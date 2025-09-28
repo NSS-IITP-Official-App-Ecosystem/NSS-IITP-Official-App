@@ -1926,7 +1926,6 @@ fun CreateEventDialog(
         }
     }
 }
-git remote add origin https://github.com/code-epic-adi/NSS_APP.git
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
