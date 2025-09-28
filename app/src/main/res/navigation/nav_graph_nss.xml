@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/nav_graph_nss"
+    app:startDestination="@id/nssHomeFragment">
+
+    <fragment
+        android:id="@+id/nssHomeFragment"
+        android:name="com.phad.chatapp.fragments.NssHomeFragment"
+        android:label="NSS Home"
+        tools:layout="@layout/fragment_home" />
+
+    <fragment
+        android:id="@+id/nssCalendarFragment"
+        android:name="com.phad.chatapp.fragments.NssCalendarFragment"
+        android:label="NSS Calendar" />
+
+    <fragment
+        android:id="@+id/nssProfileFragment"
+        android:name="com.phad.chatapp.fragments.NssProfileFragment"
+        android:label="NSS Profile"
+        tools:layout="@layout/fragment_profile">
+        
+        <action
+            android:id="@+id/action_nssProfileFragment_to_nssLibraryItemListFragment"
+            app:destination="@id/nssLibraryItemListFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/nssAttendanceManagerFragment"
+        android:name="com.phad.chatapp.fragments.NssAttendanceManagerFragment"
+        android:label="NSS Attendance Manager"
+        tools:layout="@layout/fragment_attendance_manager" />
+
+    <fragment
+        android:id="@+id/nssAdminAttendanceApprovalFragment"
+        android:name="com.phad.chatapp.fragments.NssAdminAttendanceApprovalFragment"
+        android:label="NSS Attendance Approval"
+        tools:layout="@layout/fragment_admin_attendance_approval" />
+
+    <fragment
+        android:id="@+id/nssQRAttendanceFragment"
+        android:name="com.phad.chatapp.fragments.NssQRAttendanceFragment"
+        android:label="QR Attendance - Admin"
+        tools:layout="@layout/fragment_nss_qr_attendance" />
+
+    <fragment
+        android:id="@+id/nssQRScanFragment"
+        android:name="com.phad.chatapp.fragments.NssQRScanFragment"
+        android:label="QR Attendance - Student"
+        tools:layout="@layout/fragment_nss_qr_scan" />
+
+    <fragment
+        android:id="@+id/qrAttendanceResultFragment"
+        android:name="com.phad.chatapp.fragments.QRAttendanceResultFragment"
+        android:label="QR Attendance Result" />
+
+    <!-- Add other NSS-specific fragments as needed -->
+
+    <fragment
+        android:id="@+id/nssLibraryItemListFragment"
+        android:name="com.phad.chatapp.fragments.LibraryItemListFragment"
+        android:label="Library"
+        tools:layout="@layout/fragment_library_item_list">
+        <argument
+            android:name="collectionPath"
+            android:defaultValue="NSS_Library"
+            app:argType="string" />
+        <argument
+            android:name="isSubcategory"
+            android:defaultValue="false"
+            app:argType="boolean" />
+        <action
+            android:id="@+id/action_nssLibraryItemListFragment_self"
+            app:destination="@id/nssLibraryItemListFragment" />
+    </fragment>
+</navigation>

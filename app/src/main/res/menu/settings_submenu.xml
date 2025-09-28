@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <group android:id="@+id/admin_group">
+        <item
+            android:id="@+id/action_create_group"
+            android:icon="@drawable/ic_add_group"
+            android:title="Create New Group" />
+
+        <item
+            android:id="@+id/action_remove_group"
+            android:icon="@drawable/ic_remove_group"
+            android:title="Remove Group" />
+    </group>
+
+    <item
+        android:id="@+id/action_logout"
+        android:icon="@drawable/ic_logout"
+        android:title="Logout" />
+</menu>

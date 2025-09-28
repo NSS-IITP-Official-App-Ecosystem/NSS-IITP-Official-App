@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Base dark background -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#121010" />
+        </shape>
+    </item>
+    
+    <!-- Dark gray blob 1 -->
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="#1A1A1A" />
+            <size android:width="300dp" android:height="300dp" />
+        </shape>
+        <translate android:fromXDelta="-50%" android:fromYDelta="60%" />
+    </item>
+    
+    <!-- Dark gray blob 2 -->
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="#1A1A1A" />
+            <size android:width="250dp" android:height="250dp" />
+        </shape>
+        <translate android:fromXDelta="80%" android:fromYDelta="30%" />
+    </item>
+    
+    <!-- Dark gray blob 3 -->
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="#1A1A1A" />
+            <size android:width="200dp" android:height="200dp" />
+        </shape>
+        <translate android:fromXDelta="20%" android:fromYDelta="120%" />
+    </item>
+    
+    <!-- Dark gray blob 4 -->
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="#151515" />
+            <size android:width="100dp" android:height="100dp" />
+        </shape>
+        <translate android:fromXDelta="80%" android:fromYDelta="80%" />
+    </item>
+</layer-list> 

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="60dp"
+    android:viewportWidth="120"
+    android:viewportHeight="60">
+    
+    <!-- Simple open book shape -->
+    <path
+        android:fillColor="#FFCC00"
+        android:pathData="M10,30 L60,15 L110,30 L110,35 L60,20 L10,35 Z" />
+    
+    <!-- Book pages -->
+    <path
+        android:fillColor="#FFDD33"
+        android:pathData="M10,35 L60,20 L110,35 C110,40 110,45 110,45 L60,30 L10,45 C10,45 10,40 10,35 Z" />
+    
+    <!-- Book spine -->
+    <path
+        android:fillColor="#FFE566"
+        android:pathData="M58,20 L62,20 L62,30 L58,30 Z" />
+</vector> 

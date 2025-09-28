@@ -1,0 +1,25 @@
+2025-04-13 13:25:39,402 - FirestoreMigration - INFO - Successfully connected to TWApp Firestore
+2025-04-13 13:25:39,438 - FirestoreMigration - INFO - Successfully connected to ChatApp Firestore
+2025-04-13 13:25:39,438 - FirestoreMigration - INFO - Starting migration of all collections from TWApp to ChatApp
+2025-04-13 13:25:43,245 - FirestoreMigration - INFO - Found 3 collections
+2025-04-13 13:25:44,174 - FirestoreMigration - ERROR - Error getting collections: 403 Missing or insufficient permissions.
+2025-04-13 13:25:44,174 - FirestoreMigration - INFO - Copying collection: Admin1
+2025-04-13 13:25:44,550 - FirestoreMigration - INFO - Found 10 documents in Admin1
+2025-04-13 13:25:45,346 - FirestoreMigration - ERROR - Error committing final batch for Admin1: 403 Missing or insufficient permissions.
+2025-04-13 13:25:45,346 - FirestoreMigration - INFO - Completed copying collection: Admin1 - 0/10 documents copied
+2025-04-13 13:25:45,346 - FirestoreMigration - INFO - Copying collection: Admin2
+2025-04-13 13:25:45,749 - FirestoreMigration - INFO - Found 1 documents in Admin2
+2025-04-13 13:25:46,213 - FirestoreMigration - ERROR - Error committing final batch for Admin2: 403 Missing or insufficient permissions.
+2025-04-13 13:25:46,213 - FirestoreMigration - INFO - Completed copying collection: Admin2 - 0/1 documents copied
+2025-04-13 13:25:46,213 - FirestoreMigration - INFO - Copying collection: Student
+2025-04-13 13:25:47,458 - FirestoreMigration - INFO - Found 122 documents in Student
+2025-04-13 13:25:48,510 - FirestoreMigration - ERROR - Error committing final batch for Student: 403 Missing or insufficient permissions.
+2025-04-13 13:25:48,510 - FirestoreMigration - INFO - Completed copying collection: Student - 0/122 documents copied
+2025-04-13 13:25:48,510 - FirestoreMigration - INFO - Migration complete!
+2025-04-13 13:25:48,510 - FirestoreMigration - INFO - Collections: 0/3 successfully migrated
+2025-04-13 13:25:48,511 - FirestoreMigration - INFO - Documents: 0 total documents copied
+2025-04-13 13:25:50,406 - FirestoreMigration - INFO - Found 3 collections
+2025-04-13 13:25:51,889 - FirestoreMigration - ERROR - Error verifying migration for Admin1: 403 Missing or insufficient permissions.
+2025-04-13 13:25:53,032 - FirestoreMigration - ERROR - Error verifying migration for Admin2: 403 Missing or insufficient permissions.
+2025-04-13 13:25:54,325 - FirestoreMigration - ERROR - Error verifying migration for Student: 403 Missing or insufficient permissions.
+2025-04-13 13:25:54,325 - FirestoreMigration - INFO - Migration script completed

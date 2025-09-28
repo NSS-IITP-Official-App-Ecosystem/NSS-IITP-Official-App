@@ -1,0 +1,59 @@
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+*/build/
+*/out/
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Firebase
+google-services.json
+*firebase-adminsdk*.json
+service-account-key.json
+
+# Generated files
+bin/
+gen/
+out/
+
+# Kotlin
+.kotlin/
+
+# Log Files
+*.log
+
+# Android Studio
+.navigation/
+captures/
+.idea/
+*.ipr
+*.iws
+
+# External native build folder
+.externalNativeBuild/
+.cxx/
+
+# Node.js
+node_modules/
+npm-debug.log
+package-lock.json
+
+# Build artifacts
+*.class
+*.dex
+*.ap_
+*.apk
+"build/"
+"*/build/"
+".gradle/"
+"*.class"

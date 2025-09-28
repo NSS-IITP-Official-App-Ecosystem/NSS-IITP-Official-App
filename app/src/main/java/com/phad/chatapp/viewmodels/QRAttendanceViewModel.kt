@@ -1,0 +1,1428 @@
+package com.phad.chatapp.viewmodels
+
+import android.app.Application
+import android.content.Context
+import android.content.Intent
+import android.graphics.Bitmap
+import android.net.Uri
+import android.util.Log
+import androidx.core.content.FileProvider
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.phad.chatapp.models.AttendanceEvent
+import com.phad.chatapp.models.AttendanceSession
+import com.phad.chatapp.models.AttendeeRecord
+import com.phad.chatapp.models.QRAttendanceData
+import com.phad.chatapp.repositories.AttendanceQRRepository
+import com.phad.chatapp.services.QRAttendanceService
+import com.phad.chatapp.services.QRValidationResult
+import com.phad.chatapp.utils.QRAttendanceDebugUtils
+import com.phad.chatapp.utils.SessionManager
+import com.phad.chatapp.utils.DeviceIdentificationUtils
+import com.phad.chatapp.utils.DuplicateType
+import com.phad.chatapp.utils.DeviceDuplicateTestUtils
+import com.phad.chatapp.utils.PDFGenerator
+import com.google.firebase.firestore.FirebaseFirestore
+import java.io.File
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.tasks.await
+
+/**
+ * ViewModel for managing QR-based attendance system
+ * Follows MVVM pattern established in the app
+ */
+class QRAttendanceViewModel(private val application: Application) : ViewModel() {
+    private val TAG = "QRAttendanceViewModel"
+    
+    // Dependencies
+    private val repository = AttendanceQRRepository()
+    private val qrService = QRAttendanceService()
+    private val sessionManager = SessionManager(application)
+    
+    // UI State for Admin (Take Attendance)
+    private val _adminUiState = MutableStateFlow(AdminQRUiState())
+    val adminUiState: StateFlow<AdminQRUiState> = _adminUiState.asStateFlow()
+    
+    // UI State for Student (Give Attendance)
+    private val _studentUiState = MutableStateFlow(StudentQRUiState())
+    val studentUiState: StateFlow<StudentQRUiState> = _studentUiState.asStateFlow()
+    
+    // Current QR generation job
+    private var qrGenerationJob: Job? = null
+    
+    // Current session listener job
+    private var sessionListenerJob: Job? = null
+    
+    init {
+        Log.d(TAG, "QRAttendanceViewModel initialized")
+        loadUserInfo()
+    }
+    
+    /**
+     * Load current user information
+     */
+    private fun loadUserInfo() {
+        val userType = sessionManager.fetchUserType()
+        val userId = sessionManager.fetchUserId()
+        val userName = sessionManager.fetchUserName()
+
+        Log.d(TAG, "User info - Type: '$userType', ID: '$userId', Name: '$userName'")
+
+        // Check admin status with detailed logging
+        val isAdmin = userType == "Admin" || userType == "Admin1" || userType == "Admin2"
+        Log.d(TAG, "Admin check: userType='$userType', isAdmin=$isAdmin")
+        Log.d(TAG, "Admin check: ${userType == "Admin" || userType == "Admin1" || userType == "Admin2"}")
+
+        _adminUiState.value = _adminUiState.value.copy(
+            adminId = userId,
+            adminName = userName,
+            isAdmin = isAdmin
+        )
+
+        _studentUiState.value = _studentUiState.value.copy(
+            studentId = userId,
+            studentName = userName,
+            isStudent = userType == "Student"
+        )
+
+        // Log final student UI state
+        Log.d(TAG, "Final StudentQRUiState: studentId='${_studentUiState.value.studentId}', studentName='${_studentUiState.value.studentName}', isStudent=${_studentUiState.value.isStudent}")
+
+        // Log final UI state
+        Log.d(TAG, "Final AdminQRUiState: isAdmin=${_adminUiState.value.isAdmin}, isSessionActive=${_adminUiState.value.isSessionActive}")
+    }
+    
+    /**
+     * Load available events for attendance
+     */
+    fun loadAvailableEvents() {
+        viewModelScope.launch {
+            try {
+                _adminUiState.value = _adminUiState.value.copy(isLoading = true)
+                
+                val result = repository.getAvailableEvents()
+                if (result.isSuccess) {
+                    val events = result.getOrNull() ?: emptyList()
+                    _adminUiState.value = _adminUiState.value.copy(
+                        availableEvents = events,
+                        isLoading = false
+                    )
+                    Log.d(TAG, "Loaded ${events.size} available events")
+                } else {
+                    val error = result.exceptionOrNull()?.message ?: "Failed to load events"
+                    _adminUiState.value = _adminUiState.value.copy(
+                        isLoading = false,
+                        errorMessage = error
+                    )
+                    Log.e(TAG, "Error loading events: $error")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Exception loading events", e)
+                _adminUiState.value = _adminUiState.value.copy(
+                    isLoading = false,
+                    errorMessage = e.message ?: "Unknown error"
+                )
+            }
+        }
+    }
+
+    /**
+     * Create a new attendance event
+     */
+    fun createAttendanceEvent(name: String, description: String, location: String, eventDate: java.util.Date, openingTime: java.util.Date, closingTime: java.util.Date, hours: Int) {
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "Creating attendance event: $name")
+                _adminUiState.value = _adminUiState.value.copy(
+                    isCreatingEvent = true,
+                    errorMessage = null
+                )
+
+                // Generate document ID using the new format
+                val documentId = com.phad.chatapp.utils.AttendanceEventUtils.generateDocumentId(eventDate, name)
+
+                // Create new date/time format data
+                val (dateString, timeRangeString) = com.phad.chatapp.utils.AttendanceEventUtils.createNewFormatEventTimeData(eventDate, openingTime, closingTime)
+
+                Log.d(TAG, "Creating event with:")
+                Log.d(TAG, "  Date string: $dateString")
+                Log.d(TAG, "  Time range: $timeRangeString")
+
+                val event = AttendanceEvent(
+                    id = documentId,
+                    eventDate = dateString,
+                    eventTime = timeRangeString,
+                    hours = hours,
+                    location = location.trim(),
+                    description = description.trim(),
+                    createdBy = _adminUiState.value.adminId,
+                    creatorName = _adminUiState.value.adminName,
+                    createdAt = com.google.firebase.Timestamp.now(),
+                    attendees = emptyList(),
+                    closedAt = null,
+                    _isLive = true // Explicitly set to true for new events
+                )
+
+                val result = repository.createAttendanceEvent(event)
+                result.fold(
+                    onSuccess = { eventId ->
+                        Log.d(TAG, "Event created successfully with ID: $eventId")
+                        _adminUiState.value = _adminUiState.value.copy(
+                            isCreatingEvent = false,
+                            showCreateEventDialog = false,
+                            createEventSuccess = true,
+                            errorMessage = null
+                        )
+                        // Refresh events list to show the newly created event
+                        loadAvailableEvents()
+                    },
+                    onFailure = { error ->
+                        Log.e(TAG, "Error creating event", error)
+                        _adminUiState.value = _adminUiState.value.copy(
+                            isCreatingEvent = false,
+                            errorMessage = "Failed to create event: ${error.message}"
+                        )
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Error creating event", e)
+                _adminUiState.value = _adminUiState.value.copy(
+                    isCreatingEvent = false,
+                    errorMessage = "Error creating event: ${e.message}"
+                )
+            }
+        }
+    }
+
+    /**
+     * Show create event dialog
+     */
+    fun showCreateEventDialog() {
+        _adminUiState.value = _adminUiState.value.copy(
+            showCreateEventDialog = true,
+            createEventSuccess = false,
+            errorMessage = null
+        )
+    }
+
+    /**
+     * Hide create event dialog
+     */
+    fun hideCreateEventDialog() {
+        _adminUiState.value = _adminUiState.value.copy(
+            showCreateEventDialog = false,
+            createEventSuccess = false,
+            errorMessage = null
+        )
+    }
+
+    /**
+     * Clear create event success state
+     */
+    fun clearCreateEventSuccess() {
+        _adminUiState.value = _adminUiState.value.copy(
+            createEventSuccess = false
+        )
+    }
+
+    /**
+     * Show edit event dialog
+     */
+    fun showEditEventDialog(event: AttendanceEvent) {
+        _adminUiState.value = _adminUiState.value.copy(
+            showEditEventDialog = true,
+            editingEvent = event,
+            editEventSuccess = false,
+            errorMessage = null
+        )
+    }
+
+    /**
+     * Hide edit event dialog
+     */
+    fun hideEditEventDialog() {
+        _adminUiState.value = _adminUiState.value.copy(
+            showEditEventDialog = false,
+            editingEvent = null,
+            editEventSuccess = false,
+            errorMessage = null
+        )
+    }
+
+    /**
+     * Update an existing attendance event
+     */
+    fun updateAttendanceEvent(name: String, description: String, location: String, eventDate: java.util.Date, openingTime: java.util.Date, closingTime: java.util.Date, hours: Int, eventId: String) {
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "Updating attendance event: $name (ID: $eventId)")
+                _adminUiState.value = _adminUiState.value.copy(
+                    isUpdatingEvent = true,
+                    errorMessage = null
+                )
+
+                // Generate document ID using the new format (even for update, to ensure consistency)
+                val documentId = com.phad.chatapp.utils.AttendanceEventUtils.generateDocumentId(eventDate, name)
+
+                // Create new date/time format data
+                val (dateString, timeRangeString) = com.phad.chatapp.utils.AttendanceEventUtils.createNewFormatEventTimeData(eventDate, openingTime, closingTime)
+
+                val updatedEvent = _adminUiState.value.editingEvent?.copy(
+                    id = documentId, // Update ID if name/date changed
+                    eventDate = dateString,
+                    eventTime = timeRangeString,
+                    hours = hours,
+                    location = location.trim(),
+                    description = description.trim()
+                ) ?: throw IllegalStateException("No event selected for update")
+
+                val result = repository.updateAttendanceEvent(updatedEvent)
+                result.fold(
+                    onSuccess = {
+                        Log.d(TAG, "Event updated successfully: $eventId")
+                        _adminUiState.value = _adminUiState.value.copy(
+                            isUpdatingEvent = false,
+                            showEditEventDialog = false,
+                            editingEvent = null,
+                            editEventSuccess = true,
+                            errorMessage = null
+                        )
+                        // Refresh events list to show the updated event
+                        loadAvailableEvents()
+                    },
+                    onFailure = { error ->
+                        Log.e(TAG, "Error updating event", error)
+                        _adminUiState.value = _adminUiState.value.copy(
+                            isUpdatingEvent = false,
+                            errorMessage = "Failed to update event: ${error.message}"
+                        )
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Error updating event", e)
+                _adminUiState.value = _adminUiState.value.copy(
+                    isUpdatingEvent = false,
+                    errorMessage = "Error updating event: ${e.message}"
+                )
+            }
+        }
+    }
+
+    /**
+     * Force refresh user info and UI state (for debugging)
+     */
+    fun refreshUserInfo() {
+        Log.d(TAG, "Force refreshing user info...")
+        loadUserInfo()
+    }
+
+    /**
+     * Start attendance session for selected event (now simplified for consolidated schema)
+     */
+    fun startAttendanceSession(event: AttendanceEvent) {
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "Starting attendance session for event: ${event.getEventName()}")
+
+                _adminUiState.value = _adminUiState.value.copy(isLoading = true)
+
+                // In the consolidated schema, we don't create separate session documents
+                // The event itself serves as the "session"
+                val sessionId = event.id // Use event ID as session ID
+
+                _adminUiState.value = _adminUiState.value.copy(
+                    selectedEvent = event,
+                    isSessionActive = true,
+                    isLoading = false
+                )
+
+                // Register session for security validation
+                Log.d(TAG, "=== ADMIN ID FLOW DEBUG ===")
+                Log.d(TAG, "Current admin ID from UI state: ${_adminUiState.value.adminId}")
+                Log.d(TAG, "Event created by: ${event.createdBy}")
+                Log.d(TAG, "Event creator name: ${event.creatorName}")
+                Log.d(TAG, "Session manager user ID: ${sessionManager.fetchUserId()}")
+                Log.d(TAG, "Session manager user type: ${sessionManager.fetchUserType()}")
+                Log.d(TAG, "Session manager user name: ${sessionManager.fetchUserName()}")
+                Log.d(TAG, "============================")
+
+                Log.d(TAG, "Registering session - SessionId: $sessionId, AdminId: ${_adminUiState.value.adminId}, EventId: ${event.id}")
+                qrService.registerSession(sessionId, _adminUiState.value.adminId, event.id)
+                Log.d(TAG, "Session registration completed")
+
+                // Start QR code generation
+                Log.d(TAG, "Starting QR generation with SessionId: $sessionId, EventId: ${event.id}")
+                startQRGeneration(sessionId, event.id)
+
+                // Start listening to event updates (instead of session updates)
+                startEventListener(event.id)
+
+                Log.d(TAG, "Attendance session started successfully for consolidated event")
+            } catch (e: Exception) {
+                Log.e(TAG, "Exception starting session", e)
+                _adminUiState.value = _adminUiState.value.copy(
+                    isLoading = false,
+                    errorMessage = e.message ?: "Unknown error"
+                )
+            }
+        }
+    }
+    
+    /**
+     * Start dynamic QR code generation
+     */
+    private fun startQRGeneration(sessionId: String, eventId: String) {
+        qrGenerationJob?.cancel()
+        qrGenerationJob = viewModelScope.launch {
+            try {
+                qrService.generateDynamicQRCodes(
+                    sessionId = sessionId,
+                    eventId = eventId,
+                    adminId = _adminUiState.value.adminId
+                ).collectLatest { (qrData, bitmap) ->
+                    _adminUiState.value = _adminUiState.value.copy(
+                        currentQRCode = bitmap,
+                        currentQRData = qrData,
+                        qrRefreshCount = _adminUiState.value.qrRefreshCount + 1
+                    )
+
+                    // Update repository with new QR ID
+                    repository.updateSessionQRCode(sessionId, qrData.qrId)
+
+                    Log.d(TAG, "QR code updated - ID: ${qrData.qrId}")
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Don't show error for intentional cancellation (e.g., when ending session)
+                Log.d(TAG, "QR generation cancelled (intentional)")
+                throw e // Re-throw to properly handle coroutine cancellation
+            } catch (e: Exception) {
+                // Only show error for actual failures, not cancellation
+                Log.e(TAG, "Error in QR generation", e)
+                _adminUiState.value = _adminUiState.value.copy(
+                    errorMessage = "QR generation failed: ${e.message}"
+                )
+            }
+        }
+    }
+    
+    /**
+     * Start listening to event updates for real-time attendance count
+     */
+    private fun startEventListener(eventId: String) {
+        sessionListenerJob?.cancel()
+        sessionListenerJob = viewModelScope.launch {
+            try {
+                repository.listenToAttendanceEvent(eventId).collectLatest { event ->
+                    event?.let {
+                        _adminUiState.value = _adminUiState.value.copy(
+                            selectedEvent = it,
+                            attendeeCount = it.totalMarked
+                        )
+                        Log.d(TAG, "Event updated - Attendees: ${it.totalMarked}")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error listening to event updates", e)
+            }
+        }
+    }
+
+    /**
+     * Legacy method for backward compatibility
+     */
+    @Deprecated("Use startEventListener instead")
+    private fun startSessionListener(sessionId: String) {
+        startEventListener(sessionId)
+    }
+    
+    /**
+     * End current attendance session
+     */
+    fun endAttendanceSession() {
+        viewModelScope.launch {
+            try {
+                // Use selectedEvent.id as sessionId since in consolidated schema, event ID = session ID
+                val sessionId = _adminUiState.value.selectedEvent?.id
+                if (sessionId != null) {
+                    Log.d(TAG, "Ending attendance session: $sessionId")
+
+                    // Clear any existing error messages first to prevent stale errors from showing
+                    _adminUiState.value = _adminUiState.value.copy(errorMessage = null)
+
+                    // Stop QR generation and session listener FIRST to prevent cancellation errors
+                    qrGenerationJob?.cancel()
+                    sessionListenerJob?.cancel()
+
+                    // End session in security validator
+                    qrService.endSession(sessionId)
+
+                    val result = repository.endAttendanceSession(sessionId)
+                    if (result.isSuccess) {
+                        _adminUiState.value = _adminUiState.value.copy(
+                            isSessionActive = false,
+                            selectedEvent = null,
+                            currentQRCode = null,
+                            currentQRData = null,
+                            errorMessage = null // Ensure no error messages remain
+                        )
+
+                        Log.d(TAG, "Attendance session ended successfully")
+                    } else {
+                        val error = result.exceptionOrNull()?.message ?: "Failed to end session"
+                        _adminUiState.value = _adminUiState.value.copy(errorMessage = error)
+                        Log.e(TAG, "Error ending session: $error")
+                    }
+                } else {
+                    Log.w(TAG, "No active session to end - selectedEvent is null")
+                    // Still update UI state to ensure clean state
+                    qrGenerationJob?.cancel()
+                    sessionListenerJob?.cancel()
+
+                    _adminUiState.value = _adminUiState.value.copy(
+                        isSessionActive = false,
+                        selectedEvent = null,
+                        currentQRCode = null,
+                        currentQRData = null,
+                        errorMessage = null // Clear any existing errors
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Exception ending session", e)
+                _adminUiState.value = _adminUiState.value.copy(
+                    errorMessage = e.message ?: "Unknown error"
+                )
+            }
+        }
+    }
+    
+    /**
+     * Process scanned QR code for student attendance
+     */
+    fun processScannedQR(qrText: String) {
+        viewModelScope.launch {
+            try {
+                val processingStartTime = System.currentTimeMillis()
+                Log.d(TAG, "Processing scanned QR code for student: ${_studentUiState.value.studentId}")
+                Log.d(TAG, "QR Text length: ${qrText.length}")
+                Log.d(TAG, "QR Text (first 200 chars): ${qrText.take(200)}")
+                Log.d(TAG, "Processing started at: $processingStartTime")
+
+                // Reset state for new processing
+                _studentUiState.value = _studentUiState.value.copy(
+                    isProcessing = true,
+                    scanResult = null,
+                    cameraExited = false,
+                    navigatedToResult = false
+                )
+
+                val validationStartTime = System.currentTimeMillis()
+                Log.d(TAG, "Starting QR validation at: $validationStartTime")
+                Log.d(TAG, "Time from processing start to validation: ${validationStartTime - processingStartTime}ms")
+
+                val result = qrService.validateQRCode(qrText, _studentUiState.value.studentId)
+
+                val validationEndTime = System.currentTimeMillis()
+                Log.d(TAG, "QR validation completed at: $validationEndTime")
+                Log.d(TAG, "Validation took: ${validationEndTime - validationStartTime}ms")
+                Log.d(TAG, "Total processing time: ${validationEndTime - processingStartTime}ms")
+
+                if (result.isSuccess) {
+                    val validationResult = result.getOrNull()!!
+
+                    Log.d(TAG, "QR validation result - Valid: ${validationResult.isValid}, Reason: ${validationResult.reason}")
+
+                    if (validationResult.qrData != null) {
+                        Log.d(TAG, "QR Data - SessionId: ${validationResult.qrData.sessionId}, EventId: ${validationResult.qrData.eventId}, AdminId: ${validationResult.qrData.adminId}")
+                        Log.d(TAG, "QR Data - QrId: ${validationResult.qrData.qrId}, Timestamp: ${validationResult.qrData.timestamp}")
+                        Log.d(TAG, "QR Data - Age: ${validationResult.qrData.getAgeInSeconds()}s, Remaining: ${validationResult.qrData.getRemainingValiditySeconds()}s")
+                    }
+
+                    if (validationResult.isValid && validationResult.qrData != null) {
+                        Log.d(TAG, "QR validation successful, marking attendance")
+                        // Mark attendance
+                        markStudentAttendance(validationResult.qrData)
+                    } else {
+                        // QR validation failed - reject the scan attempt
+                        _studentUiState.value = _studentUiState.value.copy(
+                            isProcessing = false,
+                            scanResult = ScanResult.Error(validationResult.reason)
+                        )
+                        Log.w(TAG, "QR validation failed: ${validationResult.reason}")
+
+                        // Log security-related failures for monitoring
+                        if (validationResult.reason.contains("expired", ignoreCase = true)) {
+                            Log.w(TAG, "SECURITY: Expired QR code rejected - Age exceeded validity window")
+                        } else if (validationResult.reason.contains("already used", ignoreCase = true)) {
+                            Log.w(TAG, "SECURITY: Replay attack detected - QR code already used")
+                        }
+                    }
+                } else {
+                    val error = result.exceptionOrNull()?.message ?: "Validation failed"
+                    _studentUiState.value = _studentUiState.value.copy(
+                        isProcessing = false,
+                        scanResult = ScanResult.Error(error)
+                    )
+                    Log.e(TAG, "Error validating QR: $error", result.exceptionOrNull())
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Exception processing QR", e)
+                _studentUiState.value = _studentUiState.value.copy(
+                    isProcessing = false,
+                    scanResult = ScanResult.Error(e.message ?: "Unknown error")
+                )
+            }
+        }
+    }
+    
+    /**
+     * Mark student attendance in the session
+     */
+    private suspend fun markStudentAttendance(qrData: QRAttendanceData) {
+        try {
+            Log.d(TAG, "=== STARTING ATTENDANCE MARKING PROCESS ===")
+            Log.d(TAG, "Student ID: ${_studentUiState.value.studentId}")
+            Log.d(TAG, "Student Name: ${_studentUiState.value.studentName}")
+            Log.d(TAG, "Session ID: ${qrData.sessionId}")
+            Log.d(TAG, "Event ID: ${qrData.eventId}")
+            Log.d(TAG, "QR Code ID: ${qrData.qrId}")
+
+            // Validate student data
+            if (_studentUiState.value.studentId.isBlank()) {
+                Log.e(TAG, "Student ID is blank!")
+                _studentUiState.value = _studentUiState.value.copy(
+                    isProcessing = false,
+                    scanResult = ScanResult.Error("Student ID not found")
+                )
+                return
+            }
+
+            // Get device ID for duplicate prevention
+            val deviceId = DeviceIdentificationUtils.getDeviceId(application)
+            Log.d(TAG, "Device ID: ${deviceId.take(16)}...")
+
+            // Get current event to check for duplicates
+            val currentEvent = repository.getAttendanceEvent(qrData.eventId).getOrNull()
+            if (currentEvent == null) {
+                Log.e(TAG, "Event not found: ${qrData.eventId}")
+                _studentUiState.value = _studentUiState.value.copy(
+                    isProcessing = false,
+                    scanResult = ScanResult.Error("Event not found")
+                )
+                return
+            }
+
+            // Check for comprehensive duplicates (user + device)
+            val duplicateCheck = qrService.checkComprehensiveDuplicate(
+                qrData.sessionId,
+                _studentUiState.value.studentId,
+                deviceId,
+                currentEvent.attendees
+            )
+
+            if (duplicateCheck.isDuplicate) {
+                Log.w(TAG, "Duplicate attendance detected: ${duplicateCheck.duplicateType}")
+                val errorMessage = when (duplicateCheck.duplicateType) {
+                    DuplicateType.USER_DUPLICATE -> "You have already marked attendance for this event"
+                    DuplicateType.DEVICE_DUPLICATE -> "This device has already been used to mark attendance for this event"
+                    else -> duplicateCheck.message
+                }
+
+                _studentUiState.value = _studentUiState.value.copy(
+                    isProcessing = false,
+                    scanResult = ScanResult.Error(errorMessage)
+                )
+                return
+            }
+
+            // Get admin information from database using the admin ID from QR code
+            val adminInfo = repository.getUserByRollNumber(qrData.adminId).getOrNull()
+            val adminName = adminInfo?.get("name") as? String ?: "Unknown Admin"
+
+            Log.d(TAG, "Admin lookup: adminId='${qrData.adminId}', adminName='$adminName'")
+
+            val attendee = AttendeeRecord(
+                rollNumber = _studentUiState.value.studentId,
+                name = _studentUiState.value.studentName.ifBlank { "Unknown Student" },
+                scanTimestamp = com.google.firebase.Timestamp.now(),
+                scannedFrom = com.phad.chatapp.models.ScannedFromAdmin(
+                    adminRollNumber = qrData.adminId,
+                    adminName = adminName
+                ),
+                deviceId = deviceId
+            )
+
+            Log.d(TAG, "Created AttendeeRecord: rollNumber=${attendee.rollNumber}, studentName=${attendee.name}, deviceId=${attendee.deviceId}")
+            Log.d(TAG, "AttendeeRecord validation: isDataValid=${attendee.isDataValid()}")
+
+            Log.d(TAG, "Calling repository.addAttendeeToEvent...")
+            val result = repository.addAttendeeToEvent(qrData.eventId, attendee)
+
+            Log.d(TAG, "Repository result: isSuccess=${result.isSuccess}")
+            if (result.isFailure) {
+                Log.e(TAG, "Repository failure details:", result.exceptionOrNull())
+            }
+
+            if (result.isSuccess) {
+                // Get event name for success message
+                val eventName = try {
+                    val event = repository.getAttendanceEvent(qrData.eventId).getOrNull()
+                    event?.getEventName() ?: "Unknown Event"
+                } catch (e: Exception) {
+                    Log.w(TAG, "Could not retrieve event name for success message", e)
+                    "Unknown Event"
+                }
+
+                _studentUiState.value = _studentUiState.value.copy(
+                    isProcessing = false,
+                    scanResult = ScanResult.Success("Attendance for $eventName marked successfully!")
+                )
+                Log.d(TAG, "✅ Attendance marked successfully for ${_studentUiState.value.studentId} - Event: $eventName")
+                Log.d(TAG, "=== ATTENDANCE MARKING COMPLETED SUCCESSFULLY ===")
+            } else {
+                val error = result.exceptionOrNull()?.message ?: "Failed to mark attendance"
+                _studentUiState.value = _studentUiState.value.copy(
+                    isProcessing = false,
+                    scanResult = ScanResult.Error(error)
+                )
+                Log.e(TAG, "❌ Error marking attendance: $error", result.exceptionOrNull())
+                Log.e(TAG, "=== ATTENDANCE MARKING FAILED ===")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception marking attendance", e)
+            _studentUiState.value = _studentUiState.value.copy(
+                isProcessing = false,
+                scanResult = ScanResult.Error(e.message ?: "Unknown error")
+            )
+        }
+    }
+    
+    /**
+     * Clear error messages
+     */
+    fun clearError() {
+        _adminUiState.value = _adminUiState.value.copy(errorMessage = null)
+        _studentUiState.value = _studentUiState.value.copy(scanResult = null)
+    }
+    
+    /**
+     * Clear success message
+     */
+    fun clearSuccessMessage() {
+        _adminUiState.value = _adminUiState.value.copy(successMessage = null)
+    }
+
+    // dismissSuccessDialog method removed - no longer needed with dedicated result screens
+
+    /**
+     * Mark that camera has been exited
+     */
+    fun markCameraExited() {
+        _studentUiState.value = _studentUiState.value.copy(
+            cameraExited = true
+        )
+    }
+
+    /**
+     * Mark that navigation to result screen has occurred
+     */
+    fun markNavigatedToResult() {
+        _studentUiState.value = _studentUiState.value.copy(
+            navigatedToResult = true
+        )
+    }
+
+    // clearNavigationFlag method removed - no longer needed with dedicated result screens
+
+    /**
+     * Test method to verify attendance marking works
+     */
+    fun testAttendanceMarking() {
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "=== TESTING ATTENDANCE MARKING ===")
+
+                // Create a test attendee record
+                val testAttendee = AttendeeRecord(
+                    rollNumber = "TEST123",
+                    name = "Test Student"
+                )
+
+                // Get the current session ID from admin UI state (use selectedEvent.id)
+                val selectedEvent = _adminUiState.value.selectedEvent
+                if (selectedEvent == null) {
+                    Log.e(TAG, "No active session for testing")
+                    return@launch
+                }
+
+                Log.d(TAG, "Testing with session: ${selectedEvent.id}")
+
+                val result = repository.addAttendeeToSession(selectedEvent.id, testAttendee)
+                if (result.isSuccess) {
+                    Log.d(TAG, "✅ Test attendance marking successful")
+                } else {
+                    Log.e(TAG, "❌ Test attendance marking failed: ${result.exceptionOrNull()?.message}")
+                }
+
+                Log.d(TAG, "=== TEST COMPLETED ===")
+            } catch (e: Exception) {
+                Log.e(TAG, "Exception during test", e)
+            }
+        }
+    }
+    
+    override fun onCleared() {
+        super.onCleared()
+        qrGenerationJob?.cancel()
+        sessionListenerJob?.cancel()
+        Log.d(TAG, "QRAttendanceViewModel cleared")
+    }
+
+    /**
+     * Debug method to test QR attendance flow
+     */
+    fun debugTestQRFlow() {
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "Starting QR attendance debug test...")
+
+                val testSessionId = "debug_session_${System.currentTimeMillis()}"
+                val testEventId = "debug_event_${System.currentTimeMillis()}"
+                val adminId = _adminUiState.value.adminId
+                val studentId = _studentUiState.value.studentId
+
+                val result = QRAttendanceDebugUtils.testQRFlow(
+                    sessionId = testSessionId,
+                    eventId = testEventId,
+                    adminId = adminId,
+                    studentId = studentId,
+                    qrService = qrService
+                )
+
+                Log.d(TAG, "Debug test completed - Success: ${result.success}")
+                if (!result.success) {
+                    Log.e(TAG, "Debug test failed:\n${result.report}")
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Debug test exception", e)
+            }
+        }
+    }
+
+    /**
+     * Close an attendance event manually
+     */
+    fun closeEvent(event: AttendanceEvent) {
+        viewModelScope.launch {
+            try {
+                val result = repository.closeAttendanceEvent(event.id)
+                if (result.isSuccess) {
+                    // Reload available events to reflect the change
+                    loadAvailableEvents()
+                    Log.d(TAG, "Event closed successfully: ${event.getEventName()}")
+                } else {
+                    val error = result.exceptionOrNull()?.message ?: "Failed to close event"
+                    _adminUiState.value = _adminUiState.value.copy(errorMessage = error)
+                    Log.e(TAG, "Error closing event: $error")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error closing event", e)
+                _adminUiState.value = _adminUiState.value.copy(
+                    errorMessage = e.message ?: "Unknown error occurred"
+                )
+            }
+        }
+    }
+
+    /**
+     * Test device-based duplicate prevention system
+     * This method can be called for debugging and validation purposes
+     */
+    fun testDeviceDuplicatePrevention() {
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "Starting device duplicate prevention test...")
+
+                val testResult = DeviceDuplicateTestUtils.runAllTests(application)
+
+                if (testResult.success) {
+                    Log.d(TAG, "✓ All device duplicate prevention tests PASSED")
+                    _adminUiState.value = _adminUiState.value.copy(
+                        errorMessage = "Device duplicate prevention tests PASSED"
+                    )
+                } else {
+                    Log.e(TAG, "✗ Some device duplicate prevention tests FAILED")
+                    _adminUiState.value = _adminUiState.value.copy(
+                        errorMessage = "Device duplicate prevention tests FAILED - Check logs for details"
+                    )
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Error running device duplicate prevention tests", e)
+                _adminUiState.value = _adminUiState.value.copy(
+                    errorMessage = "Test execution failed: ${e.message}"
+                )
+            }
+        }
+    }
+
+    /**
+     * Clean up redundant fields from all events in the database
+     * This removes duplicate "totalMarked" and "live" fields that should not exist
+     * alongside the proper snake_case fields "total_marked" and "is_live"
+     */
+    fun cleanupRedundantFields() {
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "Starting cleanup of redundant fields...")
+                _adminUiState.value = _adminUiState.value.copy(isLoading = true)
+
+                val result = repository.cleanupRedundantFields()
+                result.fold(
+                    onSuccess = { cleanedCount ->
+                        Log.d(TAG, "Successfully cleaned $cleanedCount events")
+                        _adminUiState.value = _adminUiState.value.copy(
+                            isLoading = false,
+                            errorMessage = "Cleanup completed. Cleaned $cleanedCount events."
+                        )
+                    },
+                    onFailure = { error ->
+                        Log.e(TAG, "Error during cleanup", error)
+                        _adminUiState.value = _adminUiState.value.copy(
+                            isLoading = false,
+                            errorMessage = "Cleanup failed: ${error.message}"
+                        )
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in cleanup", e)
+                _adminUiState.value = _adminUiState.value.copy(
+                    isLoading = false,
+                    errorMessage = "Cleanup failed: ${e.message}"
+                )
+            }
+        }
+    }
+
+    // ========== Zoom Control Methods ==========
+
+    /**
+     * Update zoom level for camera
+     */
+    fun updateZoomLevel(zoomLevel: Float) {
+        val currentState = _studentUiState.value
+        val clampedZoom = zoomLevel.coerceIn(currentState.minZoomLevel, currentState.maxZoomLevel)
+
+        Log.d(TAG, "updateZoomLevel called: input=${String.format("%.1f", zoomLevel)}x, " +
+                "clamped=${String.format("%.1f", clampedZoom)}x, " +
+                "limits=${String.format("%.1f", currentState.minZoomLevel)}x-${String.format("%.1f", currentState.maxZoomLevel)}x")
+
+        _studentUiState.value = currentState.copy(
+            currentZoomLevel = clampedZoom
+        )
+
+        Log.d(TAG, "Zoom level state updated to: ${String.format("%.1f", clampedZoom)}x")
+    }
+
+    /**
+     * Set zoom limits based on camera capabilities
+     */
+    fun setZoomLimits(minZoom: Float, maxZoom: Float) {
+        val currentState = _studentUiState.value
+        val safeMinZoom = minZoom.coerceAtLeast(1.0f)
+        val safeMaxZoom = maxZoom.coerceAtMost(10.0f).coerceAtLeast(safeMinZoom)
+
+        _studentUiState.value = currentState.copy(
+            minZoomLevel = safeMinZoom,
+            maxZoomLevel = safeMaxZoom,
+            currentZoomLevel = currentState.currentZoomLevel.coerceIn(safeMinZoom, safeMaxZoom)
+        )
+
+        Log.d(TAG, "Zoom limits set: ${String.format("%.1f", safeMinZoom)}x - ${String.format("%.1f", safeMaxZoom)}x")
+    }
+
+    /**
+     * Set zooming state for visual feedback
+     */
+    fun setZoomingState(isZooming: Boolean) {
+        Log.d(TAG, "setZoomingState called with isZooming: $isZooming")
+        _studentUiState.value = _studentUiState.value.copy(isZooming = isZooming)
+    }
+
+    /**
+     * Reset zoom to default level
+     */
+    fun resetZoom() {
+        val currentState = _studentUiState.value
+        _studentUiState.value = currentState.copy(currentZoomLevel = currentState.minZoomLevel)
+        Log.d(TAG, "Zoom reset to ${String.format("%.1f", currentState.minZoomLevel)}x")
+    }
+    
+    /**
+     * Generate PDF report for attendance event
+     */
+    fun generateAttendancePDF(event: AttendanceEvent) {
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "=== PDF GENERATION DEBUG START ===")
+                Log.d(TAG, "Generating PDF for event: ${event.getEventName()}")
+                Log.d(TAG, "Event ID: ${event.id}")
+                Log.d(TAG, "Event object: $event")
+                Log.d(TAG, "Event totalMarked: ${event.totalMarked}")
+                Log.d(TAG, "Event attendees count: ${event.attendees.size}")
+                
+                // Update UI state to show loading
+                _adminUiState.value = _adminUiState.value.copy(isLoading = true)
+                
+                // First, let's try to get all events to see what's available
+                Log.d(TAG, "=== FETCHING ALL EVENTS FOR DEBUG ===")
+                try {
+                    val allEventsSnapshot = FirebaseFirestore.getInstance()
+                        .collection("NSS_Events_Attendence")
+                        .get()
+                        .await()
+                    
+                    Log.d(TAG, "Total events in database: ${allEventsSnapshot.size()}")
+                    for (doc in allEventsSnapshot) {
+                        Log.d(TAG, "Available event ID: '${doc.id}'")
+                        val docData = doc.data
+                        val attendeesCount = (docData["attendees"] as? List<*>)?.size ?: 0
+                        Log.d(TAG, "Event '${doc.id}' has $attendeesCount attendees")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error fetching all events", e)
+                }
+                
+                // Fetch attendees directly from Firestore database
+                Log.d(TAG, "=== FETCHING ATTENDEES FOR EVENT: ${event.id} ===")
+                val attendees = fetchEventAttendeesFromDatabase(event.id)
+                
+                if (attendees.isEmpty()) {
+                    Log.w(TAG, "No attendees found for event: ${event.getEventName()}")
+                    Log.w(TAG, "Event ID used: '${event.id}'")
+                    _adminUiState.value = _adminUiState.value.copy(
+                        isLoading = false,
+                        errorMessage = "No attendees found for this event. Event ID: ${event.id}"
+                    )
+                    return@launch
+                }
+                
+                Log.d(TAG, "Found ${attendees.size} attendees for PDF generation")
+                
+                // Generate PDF
+                val pdfGenerator = PDFGenerator(application)
+                val pdfPath = pdfGenerator.generateAttendanceReport(event, attendees)
+                
+                if (pdfPath != null) {
+                    Log.d(TAG, "PDF generated successfully: $pdfPath")
+                    val pdfFile = File(pdfPath as String)
+                    
+                    // Use FileProvider to create URI and share the PDF
+                    try {
+                        val uri = FileProvider.getUriForFile(
+                            application,
+                            application.packageName + ".fileprovider",
+                            pdfFile
+                        )
+                        
+                        val intent = Intent(Intent.ACTION_VIEW).apply {
+                            setDataAndType(uri, "application/pdf")
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        
+                        if (intent.resolveActivity(application.packageManager) != null) {
+                            application.startActivity(intent)
+                            _adminUiState.value = _adminUiState.value.copy(
+                                isLoading = false,
+                                successMessage = "PDF report generated and opened successfully!"
+                            )
+                        } else {
+                            // If no PDF viewer app is available, offer to share the file
+                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "application/pdf"
+                                putExtra(Intent.EXTRA_STREAM, uri)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            application.startActivity(Intent.createChooser(shareIntent, "Share PDF").apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            })
+                            _adminUiState.value = _adminUiState.value.copy(
+                                isLoading = false,
+                                successMessage = "PDF report generated! Choose an app to open or share it."
+                            )
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error sharing PDF", e)
+                        _adminUiState.value = _adminUiState.value.copy(
+                            isLoading = false,
+                            errorMessage = "PDF generated but could not open it: ${e.message}"
+                        )
+                    }
+                } else {
+                    Log.e(TAG, "Failed to generate PDF")
+                    _adminUiState.value = _adminUiState.value.copy(
+                        isLoading = false,
+                        errorMessage = "Failed to generate PDF report"
+                    )
+                }
+                
+            } catch (e: Exception) {
+                Log.e(TAG, "Error generating PDF", e)
+                _adminUiState.value = _adminUiState.value.copy(
+                    isLoading = false,
+                    errorMessage = "Error generating PDF: ${e.message}"
+                )
+            }
+        }
+    }
+    
+    /**
+     * Fetch attendees directly from Firestore database
+     */
+    private suspend fun fetchEventAttendeesFromDatabase(eventId: String): List<AttendeeRecord> {
+        return try {
+            Log.d(TAG, "=== FETCHING ATTENDEES DEBUG START ===")
+            Log.d(TAG, "Looking for event ID: '$eventId'")
+            Log.d(TAG, "Event ID length: ${eventId.length}")
+            Log.d(TAG, "Event ID bytes: ${eventId.toByteArray().contentToString()}")
+            
+            // Get the document from NSS_Events_Attendence collection
+            val document = FirebaseFirestore.getInstance()
+                .collection("NSS_Events_Attendence")
+                .document(eventId)
+                .get()
+                .await()
+            
+            Log.d(TAG, "Document exists: ${document.exists()}")
+            Log.d(TAG, "Document ID: ${document.id}")
+            Log.d(TAG, "Document reference: ${document.reference.path}")
+            
+            if (!document.exists()) {
+                Log.w(TAG, "Event document not found: '$eventId'")
+                Log.d(TAG, "Trying to find document by searching all events...")
+                
+                // Try to find the document by searching all events
+                val allEvents = FirebaseFirestore.getInstance()
+                    .collection("NSS_Events_Attendence")
+                    .get()
+                    .await()
+                
+                Log.d(TAG, "Found ${allEvents.size()} total events in database")
+                for (doc in allEvents) {
+                    Log.d(TAG, "Available event ID: '${doc.id}'")
+                    Log.d(TAG, "Comparing: '$eventId' vs '${doc.id}'")
+                    Log.d(TAG, "Are they equal: ${eventId == doc.id}")
+                    Log.d(TAG, "Contains check: ${doc.id.contains(eventId)}")
+                }
+                
+                return emptyList()
+            }
+            
+            val data = document.data
+            Log.d(TAG, "Document data keys: ${data?.keys}")
+            Log.d(TAG, "Document data: $data")
+            
+            val attendeesField = data?.get("attendees")
+            Log.d(TAG, "Attendees field type: ${attendeesField?.javaClass?.simpleName}")
+            Log.d(TAG, "Attendees field value: $attendeesField")
+            
+            val attendeesArray = attendeesField as? List<Map<String, Any>>
+            Log.d(TAG, "Attendees array type: ${attendeesArray?.javaClass?.simpleName}")
+            Log.d(TAG, "Attendees array size: ${attendeesArray?.size}")
+            
+            if (attendeesArray == null || attendeesArray.isEmpty()) {
+                Log.w(TAG, "No attendees array found in document")
+                Log.d(TAG, "Attendees field value: ${data?.get("attendees")}")
+                Log.d(TAG, "Attendees field is null: ${attendeesArray == null}")
+                Log.d(TAG, "Attendees array is empty: ${attendeesArray?.isEmpty()}")
+                return emptyList()
+            }
+            
+            Log.d(TAG, "Found ${attendeesArray.size} attendees in database")
+            Log.d(TAG, "Attendees data: $attendeesArray")
+            
+            // Convert to AttendeeRecord objects
+            Log.d(TAG, "=== PARSING ATTENDEES ===")
+            val parsedAttendees = attendeesArray.mapNotNull { attendeeData ->
+                try {
+                    Log.d(TAG, "Parsing attendee data: $attendeeData")
+                    val name = attendeeData["name"] as? String ?: "Unknown"
+                    val rollNumber = attendeeData["rollNumber"] as? String ?: "Unknown"
+                    val deviceId = attendeeData["deviceId"] as? String ?: ""
+                    
+                    // Handle scanTimestamp - it could be a Timestamp object or a string
+                    val scanTimestamp = try {
+                        val timestampValue = attendeeData["scanTimestamp"]
+                        when (timestampValue) {
+                            is com.google.firebase.Timestamp -> {
+                                Log.d(TAG, "Found Firebase Timestamp object")
+                                timestampValue
+                            }
+                            is String -> {
+                                Log.d(TAG, "Found timestamp string: $timestampValue")
+                                if (timestampValue.isNotEmpty()) {
+                                    val dateFormat = java.text.SimpleDateFormat("dd MMMM yyyy 'at' HH:mm:ss 'UTC+5:30'", java.util.Locale.ENGLISH)
+                                    val date = dateFormat.parse(timestampValue)
+                                    com.google.firebase.Timestamp(date)
+                                } else {
+                                    com.google.firebase.Timestamp.now()
+                                }
+                            }
+                            else -> {
+                                Log.w(TAG, "Unknown timestamp type: ${timestampValue?.javaClass?.simpleName}")
+                                com.google.firebase.Timestamp.now()
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Error parsing timestamp", e)
+                        com.google.firebase.Timestamp.now()
+                    }
+                    
+                    Log.d(TAG, "Parsed attendee: name='$name', rollNumber='$rollNumber', scanTimestamp='${scanTimestamp.toDate()}', deviceId='$deviceId'")
+                    
+                    // Get scannedFrom data
+                    val scannedFromData = attendeeData["scannedFrom"] as? Map<String, Any>
+                    val adminName = scannedFromData?.get("adminName") as? String ?: "Unknown Admin"
+                    val adminRollNumber = scannedFromData?.get("adminRollNumber") as? String ?: "Unknown"
+                    
+                    AttendeeRecord(
+                        name = name,
+                        rollNumber = rollNumber,
+                        scanTimestamp = scanTimestamp,
+                        deviceId = deviceId,
+                        scannedFrom = com.phad.chatapp.models.ScannedFromAdmin(
+                            adminRollNumber = adminRollNumber,
+                            adminName = adminName
+                        )
+                    )
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing attendee data", e)
+                    null
+                }
+            }
+            
+            Log.d(TAG, "=== PARSING COMPLETE ===")
+            Log.d(TAG, "Successfully parsed ${parsedAttendees.size} attendees")
+            Log.d(TAG, "Parsed attendees: $parsedAttendees")
+            
+            return parsedAttendees
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching attendees from database", e)
+            emptyList()
+        }
+    }
+
+    /**
+     * Add manual attendance for one or multiple roll numbers
+     */
+    fun addManualAttendance(eventId: String, rollNumbersText: String) {
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "Adding manual attendance for event: $eventId")
+                Log.d(TAG, "Roll numbers text: $rollNumbersText")
+
+                // Parse roll numbers from the input text
+                val rollNumbers = parseRollNumbers(rollNumbersText)
+                if (rollNumbers.isEmpty()) {
+                    _adminUiState.value = _adminUiState.value.copy(
+                        errorMessage = "No valid roll numbers found. Please check your input."
+                    )
+                    return@launch
+                }
+
+                Log.d(TAG, "Parsed roll numbers: $rollNumbers")
+
+                // Get current admin information
+                val adminId = _adminUiState.value.adminId
+                val adminName = _adminUiState.value.adminName
+
+                if (adminId.isBlank()) {
+                    _adminUiState.value = _adminUiState.value.copy(
+                        errorMessage = "Admin information not found. Please try again."
+                    )
+                    return@launch
+                }
+
+                var successCount = 0
+                var errorCount = 0
+                val errors = mutableListOf<String>()
+
+                // Process each roll number
+                for (rollNumber in rollNumbers) {
+                    try {
+                        Log.d(TAG, "Processing roll number: $rollNumber")
+                        
+                        // Get student information from Student collection
+                        val studentResult = repository.getStudentByRollNumber(rollNumber)
+                        if (studentResult.isFailure) {
+                            Log.e(TAG, "Failed to get student data for roll number: $rollNumber, error: ${studentResult.exceptionOrNull()?.message}")
+                            errorCount++
+                            errors.add("Failed to find student: $rollNumber")
+                            continue
+                        }
+
+                        val studentData = studentResult.getOrNull()
+                        if (studentData == null) {
+                            Log.w(TAG, "Student document not found in database for roll number: $rollNumber")
+                            errorCount++
+                            errors.add("Student not found: $rollNumber")
+                            continue
+                        }
+
+                        Log.d(TAG, "Student data retrieved for $rollNumber: $studentData")
+                        
+                        // Try different possible field names for student name
+                        val studentName = studentData["Name"] as? String 
+                            ?: studentData["name"] as? String
+                            ?: studentData["student_name"] as? String
+                            ?: studentData["full_name"] as? String
+                            ?: studentData["studentName"] as? String
+                            ?: studentData["fullName"] as? String
+                            ?: "Unknown Student"
+                        
+                        Log.d(TAG, "Extracted student name for $rollNumber: '$studentName'")
+                        
+                        // If still "Unknown Student", log all available fields for debugging
+                        if (studentName == "Unknown Student") {
+                            Log.w(TAG, "Could not find name field for student $rollNumber. Available fields: ${studentData.keys}")
+                        }
+
+                        // Create AttendeeRecord for manual entry
+                        val attendee = AttendeeRecord(
+                            rollNumber = rollNumber,
+                            name = studentName,
+                            scanTimestamp = com.google.firebase.Timestamp.now(),
+                            scannedFrom = com.phad.chatapp.models.ScannedFromAdmin(
+                                adminRollNumber = adminId,
+                                adminName = adminName
+                            ),
+                            deviceId = "" // No device ID for manual entry
+                        )
+
+                        // Add attendee to event
+                        val result = repository.addAttendeeToEvent(eventId, attendee)
+                        if (result.isSuccess) {
+                            successCount++
+                            Log.d(TAG, "Successfully added manual attendance for: $rollNumber")
+                        } else {
+                            errorCount++
+                            val error = result.exceptionOrNull()?.message ?: "Unknown error"
+                            errors.add("$rollNumber: $error")
+                            Log.e(TAG, "Failed to add attendance for $rollNumber: $error")
+                        }
+
+                    } catch (e: Exception) {
+                        errorCount++
+                        errors.add("$rollNumber: ${e.message}")
+                        Log.e(TAG, "Error processing roll number $rollNumber", e)
+                    }
+                }
+
+                // Update UI state with results
+                val message = if (errorCount == 0) {
+                    "Successfully added attendance for $successCount student(s)"
+                } else if (successCount == 0) {
+                    "Failed to add attendance for all students. Errors: ${errors.joinToString(", ")}"
+                } else {
+                    "Added attendance for $successCount student(s). Failed for $errorCount: ${errors.joinToString(", ")}"
+                }
+
+                _adminUiState.value = _adminUiState.value.copy(
+                    successMessage = message
+                )
+
+                // Refresh the current event data if we're in an active session
+                if (_adminUiState.value.isSessionActive && _adminUiState.value.selectedEvent?.id == eventId) {
+                    startEventListener(eventId)
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Error adding manual attendance", e)
+                _adminUiState.value = _adminUiState.value.copy(
+                    errorMessage = "Error adding manual attendance: ${e.message}"
+                )
+            }
+        }
+    }
+
+    /**
+     * Parse roll numbers from input text
+     * Supports comma, line, space, and comma-space separators
+     */
+    private fun parseRollNumbers(input: String): List<String> {
+        if (input.isBlank()) return emptyList()
+
+        return input
+            .split(Regex("[,;\\n\\r\\s]+")) // Split by comma, semicolon, newline, carriage return, or whitespace
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+    }
+}
+
+/**
+ * UI State for Admin QR Attendance interface
+ */
+data class AdminQRUiState(
+    val isLoading: Boolean = false,
+    val adminId: String = "",
+    val adminName: String = "",
+    val isAdmin: Boolean = false,
+    val availableEvents: List<AttendanceEvent> = emptyList(),
+    val selectedEvent: AttendanceEvent? = null,
+    val currentSession: AttendanceSession? = null,
+    val isSessionActive: Boolean = false,
+    val currentQRCode: Bitmap? = null,
+    val currentQRData: QRAttendanceData? = null,
+    val qrRefreshCount: Int = 0,
+    val attendeeCount: Int = 0,
+    val errorMessage: String? = null,
+    val successMessage: String? = null,
+    // Event creation states
+    val showCreateEventDialog: Boolean = false,
+    val isCreatingEvent: Boolean = false,
+    val createEventSuccess: Boolean = false,
+    // Event editing states
+    val showEditEventDialog: Boolean = false,
+    val editingEvent: AttendanceEvent? = null,
+    val isUpdatingEvent: Boolean = false,
+    val editEventSuccess: Boolean = false
+)
+
+/**
+ * UI State for Student QR Attendance interface
+ */
+data class StudentQRUiState(
+    val isProcessing: Boolean = false,
+    val studentId: String = "",
+    val studentName: String = "",
+    val isStudent: Boolean = false,
+    val scanResult: ScanResult? = null,
+    val isCameraPermissionGranted: Boolean = false,
+
+    val cameraExited: Boolean = false,
+    val navigatedToResult: Boolean = false,
+
+    // Zoom functionality
+    val currentZoomLevel: Float = 1.0f,
+    val minZoomLevel: Float = 1.0f,
+    val maxZoomLevel: Float = 4.0f,
+    val isZooming: Boolean = false
+)
+
+/**
+ * Sealed class representing scan results
+ */
+sealed class ScanResult {
+    data class Success(val message: String) : ScanResult()
+    data class Error(val message: String) : ScanResult()
+}

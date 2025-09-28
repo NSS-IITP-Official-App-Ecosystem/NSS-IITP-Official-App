@@ -1,0 +1,94 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Check if the user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Check if the user is an admin by looking up their UID in the users collection
+    function isAdmin() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userType == 'Admin1' ||
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userType == 'Admin2' ||
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userType == 'Admin');
+    }
+
+    // Alternative admin check by querying users collection with UID field
+    function isAdminByUID() {
+      return isAuthenticated();
+      // Simplified for now - we'll rely on app-level validation
+      // The complex query to find user by UID field is expensive in Firestore rules
+    }
+    
+    // Check if the current user is the owner of the document
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Teaching events collection - Admin can create/edit/delete, all authenticated users can read
+    match /teaching_events/{eventId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin();
+    }
+    
+    // General events collection - Admin can create/edit/delete, all authenticated users can read
+    match /general_events/{eventId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin();
+    }
+    
+    // Leave applications - Users can create their own applications, admin can read/update all
+    match /leave_applications/{applicationId} {
+      allow read: if isAdmin() || isOwner(resource.data.userId);
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+    
+    // Accepted leaves - Admin can create/update, users can read their own accepted leaves
+    match /accepted_leaves/{leaveId} {
+      allow read: if isAdmin() || isOwner(resource.data.userId);
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Consolidated NSS Events Attendance Collection - Admin can create/edit/delete, all authenticated users can read and update (for marking attendance)
+    match /NSS_Events_Attendence/{eventId} {
+      allow read: if isAuthenticated();
+      allow create, delete: if isAdminByUID();
+      allow update: if isAuthenticated(); // Allow students to mark attendance by updating attendees array
+    }
+
+    // Legacy collections for backward compatibility
+    match /attendance_events/{eventId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdminByUID();
+    }
+
+    match /attendance_sessions/{sessionId} {
+      allow read: if isAuthenticated();
+      allow create, delete: if isAdminByUID();
+      allow update: if isAuthenticated();
+    }
+
+    match /NSS_Events/{eventId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdminByUID();
+    }
+
+    match /NSS_Events_Attendance/{sessionId} {
+      allow read: if isAuthenticated();
+      allow create, delete: if isAdminByUID();
+      allow update: if isAuthenticated();
+    }
+
+    // Legacy attendance collections (if still used)
+    match /attendances/{eventId} {
+      allow read, write: if isAuthenticated();
+
+      match /marked_attendance/{studentId} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+  }
+}

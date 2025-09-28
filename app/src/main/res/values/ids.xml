@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Menu action IDs -->
+    <item name="action_test_firebase" type="id" />
+    <item name="action_student_data" type="id" />
+    <item name="action_user_migration" type="id" />
+</resources> 

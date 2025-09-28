@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="#1F1F1F">
+
+    <TextView
+        android:id="@+id/menu_manage_participants"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Manage Participants"
+        android:textColor="#FFFFFF"
+        android:textSize="16sp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="16dp"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#333333" />
+
+    <TextView
+        android:id="@+id/menu_edit_group_name"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Edit Group Name"
+        android:textColor="#FFFFFF"
+        android:textSize="16sp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="16dp"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#333333" />
+
+    <TextView
+        android:id="@+id/menu_edit_description"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Edit Description"
+        android:textColor="#FFFFFF"
+        android:textSize="16sp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="16dp"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true" />
+
+</LinearLayout> 

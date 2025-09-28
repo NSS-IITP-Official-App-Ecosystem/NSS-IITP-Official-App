@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="calendar_title">Calendar</string>
+    <string name="teaching_calendar">Core Teaching</string>
+    <string name="events_calendar">Events and Meets</string>
+    <string name="no_events">No events scheduled</string>
+    <string name="add_event">Add event</string>
+    <string name="select_role">Select Role</string>
+    <string name="admin">Admin</string>
+    <string name="user">User</string>
+    <string name="event_details">Event Details</string>
+    <string name="ok">OK</string>
+</resources> 

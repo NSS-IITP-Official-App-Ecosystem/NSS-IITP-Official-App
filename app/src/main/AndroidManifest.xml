@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Add Internet permission for Firebase connectivity -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Location permissions for attendance -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Storage permissions for PDF generation -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+
+    <application
+        android:name=".ChatApplication"
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@drawable/nss_logo_main"
+        android:label="NSS IITP"
+        android:roundIcon="@drawable/nss_logo_main"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.ChatApp"
+        android:networkSecurityConfig="@xml/network_security_config"
+        tools:targetApi="31"
+        tools:replace="android:icon,android:label,android:roundIcon">
+        
+        <!-- FCM Service for push notifications -->
+        <service
+            android:name=".utils.ChatMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+        
+        <!-- Receiver for boot completed to restore notification listening -->
+        <receiver
+            android:name=".utils.BootCompletedReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+        
+        <!-- Splash Activity as launcher -->
+        <activity
+            android:name=".SplashActivity"
+            android:exported="true"
+            android:theme="@style/Theme.ChatApp.Splash">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <!-- Login Activity -->
+        <activity
+            android:name=".LoginActivity"
+            android:exported="true"
+            android:theme="@style/Theme.ChatApp"
+            android:windowSoftInputMode="adjustResize" />
+        
+        <!-- Login Form Activity -->
+        <activity
+            android:name=".LoginFormActivity"
+            android:windowSoftInputMode="adjustResize"
+            android:exported="false"
+            android:theme="@style/Theme.ChatApp"/>
+
+        <!-- Main Activity -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.ChatApp" />
+            
+        <!-- Group Chat Activity -->
+        <activity
+            android:name=".GroupChatActivity"
+            android:exported="false"
+            android:theme="@style/Theme.ChatApp"
+            android:windowSoftInputMode="adjustResize" />
+            
+        <!-- Manage Participants Activity -->
+        <activity
+            android:name=".ManageParticipantsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.ChatApp"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- Chat Activity -->
+        <activity
+            android:name=".ChatActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- Add the StudentDataActivity before the closing application tag -->
+        <activity
+            android:name=".StudentDataActivity"
+            android:exported="false"
+            android:label="TWApp Student Data" />
+            
+        <!-- User Migration Activity -->
+        <activity
+            android:name=".UserMigrationActivity"
+            android:exported="false"
+            android:label="TWApp User Migration" />
+
+        <!-- Image View Activity -->
+        <activity
+            android:name=".activities.ImageViewActivity"
+            android:exported="false"
+            android:theme="@style/Theme.ChatApp.Fullscreen" />
+            
+        <!-- Update Detail Activity -->
+        <activity
+            android:name=".activities.UpdateDetailActivity"
+            android:exported="false"
+            android:theme="@style/Theme.ChatApp" />
+            
+        <!-- Audio Player Activity -->
+        <activity
+            android:name=".activities.AudioPlayerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.ChatApp.Fullscreen" />
+
+        <!-- Manage Permissions Activity -->
+        <activity
+            android:name=".activities.ManagePermissionsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.ChatApp"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- Create Update Activity -->
+        <activity
+            android:name=".ui.CreateUpdateActivity"
+            android:exported="false"
+            android:theme="@style/Theme.ChatApp"
+            android:windowSoftInputMode="adjustResize" />
+
+
+            android:theme="@style/Theme.ChatApp"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- FAQ Activity -->
+        <activity
+            android:name=".features.home.faqs.ui.FaqActivity"
+            android:exported="false"
+            android:theme="@style/Theme.ChatApp" />
+
+        <!-- Admin FAQ Activity -->
+        <activity
+            android:name=".features.home.faqs.ui.AdminFaqActivity"
+            android:exported="false"
+            android:theme="@style/Theme.ChatApp" />
+
+        <!-- NSS or Teaching Wing Activity -->
+        <activity
+            android:name=".ui.profile.NssOrTeachingWingActivity"
+            android:exported="false"
+            android:theme="@style/Theme.ChatApp" />
+
+        <!-- NSS Main Activity -->
+        <activity
+            android:name=".NssMainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.ChatApp" />
+
+        <!-- Events List Activity -->
+        <activity
+            android:name=".EventsListActivity"
+            android:exported="false"
+            android:theme="@style/Theme.ChatApp" />
+
+        <!-- Add this inside the application tag -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true"
+            tools:replace="android:authorities">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+    </application>
+
+</manifest>

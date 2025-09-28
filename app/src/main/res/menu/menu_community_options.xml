@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/action_view_info"
+        android:title="View info" />
+    <item
+        android:id="@+id/action_mute"
+        android:title="Mute notifications" />
+    <item
+        android:id="@+id/action_leave"
+        android:title="Leave group" />
+</menu> 

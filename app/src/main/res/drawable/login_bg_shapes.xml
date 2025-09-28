@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Base dark background -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#1E1716" />
+        </shape>
+    </item>
+    
+    <!-- Organic shape 1 - large blob -->
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="#2A2322" />
+            <size android:width="400dp" android:height="400dp" />
+        </shape>
+        <translate android:fromXDelta="20%" android:fromYDelta="20%" />
+    </item>
+    
+    <!-- Organic shape 2 - medium blob -->
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="#2A2322" />
+            <size android:width="200dp" android:height="200dp" />
+        </shape>
+        <translate android:fromXDelta="70%" android:fromYDelta="70%" />
+    </item>
+    
+    <!-- Organic shape 3 - small blob -->
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="#2A2322" />
+            <size android:width="100dp" android:height="100dp" />
+        </shape>
+        <translate android:fromXDelta="10%" android:fromYDelta="80%" />
+    </item>
+</layer-list> 
