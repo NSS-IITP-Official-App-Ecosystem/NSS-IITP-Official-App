@@ -63,7 +63,7 @@ class LibraryItemListFragment : Fragment(), LibraryItemAdapter.OnItemClickListen
 
         // Check user role and control FAB visibility - handle multiple admin types
         val userType = sessionManager.fetchUserType()
-        val isAdmin = userType == "Admin" || userType == "Admin1" || userType == "Admin2"
+        val isAdmin = userType.equals("Admin", ignoreCase = true)
         if (isAdmin) {
             binding.fabAddItem.visibility = View.VISIBLE
         } else {

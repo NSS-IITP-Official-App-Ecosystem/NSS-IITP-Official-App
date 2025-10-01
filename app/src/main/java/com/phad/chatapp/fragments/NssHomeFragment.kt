@@ -29,6 +29,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import kotlinx.coroutines.tasks.await
 import com.phad.chatapp.ChatActivity
 import com.phad.chatapp.MainActivity
 import com.phad.chatapp.R
@@ -133,15 +134,52 @@ class NssHomeFragment : Fragment() {
     
     private fun loadGreetingAndNextClass() {
         val greeting = getGreetingBasedOnTime()
-        val userName = sessionManager.fetchUserName().ifEmpty { "User" }
         val userType = sessionManager.fetchUserType()
-        _uiState.update {
-            it.copy(
-                greeting = greeting,
-                userName = userName,
-                isAdmin = userType == "Admin" || userType == "Admin1" || userType == "Admin2",
-                isNssInterface = true
-            )
+        val rollNumber = sessionManager.fetchUserId()
+        
+        // Load fresh user data from users collection
+        loadUserDataFromFirestore(greeting, userType, rollNumber)
+    }
+    
+    private fun loadUserDataFromFirestore(greeting: String, userType: String, rollNumber: String) {
+        val db = FirebaseFirestore.getInstance()
+        
+        lifecycleScope.launch {
+            try {
+                Log.d(TAG, "Loading user data for rollNumber: $rollNumber")
+                val userDoc = db.collection("users").document(rollNumber).get().await()
+                
+                val userName = if (userDoc.exists()) {
+                    val name = userDoc.getString("name") ?: "User"
+                    Log.d(TAG, "Found user name: '$name'")
+                    name
+                } else {
+                    Log.w(TAG, "User document not found, using fallback")
+                    "User"
+                }
+                
+                _uiState.update {
+                    it.copy(
+                        greeting = greeting,
+                        userName = userName,
+                        isAdmin = userType.equals("Admin", ignoreCase = true),
+                        isNssInterface = true
+                    )
+                }
+                
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading user data from Firestore", e)
+                // Fallback to session data
+                val userName = sessionManager.fetchUserName().ifEmpty { "User" }
+                _uiState.update {
+                    it.copy(
+                        greeting = greeting,
+                        userName = userName,
+                        isAdmin = userType.equals("Admin", ignoreCase = true),
+                        isNssInterface = true
+                    )
+                }
+            }
         }
     }
     
@@ -200,12 +238,17 @@ class NssHomeFragment : Fragment() {
         val userType = sessionManager.fetchUserType()
         val currentInterface = sessionManager.getLastInterfaceChoice() ?: "NSS"
 
-        // Check for admin users (Admin, Admin1, Admin2) with NSS interface
-        if ((userType == "Admin" || userType == "Admin1" || userType == "Admin2") && currentInterface == "NSS") {
+        Log.d(TAG, "QR Attendance navigation - UserType: '$userType', Interface: '$currentInterface'")
+
+        // Allow admins regardless of interface
+        if (userType.equals("Admin", ignoreCase = true)) {
+            Log.d(TAG, "Admin user accessing QR attendance management")
             findNavController().navigate(R.id.nssQRAttendanceFragment)
-        } else if (userType == "Student" && currentInterface == "NSS") {
+        } else if (userType.equals("Student", ignoreCase = true)) {
+            Log.d(TAG, "Student user accessing QR scan")
             findNavController().navigate(R.id.nssQRScanFragment)
         } else {
+            Log.w(TAG, "Access denied - UserType: '$userType', Interface: '$currentInterface'")
             Toast.makeText(requireContext(), "Access denied. Only NSS users can access QR attendance.", Toast.LENGTH_SHORT).show()
         }
     }

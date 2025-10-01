@@ -123,7 +123,7 @@ class RemoveGroupFragment : Fragment() {
         val currentUserId = sessionManager.fetchUserId()
         
         // Only Admin users can delete groups
-        if (userType != "Admin" && userType != "Admin1" && userType != "Admin2") {
+        if (userType != "Admin") {
             // Show a message that only Admin users can remove groups
             emptyView.visibility = View.VISIBLE
             loadingProgress.visibility = View.GONE

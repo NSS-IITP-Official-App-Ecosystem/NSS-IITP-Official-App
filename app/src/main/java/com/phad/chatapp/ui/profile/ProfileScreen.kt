@@ -1,5 +1,6 @@
 package com.phad.chatapp.ui.profile
 
+import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -101,6 +102,14 @@ fun ProfileScreen(
     currentInterface: String,
     teachingWing: Boolean
 ) {
+    // Debug logging for ProfileScreen
+    Log.d("ProfileScreen", "=== PROFILE SCREEN DEBUG ===")
+    Log.d("ProfileScreen", "Received state: $state")
+    Log.d("ProfileScreen", "sem1Hours: ${state.sem1Hours}")
+    Log.d("ProfileScreen", "sem2Hours: ${state.sem2Hours}")
+    Log.d("ProfileScreen", "eventsAttended: ${state.eventsAttended}")
+    Log.d("ProfileScreen", "isStudent: ${state.isStudent}")
+    Log.d("ProfileScreen", "=== PROFILE SCREEN DEBUG COMPLETE ===")
     val isDarkTheme = isSystemInDarkTheme()
     val backgroundColor = Color(0xff0d0302)
     val surfaceColor = Color.White
@@ -312,21 +321,6 @@ fun ProfileScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // Second row: NSS Group and Academic Group in same line with better spacing
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                LabeledInfoItem(label = "NSS Group", value = state.nssGroup, color = onSurfaceColor)
-                            }
-                            Spacer(modifier = Modifier.size(16.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                LabeledInfoItem(label = "Academic Group", value = state.academicGroup, color = onSurfaceColor)
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
 
                         // Third row: Institute ID
                         LabeledInfoItem(label = "Institute ID", value = state.instituteId, color = onSurfaceColor)

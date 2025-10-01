@@ -57,7 +57,7 @@ class UserAvatarAdapter(
             importantIndicator.visibility = if (user.hasImportantMessages) View.VISIBLE else View.GONE
             
         // Show golden border for Admin users
-        adminBorder.visibility = if (user.userType == "Admin" || user.userType == "Admin1" || user.userType == "Admin2") View.VISIBLE else View.GONE
+        adminBorder.visibility = if (user.userType.equals("Admin", ignoreCase = true)) View.VISIBLE else View.GONE
 
             // Set click listener to open chat with this user
             itemView.setOnClickListener {

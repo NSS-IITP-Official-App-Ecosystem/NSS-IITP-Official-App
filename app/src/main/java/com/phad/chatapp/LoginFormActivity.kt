@@ -159,8 +159,8 @@ class LoginFormActivity : AppCompatActivity() {
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val collectionName = if (loginType == "ADMIN") "NSS_ADMINS" else "Student"
-                val documentSnapshot = db.collection(collectionName)
+                // Fetch from unified users collection
+                val documentSnapshot = db.collection("users")
                     .document(rollNumber)
                     .get()
                     .await()
@@ -168,22 +168,8 @@ class LoginFormActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     if (documentSnapshot.exists()) {
                         val userData = documentSnapshot.data
-                        if (loginType == "ADMIN") {
-                            val collegeEmail = userData?.get("College_Email") as? String
-                            if (!collegeEmail.isNullOrEmpty()) {
-                                binding.rollNumberCheckMark.visibility = View.VISIBLE
-                            } else {
-                                binding.rollNumberCheckMark.visibility = View.GONE
-                            }
-                        } else {
-                            // For students, check in Student collection
-                            val firestoreEmail = userData?.get("Gmail_ID") as? String
-                            if (!firestoreEmail.isNullOrEmpty()) {
-                                binding.rollNumberCheckMark.visibility = View.VISIBLE
-                            } else {
-                                binding.rollNumberCheckMark.visibility = View.GONE
-                            }
-                        }
+                        // We no longer use legacy collections for validation here; presence in users is enough
+                        binding.rollNumberCheckMark.visibility = View.VISIBLE
                         binding.progressBar.visibility = View.GONE
                     } else {
                         binding.progressBar.visibility = View.GONE
@@ -210,8 +196,8 @@ class LoginFormActivity : AppCompatActivity() {
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val collectionName = if (loginType == "ADMIN") "NSS_ADMINS" else "Student"
-                val documentSnapshot = db.collection(collectionName)
+                // New unified users collection lookup by rollNumber (document id)
+                val documentSnapshot = db.collection("users")
                     .document(rollNumber)
                     .get()
                     .await()
@@ -234,12 +220,8 @@ class LoginFormActivity : AppCompatActivity() {
                     return@launch
                 }
 
-                // For admin, use College_Email; for student, use Gmail_ID
-                val firestoreEmail = if (loginType == "ADMIN") {
-                    userData["College_Email"] as? String
-                } else {
-                    userData["Gmail_ID"] as? String
-                }
+                // Use instituteOutlookId for both admin and student
+                val firestoreEmail = userData["instituteOutlookId"] as? String
                 if (firestoreEmail.isNullOrEmpty()) {
                     withContext(Dispatchers.Main) {
                         binding.progressBar.visibility = View.GONE
@@ -252,20 +234,13 @@ class LoginFormActivity : AppCompatActivity() {
                 try {
                     auth.signInWithEmailAndPassword(firestoreEmail, password).await()
                     // Login successful - extract user data
-                    val year = (userData["Year"] as? Long)?.toInt() ?: 1
-                    val fullName = userData["Name"] as? String ?: ""
+                    val fullName = userData["name"] as? String ?: ""
                     // Create login session
-                    val finalUserType = if (loginType == "ADMIN") {
-                        // For admins, we need to check the "users" collection to get the specific admin type
-                        val userDocument = db.collection("users").document(rollNumber).get().await()
-                        userDocument.getString("userType") ?: "Admin"
-                    } else {
-                        "Student"
-                    }
-                    sessionManager.createLoginSession(finalUserType, rollNumber, year)
+                    val finalUserType = (userData["userType"] as? String ?: "student").replaceFirstChar { it.lowercase() }
+                    sessionManager.createLoginSession(if (finalUserType == "admin") "Admin" else "Student", rollNumber, 0)
                     sessionManager.saveUserName(fullName)
                     // Update FCM token (only for users collection)
-                    if (loginType != "ADMIN") {
+                    if (true) {
                     val currentUser = auth.currentUser
                     if (currentUser != null) {
                         try {
@@ -282,6 +257,8 @@ class LoginFormActivity : AppCompatActivity() {
                     }
                     // Now fetch full profile and save to session
                     fetchProfileAndProceed(rollNumber, finalUserType)
+                    // Default interface to NSS after unified login
+                    SessionManager(this@LoginFormActivity).setLastInterfaceChoice("NSS")
                     // Also update attendance stats in session after login
                     CoroutineScope(Dispatchers.IO).launch {
                         AttendanceStatsUpdater.updateAttendanceStatsInSession(this@LoginFormActivity)
@@ -351,89 +328,53 @@ class LoginFormActivity : AppCompatActivity() {
     }
 
     private suspend fun fetchAdminProfile(rollNumber: String, userType: String): ProfileUiState {
-        return try {
-            val document = db.collection("NSS_ADMINS").document(rollNumber).get().await()
-            if (document.exists()) {
-                val data = document.data!!
-                ProfileUiState(
-                    name = data["Name"] as? String ?: "Admin",
-                    location = "N/A",
-                    email = data["College_Email"] as? String ?: "",
-                    phone = data["Contact_Number"] as? String ?: "",
-                    rollNumber = data["Roll_Number"] as? String ?: rollNumber,
-                    collegeEmail = data["College_Email"] as? String ?: "",
-                    academicGroup = (data["Academic_Group"] as? Long)?.toString() ?: "N/A",
-                    nssGroup = (data["NSS_Group"] as? Long)?.toString() ?: "N/A",
-                    topic1 = "N/A",
-                    topic2 = "N/A",
-                    topic3 = "N/A",
-                    userType = userType,
-                    isStudent = false, // Admins are not students
-                    Teaching_wing = data["Teaching_wing"] as? Boolean ?: false
-                )
-            } else {
-                // Fallback to a default admin profile if not found
-                ProfileUiState(
-                    name = "Admin",
-                    rollNumber = rollNumber,
-                    userType = userType,
-                    isStudent = false,
-                    location = "N/A",
-                    email = "N/A",
-                    phone = "N/A",
-                    collegeEmail = "N/A",
-                    academicGroup = "N/A",
-                    nssGroup = "N/A",
-                    Teaching_wing = false
-                )
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error fetching admin profile for $rollNumber", e)
-            // Return a default profile on error
-            ProfileUiState(
-                name = "Admin",
-                rollNumber = rollNumber,
-                isStudent = false,
-                location = "N/A",
-                email = "N/A",
-                phone = "N/A",
-                collegeEmail = "N/A",
-                academicGroup = "N/A",
-                nssGroup = "N/A",
-                Teaching_wing = false,
-                userType = userType
-            )
-        }
+        val doc = db.collection("users").document(rollNumber).get().await()
+        val name = doc.getString("name") ?: "Admin"
+        val email = doc.getString("instituteOutlookId") ?: ""
+        // Determine Teaching Wing from `wings` array in users doc
+        val wings = doc.get("wings") as? List<*> ?: emptyList<Any>()
+        val isTeachingWing = wings.any { (it as? String)?.equals("Teaching and Technical Wing", ignoreCase = true) == true }
+        return ProfileUiState(
+            name = name,
+            location = "N/A",
+            email = email,
+            phone = "",
+            rollNumber = rollNumber,
+            collegeEmail = email,
+            academicGroup = "N/A",
+            nssGroup = "N/A",
+            topic1 = "N/A",
+            topic2 = "N/A",
+            topic3 = "N/A",
+            userType = userType,
+            isStudent = false,
+            Teaching_wing = isTeachingWing
+        )
     }
 
     private suspend fun fetchStudentProfile(rollNumber: String, userType: String): ProfileUiState {
-        return try {
-            val document = db.collection("Student").document(rollNumber).get().await()
-            if (document.exists()) {
-                val data = document.data!!
-                ProfileUiState(
-                    name = data["Name"] as? String ?: "Student",
-                    location = data["location"] as? String ?: "N/A",
-                    email = data["Gmail_ID"] as? String ?: "",
-                    phone = data["Mobile_No_"] as? String ?: "",
-                    rollNumber = data["Roll_No_"] as? String ?: rollNumber,
-                    collegeEmail = data["Institute_ID"] as? String ?: "",
-                    academicGroup = data["Academic_Grp"] as? String ?: "N/A",
-                    nssGroup = data["NSS_gro"] as? String ?: "N/A",
-                    topic1 = "N/A",
-                    topic2 = "N/A",
-                    topic3 = "N/A",
-                    isStudent = true,
-                    userType = userType,
-                    Teaching_wing = data["Teaching_wing"] as? Boolean ?: false
-                )
-            } else {
-                ProfileUiState(name = "Student", rollNumber = rollNumber, userType = userType)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error fetching student profile for $rollNumber", e)
-            ProfileUiState(name = "Student", rollNumber = rollNumber, userType = userType)
-        }
+        val doc = db.collection("users").document(rollNumber).get().await()
+        val name = doc.getString("name") ?: "Student"
+        val email = doc.getString("instituteOutlookId") ?: ""
+        // Determine Teaching Wing from `wings` array in users doc
+        val wings = doc.get("wings") as? List<*> ?: emptyList<Any>()
+        val isTeachingWing = wings.any { (it as? String)?.equals("Teaching and Technical Wing", ignoreCase = true) == true }
+        return ProfileUiState(
+            name = name,
+            location = "N/A",
+            email = email,
+            phone = "",
+            rollNumber = rollNumber,
+            collegeEmail = email,
+            academicGroup = "N/A",
+            nssGroup = "N/A",
+            topic1 = "N/A",
+            topic2 = "N/A",
+            topic3 = "N/A",
+            isStudent = true,
+            userType = userType,
+            Teaching_wing = isTeachingWing
+        )
     }
 
     private fun handleForgotPassword() {
@@ -448,9 +389,8 @@ class LoginFormActivity : AppCompatActivity() {
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                // First check in the appropriate collection based on login type
-                val collectionName = if (loginType == "ADMIN") "NSS_ADMINS" else "Student"
-                val userDoc = db.collection(collectionName)
+                // Look up unified users collection for email
+                val userDoc = db.collection("users")
                     .document(rollNumber)
                     .get()
                     .await()
@@ -463,12 +403,8 @@ class LoginFormActivity : AppCompatActivity() {
                     return@launch
                 }
 
-                // Get email from Firestore based on user type
-                val firestoreEmail = if (loginType == "ADMIN") {
-                    userDoc.getString("College_Email")
-                } else {
-                    userDoc.getString("Gmail_ID")
-                }
+                // Get email from Firestore unified field
+                val firestoreEmail = userDoc.getString("instituteOutlookId")
 
                 if (firestoreEmail.isNullOrEmpty()) {
                     withContext(Dispatchers.Main) {

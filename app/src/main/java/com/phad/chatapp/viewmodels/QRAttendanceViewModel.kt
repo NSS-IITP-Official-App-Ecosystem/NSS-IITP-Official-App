@@ -22,6 +22,7 @@ import com.phad.chatapp.utils.DeviceIdentificationUtils
 import com.phad.chatapp.utils.DuplicateType
 import com.phad.chatapp.utils.DeviceDuplicateTestUtils
 import com.phad.chatapp.utils.PDFGenerator
+import com.phad.chatapp.utils.AttendanceStatsUpdater
 import com.google.firebase.firestore.FirebaseFirestore
 import java.io.File
 import kotlinx.coroutines.delay
@@ -74,10 +75,10 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
 
         Log.d(TAG, "User info - Type: '$userType', ID: '$userId', Name: '$userName'")
 
-        // Check admin status with detailed logging
-        val isAdmin = userType == "Admin" || userType == "Admin1" || userType == "Admin2"
+        // Check admin status with detailed logging (case-insensitive)
+        val isAdmin = userType.equals("Admin", ignoreCase = true)
         Log.d(TAG, "Admin check: userType='$userType', isAdmin=$isAdmin")
-        Log.d(TAG, "Admin check: ${userType == "Admin" || userType == "Admin1" || userType == "Admin2"}")
+        Log.d(TAG, "Admin check: ${userType.equals("Admin", ignoreCase = true)}")
 
         _adminUiState.value = _adminUiState.value.copy(
             adminId = userId,
@@ -88,7 +89,7 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
         _studentUiState.value = _studentUiState.value.copy(
             studentId = userId,
             studentName = userName,
-            isStudent = userType == "Student"
+            isStudent = userType.equals("Student", ignoreCase = true)
         )
 
         // Log final student UI state
@@ -682,6 +683,15 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                     isProcessing = false,
                     scanResult = ScanResult.Success("Attendance for $eventName marked successfully!")
                 )
+                
+                // Update attendance stats in session after successful attendance marking
+                try {
+                    AttendanceStatsUpdater.updateAttendanceStatsInSession(application)
+                    Log.d(TAG, "✅ Attendance stats updated in session")
+                } catch (e: Exception) {
+                    Log.w(TAG, "⚠️ Failed to update attendance stats in session: ${e.message}")
+                }
+                
                 Log.d(TAG, "✅ Attendance marked successfully for ${_studentUiState.value.studentId} - Event: $eventName")
                 Log.d(TAG, "=== ATTENDANCE MARKING COMPLETED SUCCESSFULLY ===")
             } else {
@@ -1261,18 +1271,17 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                     try {
                         Log.d(TAG, "Processing roll number: $rollNumber")
                         
-                        // Get student information from Student collection
-                        val studentResult = repository.getStudentByRollNumber(rollNumber)
-                        if (studentResult.isFailure) {
-                            Log.e(TAG, "Failed to get student data for roll number: $rollNumber, error: ${studentResult.exceptionOrNull()?.message}")
-                            errorCount++
-                            errors.add("Failed to find student: $rollNumber")
-                            continue
+                        // Prefer unified users collection; fallback to legacy Student collection
+                        val userResult = repository.getUserByRollNumber(rollNumber)
+                        val legacyStudentResult = if (userResult.getOrNull() == null) repository.getStudentByRollNumber(rollNumber) else Result.success(null)
+
+                        if (userResult.isFailure) {
+                            Log.e(TAG, "Failed to get user data for roll number: $rollNumber, error: ${userResult.exceptionOrNull()?.message}")
                         }
 
-                        val studentData = studentResult.getOrNull()
+                        val studentData = userResult.getOrNull() ?: legacyStudentResult.getOrNull()
                         if (studentData == null) {
-                            Log.w(TAG, "Student document not found in database for roll number: $rollNumber")
+                            Log.w(TAG, "User/Student document not found for roll number: $rollNumber")
                             errorCount++
                             errors.add("Student not found: $rollNumber")
                             continue

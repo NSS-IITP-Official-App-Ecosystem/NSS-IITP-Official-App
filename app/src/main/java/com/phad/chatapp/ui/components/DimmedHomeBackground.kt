@@ -37,7 +37,7 @@ fun DimmedHomeBackground(
             },
             userName = sessionManager.fetchUserName().ifEmpty { "User" },
             updates = emptyList(), // Empty for background display to improve performance
-                            isAdmin = sessionManager.fetchUserType() == "Admin" || sessionManager.fetchUserType() == "Admin1" || sessionManager.fetchUserType() == "Admin2",
+                            isAdmin = sessionManager.fetchUserType().equals("Admin", ignoreCase = true),
             isNssInterface = sessionManager.getLastInterfaceChoice() == "NSS"
         )
     }

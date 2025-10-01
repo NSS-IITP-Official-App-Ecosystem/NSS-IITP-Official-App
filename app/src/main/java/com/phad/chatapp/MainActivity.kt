@@ -192,8 +192,8 @@ class MainActivity : AppCompatActivity() {
         // Get user type from session
         val userType = sessionManager.fetchUserType()
         
-        // Show/hide admin menu items based on user type
-        val isAdmin = userType == "Admin" || userType == "Admin1" || userType == "Admin2"
+        // Show/hide admin menu items based on user type (consolidated)
+        val isAdmin = userType.equals("Admin", ignoreCase = true)
 
         // Only Admin can create/remove groups
         menu.findItem(R.id.action_create_group)?.isVisible = isAdmin

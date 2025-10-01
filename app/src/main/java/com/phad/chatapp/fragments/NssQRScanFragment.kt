@@ -89,9 +89,9 @@ class NssQRScanFragment : Fragment() {
         
         sessionManager = SessionManager(requireContext())
         
-        // Check if user is student
+        // Check if user is student (case-insensitive)
         val userType = sessionManager.fetchUserType()
-        if (userType != "Student") {
+        if (!userType.equals("Student", ignoreCase = true)) {
             Log.w(TAG, "Non-student user trying to access QR scanning: $userType")
             Toast.makeText(requireContext(), "Access denied. Student privileges required.", Toast.LENGTH_LONG).show()
             parentFragmentManager.popBackStack()

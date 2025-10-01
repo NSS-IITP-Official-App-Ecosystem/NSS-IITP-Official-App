@@ -12,7 +12,7 @@ object AttendanceUtils {
 
     fun incrementStudentAttendance(rollNumber: String) {
         val db = FirebaseFirestore.getInstance()
-        val studentRef = db.collection("Student").document(rollNumber)
-        studentRef.update("event_attendance", FieldValue.increment(1))
+        val userRef = db.collection("users").document(rollNumber)
+        userRef.update("eventsAttended", FieldValue.increment(1))
     }
 } 

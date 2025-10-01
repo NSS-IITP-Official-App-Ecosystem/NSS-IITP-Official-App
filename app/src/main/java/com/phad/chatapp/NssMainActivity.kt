@@ -195,11 +195,11 @@ class NssMainActivity : AppCompatActivity() {
 
         Log.d("NssMainActivity", "QR Attendance access check - UserType: '$userType', Interface: '$currentInterface'")
 
-        // Check for admin users (Admin, Admin1, Admin2) with NSS interface
-        if ((userType == "Admin" || userType == "Admin1" || userType == "Admin2") && currentInterface == "NSS") {
-            Log.d("NssMainActivity", "Admin user ($userType) accessing QR attendance")
+        // Allow admins regardless of interface
+        if (userType.equals("Admin", ignoreCase = true)) {
+            Log.d("NssMainActivity", "Admin user accessing QR attendance management")
             navController.navigate(R.id.nssQRAttendanceFragment)
-        } else if (userType == "Student" && currentInterface == "NSS") {
+        } else if (userType.equals("Student", ignoreCase = true)) {
             Log.d("NssMainActivity", "Student user accessing QR scan")
             navController.navigate(R.id.nssQRScanFragment)
         } else {

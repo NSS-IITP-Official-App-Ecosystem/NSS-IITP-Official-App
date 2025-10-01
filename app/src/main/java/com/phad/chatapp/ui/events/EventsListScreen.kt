@@ -23,6 +23,11 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.phad.chatapp.models.AttendanceEvent
 import com.phad.chatapp.utils.PDFGenerator
 import kotlinx.coroutines.tasks.await
+import android.net.Uri
+import androidx.core.content.FileProvider
+import android.content.Intent
+import kotlinx.coroutines.launch
+import com.phad.chatapp.utils.SessionManager
 
 data class EventDetail(
     val id: String,
@@ -47,6 +52,7 @@ fun EventsListScreen(
     var showPDFMessage by remember { mutableStateOf<String?>(null) }
     
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(semester, rollNumber) {
         try {
@@ -54,12 +60,22 @@ fun EventsListScreen(
             error = null
             
             val db = FirebaseFirestore.getInstance()
-            
-            // Get student information
-            val studentDoc = db.collection("Student").document(rollNumber).get().await()
-            if (studentDoc.exists()) {
-                studentName = studentDoc.getString("Name") ?: ""
-                nssGroup = studentDoc.getString("NSS_gro") ?: ""
+            // Seed from session as fallback
+            val sessionManager = SessionManager(context)
+            val sessionName = sessionManager.fetchUserName()
+            if (!sessionName.isNullOrEmpty()) studentName = sessionName
+
+            // Prefer unified users collection
+            val userDoc = db.collection("users").document(rollNumber).get().await()
+            if (userDoc.exists()) {
+                studentName = userDoc.getString("name") ?: studentName
+            } else {
+                // Legacy fallback: Student collection (deprecated)
+                val studentDoc = db.collection("Student").document(rollNumber).get().await()
+                if (studentDoc.exists()) {
+                    studentName = studentDoc.getString("Name") ?: studentName
+                    nssGroup = studentDoc.getString("NSS_gro") ?: ""
+                }
             }
             
             val eventsSnapshot = db.collection("NSS_Events_Attendence").get().await()
@@ -117,9 +133,45 @@ fun EventsListScreen(
                         IconButton(
                             onClick = {
                                 isGeneratingPDF = true
-                                // Disabled: generateEventsListPDF helper not available. Future enhancement.
-                                isGeneratingPDF = false
-                                showPDFMessage = "PDF generation for events list is not available in this build"
+                                scope.launch {
+                                    try {
+                                        val generator = PDFGenerator(context)
+                                        val rows = events.map { Triple(it.name, it.date, it.hours) }
+                                        val path = generator.generateStudentEventsList(studentName, rollNumber, semester, rows)
+                                        if (path != null) {
+                                            try {
+                                                val file = java.io.File(path)
+                                                val uri: Uri = FileProvider.getUriForFile(
+                                                    context,
+                                                    context.packageName + ".fileprovider",
+                                                    file
+                                                )
+                                                // Try to open first (like QR attendance flow)
+                                                val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                                                    setDataAndType(uri, "application/pdf")
+                                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                }
+                                                if (viewIntent.resolveActivity(context.packageManager) != null) {
+                                                    context.startActivity(viewIntent)
+                                                } else {
+                                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                                        type = "application/pdf"
+                                                        putExtra(Intent.EXTRA_STREAM, uri)
+                                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                    }
+                                                    context.startActivity(Intent.createChooser(shareIntent, "Share PDF"))
+                                                }
+                                            } catch (_: Exception) { }
+                                            showPDFMessage = "PDF generated successfully"
+                                        } else {
+                                            showPDFMessage = "Failed to generate PDF"
+                                        }
+                                    } catch (e: Exception) {
+                                        showPDFMessage = e.message ?: "Failed to generate PDF"
+                                    } finally {
+                                        isGeneratingPDF = false
+                                    }
+                                }
                             }
                         ) {
                             Icon(
@@ -337,6 +389,8 @@ fun EventCard(event: EventDetail) {
         }
     }
 }
+
+// Intentionally empty: helper removed; PDF generation handled in composable click coroutine
 
 private fun extractEventNameFromId(eventId: String): String {
     // Event ID format: "{day}_{month}_{event_name_with_underscores}"

@@ -12,7 +12,7 @@ object AdminAccessControl {
      */
     fun isUserAdmin(sessionManager: SessionManager): Boolean {
         val userType = sessionManager.fetchUserType()
-        return userType == "Admin" || userType == "Admin1" || userType == "Admin2"
+        return userType.equals("Admin", ignoreCase = true)
     }
     
     /**

@@ -56,8 +56,8 @@ class CommunityTabFragment : Fragment() {
         Log.d(TAG, "User data: $userData")
         Log.d(TAG, "User type: '$userType', User ID: '$userId'")
         
-        // Only Admin users can manage groups - check with trimming to handle any whitespace issues
-        isAdmin = userType.trim() == "Admin" || userType.trim() == "Admin1" || userType.trim() == "Admin2"
+        // Only Admin users can manage groups - consolidated schema
+        isAdmin = userType.trim().equals("Admin", ignoreCase = true)
         Log.d(TAG, "Is user Admin? $isAdmin")
         
         // Initialize views

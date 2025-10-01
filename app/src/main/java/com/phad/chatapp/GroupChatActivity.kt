@@ -272,7 +272,7 @@ class GroupChatActivity : AppCompatActivity() {
         
         // Get user type to check permissions
         val userType = sessionManager.fetchUserType()
-        val isAdmin = userType == "Admin" || userType == "Admin1" || userType == "Admin2"
+        val isAdmin = userType.equals("Admin", ignoreCase = true)
         val userId = sessionManager.fetchUserId()
         
         // If this is the announcement group and user is not admin, disable message input
@@ -436,7 +436,7 @@ class GroupChatActivity : AppCompatActivity() {
         
         // Get user type to check permissions
         val userType = sessionManager.fetchUserType()
-        val isAdmin = userType == "Admin" || userType == "Admin1" || userType == "Admin2"
+        val isAdmin = userType.equals("Admin", ignoreCase = true)
         
         // Show/hide menu items based on user role
         popupMenu.menu.findItem(R.id.action_manage_participants)?.isVisible = isAdmin
@@ -725,7 +725,7 @@ class GroupChatActivity : AppCompatActivity() {
         // Check if this is the announcement group and if user has permission to post
         val isAnnouncementGroup = groupId == Constants.ANNOUNCEMENT_GROUP_ID
         val userType = sessionManager.fetchUserType()
-        val isAdmin = userType == "Admin" || userType == "Admin1" || userType == "Admin2"
+        val isAdmin = userType.equals("Admin", ignoreCase = true)
         
         if (isAnnouncementGroup && !isAdmin) {
             showToast("Only administrators can post attachments to announcements")
@@ -882,7 +882,7 @@ class GroupChatActivity : AppCompatActivity() {
         // Check if this is the announcement group and if user has permission to post
         val isAnnouncementGroup = groupId == Constants.ANNOUNCEMENT_GROUP_ID
         val userType = sessionManager.fetchUserType()
-        val isAdmin = userType == "Admin" || userType == "Admin1" || userType == "Admin2"
+        val isAdmin = userType.equals("Admin", ignoreCase = true)
         
         if (isAnnouncementGroup && !isAdmin) {
             showToast("Only administrators can post announcements")

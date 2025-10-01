@@ -28,7 +28,7 @@ class UserMigrationActivity : AppCompatActivity() {
         
         // Check if the user has Admin permissions - handle multiple admin types
         val userType = sessionManager.fetchUserType()
-        val isAdmin = userType == "Admin" || userType == "Admin1" || userType == "Admin2"
+        val isAdmin = userType.equals("Admin", ignoreCase = true)
         if (!isAdmin) {
             // Show error and finish activity if not an Admin user
             AlertDialog.Builder(this)

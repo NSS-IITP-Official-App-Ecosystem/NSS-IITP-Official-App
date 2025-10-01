@@ -70,7 +70,7 @@ class ChatApplication : Application() {
             initializeFCM()
             
             // Test Firestore access permissions
-            testFirestoreAccess()
+            // Removed test connection diagnostics
             
             // Initialize system announcement group
             initializeAnnouncementGroup()
@@ -244,54 +244,7 @@ class ChatApplication : Application() {
     /**
      * Test Firestore access permissions
      */
-    private fun testFirestoreAccess() {
-        try {
-            val db = FirebaseFirestore.getInstance()
-            
-            // Enable offline persistence to make the app more robust to connectivity issues
-            try {
-                val settings = FirebaseFirestoreSettings.Builder()
-                    .setPersistenceEnabled(true)
-                    .setCacheSizeBytes(FirebaseFirestoreSettings.CACHE_SIZE_UNLIMITED)
-                    .build()
-                db.firestoreSettings = settings
-                Log.d(TAG, "Firestore offline persistence enabled")
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to enable Firestore offline persistence", e)
-            }
-            
-            // Create a test document to verify write permissions
-            val testData = hashMapOf(
-                "timestamp" to com.google.firebase.Timestamp.now(),
-                "test" to "Testing Firestore access permissions",
-                "device" to "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}"
-            )
-            
-            // Test method 1: Using the "test_connection" collection which should have open permissions
-            try {
-                // Try a completely open collection first
-                db.collection("test_connection")
-                    .document("test")
-                    .set(testData)
-                    .addOnSuccessListener {
-                        Log.d(TAG, "Successfully wrote to Firestore test document (method 1)")
-                    }
-                    .addOnFailureListener { e ->
-                        Log.e(TAG, "Failed to write to Firestore test document (method 1)", e)
-                        
-                        // Try an alternative approach with users collection
-                        tryAlternativeFirestoreTest(db, testData)
-                    }
-            } catch (e: Exception) {
-                Log.e(TAG, "Exception during Firestore test (method 1)", e)
-                
-                // Try an alternative approach with users collection
-                tryAlternativeFirestoreTest(db, testData)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error testing Firestore access", e)
-        }
-    }
+    // Removed test connection diagnostics
     
     /**
      * Alternative method to test Firestore access using the users collection

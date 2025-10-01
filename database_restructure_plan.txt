@@ -1,132 +1,52 @@
 NSS APP - Database Restructure Plan
 ====================================
 
-This document tracks proposed changes to the database structure and their impact analysis.
+### NamingConventions
+- Use camelCase everywhere. Normalize and correct spellings.
 
-## PROPOSED CHANGES TO USERS COLLECTION
+### UsersCollectionSchema (final)
+- name: string
+- rollNumber: string
+- instituteOutlookId: string   // canonical Auth email
+- uid: string                  // Firebase Auth UID
+- unreadCount: number
+- userType: 'admin' | 'student'
+- wings: string[]              // zero or more wings
+- password: string             // DO NOT store plaintext; rely on Firebase Auth
 
-### Fields to Remove:
-- description
-- lastUpdated
-- unread_count
-- user_type
-- year
+### SourceOfTruth
+- Login email: users/{rollNumber}.instituteOutlookId
+- Role: users/{rollNumber}.userType ('admin'|'student')
 
-### Fields to Keep:
-- uid (user explicitly doesn't want to remove this)
+### AuthConsolidation (use only users)
+- Stop using NSS_ADMINS/Student for login email.
+- Sign in: signInWithEmailAndPassword(instituteOutlookId, password).
+- Forgot password: send to users.instituteOutlookId.
+- Role checks: userType == 'admin' for admin-only features.
+- Do not use year anywhere.
 
-### Impact Analysis:
+### SecurityRules (firestore.rules)
+- isAdmin(): exists(users/{request.auth.uid}) && get(users/{request.auth.uid}).data.userType == 'admin'
 
-#### 1. description
-- **Current Usage**: User bio/description field ("together we can")
-- **Code References**: User.kt model, ManageParticipantsActivity.kt
-- **Impact**: LOW - Used only in user profile displays
-- **Functionality Affected**: 
-  - User profile screens
-  - Personal information sections
-  - User list displays
-- **Recommendation**: ✅ SAFE TO REMOVE - Not critical for core functionality
+### MigrationSteps
+- users.userType: Admin1/Admin2/Admin → 'admin'; others → 'student'.
+- users.instituteOutlookId: backfill from NSS_ADMINS.College_Email or Student.Gmail_ID when missing.
+- Remove users.year from all docs.
 
-#### 2. lastUpdated
-- **Current Usage**: Timestamp tracking when user record was last modified
-- **Code References**: Not found in current codebase analysis
-- **Impact**: LOW - Appears to be unused in current implementation
-- **Functionality Affected**: 
-  - Data synchronization (if implemented)
-  - Audit trails (if implemented)
-- **Recommendation**: ✅ SAFE TO REMOVE - Not actively used
+### CodeTouchpoints (update to new flow)
+- LoginFormActivity.kt / LoginActivity.kt
+  - Read users/{rollNumber}.instituteOutlookId for email.
+  - Auth with that email; store userType ('admin'|'student') in SessionManager.
+  - Remove year from session.
+  - Forgot password uses instituteOutlookId.
+- Role checks
+  - AttendanceManagerFragment.kt, QRAttendanceViewModel.kt, CalendarFragment.kt, AdminAccessControl.kt: replace Admin1/Admin2 checks with userType == 'admin'.
+- SessionManager.kt
+  - Store only 'admin' or 'student'. Remove Admin1/Admin2 constants and any year-based logic.
 
-#### 3. unread_count
-- **Current Usage**: Tracks unread message count (3)
-- **Code References**: ChatActivity.kt, UnreadMessageAdapter.kt, UnreadMessageRepository.kt, ChatPreview.kt
-- **Impact**: HIGH - Core chat functionality
-- **Functionality Affected**:
-  - 🔴 Chat notification badges and indicators
-  - 🔴 Unread message popup displays
-  - 🔴 Message read status tracking
-  - 🔴 UI state management for chat features
-  - 🔴 Push notification counts
-- **Recommendation**: ❌ DO NOT REMOVE - Critical for chat functionality
-
-#### 4. user_type
-- **Current Usage**: User role classification ("Admin2")
-- **Code References**: AttendanceManagerFragment.kt (lines 192-193), CalendarFragment.kt (lines 124-128), AdminAccessControl.kt (lines 14-15), firestore.rules (lines 13-15)
-- **Impact**: CRITICAL - Core permission and access control system
-- **Functionality Affected**:
-  - 🔴 Access control and permissions throughout the app
-  - 🔴 UI customization based on user role (Admin vs Student views)
-  - 🔴 Feature availability (Admin panels, attendance management)
-  - 🔴 Firestore security rules enforcement
-  - 🔴 Role-based navigation and menu items
-  - 🔴 Admin hierarchy (Admin1, Admin2, Student)
-  - 🔴 Calendar event permissions
-  - 🔴 FAQ management access
-- **Recommendation**: ❌ DO NOT REMOVE - Essential for security and role management
-
-#### 5. year
-- **Current Usage**: Academic year classification (3)
-- **Code References**: User.kt model (lines 25-54), ManageParticipantsActivity.kt (lines 247-248), LoginFormActivity.kt (line 255)
-- **Impact**: HIGH - Academic organization and admin hierarchy
-- **Functionality Affected**:
-  - 🔴 Academic year-based user filtering
-  - 🔴 Admin hierarchy logic (Admin1 = 2nd year, Admin2 = 3rd year)
-  - 🔴 Student batch management
-  - 🔴 Academic progress tracking
-  - 🔴 User session creation and management
-  - 🔴 User data loading and display
-- **Recommendation**: ❌ DO NOT REMOVE - Important for academic organization
-
-### FINAL RECOMMENDATION:
-
-#### ❌ CRITICAL - DO NOT REMOVE:
-- **uid**: Essential for Firebase authentication and security rules (USER REQUESTED TO KEEP)
-- **user_type**: Core permission system for Admin/Student role management
-- **unread_count**: Critical for chat notification system and message tracking
-- **year**: Important for academic organization and admin hierarchy
-
-#### ✅ SAFE TO REMOVE:
-- **description**: Only used in user profile displays, not critical functionality
-- **lastUpdated**: Not actively used in current codebase
-
-### RISK ASSESSMENT:
-
-#### HIGH RISK REMOVALS:
-- **user_type**: Will break permission system, admin panels, and role-based access
-- **unread_count**: Will break chat notification system and message tracking
-- **year**: Will break admin hierarchy and academic organization
-
-#### LOW RISK REMOVALS:
-- **description**: Only affects user profile displays
-- **lastUpdated**: May affect future sync features but not currently critical
-
-### IMPACT SUMMARY:
-Removing user_type, unread_count, or year would cause:
-- 🔴 Permission system breakdown
-- 🔴 Chat system malfunctions
-- 🔴 Academic hierarchy issues
-- 🔴 Admin panel inaccessibility
-
-Removing description and lastUpdated will have minimal impact:
-- ✅ No authentication failures
-- ✅ No security rule violations
-- ✅ No core functionality breakdown
-
-### RECOMMENDED ACTION PLAN:
-1. **Phase 1**: Remove only `description` and `lastUpdated` fields
-2. **Phase 2**: Update UI components that reference description field
-3. **Phase 3**: Test application functionality after removal
-4. **Phase 4**: Consider keeping user_type, unread_count, year if app functionality is needed
-
-### Next Steps:
-- [x] Analyze code dependencies for each field
-- [x] Check security rules dependencies  
-- [x] Review UI components that use these fields
-- [ ] Remove only `description` and `lastUpdated` fields from database
-- [ ] Update User.kt model to remove these fields
-- [ ] Update UI components that display description
-- [ ] Test application functionality
-- [ ] Decide on user_type, unread_count, year based on app needs
-
-====================================
-Last Updated: [Current Date]
-Status: Analysis Phase
+### VerificationChecklist
+- Login works for admin and student via users.instituteOutlookId only.
+- Forgot password email sends correctly.
+- Admin-only screens gated by userType == 'admin'.
+- Rules allow admin actions; block student actions.
+- No references to NSS_ADMINS/Student/year remain.

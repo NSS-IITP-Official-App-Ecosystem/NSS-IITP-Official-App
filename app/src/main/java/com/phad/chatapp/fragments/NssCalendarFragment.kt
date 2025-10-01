@@ -109,20 +109,9 @@ class NssCalendarFragment : Fragment() {
                     isLoading = false
                 }
 
-                val isAdmin = sessionManager.fetchUserType().let { userType ->
-                    userType == "Admin" || userType == "Admin1" || userType == "Admin2"
-                }
+                val isAdmin = sessionManager.fetchUserType().equals("Admin", ignoreCase = true)
 
                 Scaffold(
-                    floatingActionButton = {
-                        if (isAdmin) {
-                            FloatingActionButton(
-                                onClick = { viewModel.showCreateEventDialog() },
-                                containerColor = Color(0xFF2196F3),
-                                contentColor = Color.White
-                            ) { Icon(Icons.Default.CalendarMonth, contentDescription = "Create Event") }
-                        }
-                    }
                 ) { padding ->
                     Column(
                         modifier = Modifier
@@ -968,9 +957,7 @@ private fun DayCell(
 ) {
     val context = LocalContext.current
     val sessionManager = remember { SessionManager(context) }
-    val isAdmin = sessionManager.fetchUserType().let { userType ->
-        userType == "Admin" || userType == "Admin1" || userType == "Admin2"
-    }
+    val isAdmin = sessionManager.fetchUserType().equals("Admin", ignoreCase = true)
 
     // Try multiple methods to get the current user's roll number
     val currentUserRollNumber = sessionManager.fetchUserId().takeIf { it.isNotEmpty() }

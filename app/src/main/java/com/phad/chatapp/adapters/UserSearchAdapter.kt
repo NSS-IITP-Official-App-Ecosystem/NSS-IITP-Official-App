@@ -72,7 +72,7 @@ class ChatSearchAdapter(
         fun bind(user: User) {
             textName.text = user.name
             textUserType.text = user.userType
-        adminBorder.visibility = if (user.userType == "Admin" || user.userType == "Admin1" || user.userType == "Admin2") View.VISIBLE else View.GONE
+        adminBorder.visibility = if (user.userType.equals("Admin", ignoreCase = true)) View.VISIBLE else View.GONE
             imageAvatar.setImageResource(R.drawable.ic_profile)
             itemView.setOnClickListener {
                 onUserClick?.invoke(user)

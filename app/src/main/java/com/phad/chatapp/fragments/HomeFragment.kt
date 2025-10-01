@@ -28,6 +28,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import kotlinx.coroutines.tasks.await
 import com.phad.chatapp.ChatActivity
 import com.phad.chatapp.MainActivity
 import com.phad.chatapp.R
@@ -111,7 +112,7 @@ class HomeFragment : Fragment() {
                     onChatbotClick = {
                         val intent = Intent(requireContext(), com.phad.chatapp.features.home.faqs.ui.FaqActivity::class.java)
                         val userType = sessionManager.fetchUserType()
-                        val isAdmin = userType == "Admin" || userType == "Admin1" || userType == "Admin2"
+                        val isAdmin = userType.equals("Admin", ignoreCase = true)
                         intent.putExtra("interface_type", if (isAdmin) "teaching_wing" else "nss")
                         startActivity(intent)
                     },
@@ -148,29 +149,53 @@ class HomeFragment : Fragment() {
     
     private fun loadGreetingAndNextClass() {
         val greeting = getGreetingBasedOnTime()
-        val userName = sessionManager.fetchUserName().ifEmpty { "User" }
         val userType = sessionManager.fetchUserType()
+        val rollNumber = sessionManager.fetchUserId()
         
-        // Debug logging to see what's happening
-        Log.d(TAG, "HomeFragment - User Type: '$userType'")
-        Log.d(TAG, "HomeFragment - User Type (trimmed): '${userType.trim()}'")
-        Log.d(TAG, "HomeFragment - Contains Admin (ignoreCase): ${userType.trim().contains("Admin", ignoreCase = true)}")
-        Log.d(TAG, "HomeFragment - Is Admin: ${userType.trim() == "Admin" || userType.trim().contains("Admin", ignoreCase = true)}")
-        Log.d(TAG, "HomeFragment - User Name: '$userName'")
-
-        _uiState.update {
-            it.copy(
-                greeting = greeting,
-                userName = userName,
-                isAdmin = userType.trim() == "Admin" || userType.trim().contains("Admin", ignoreCase = true),
-                isNssInterface = false
-            )
+        // Load fresh user data from users collection
+        loadUserDataFromFirestore(greeting, userType, rollNumber)
+    }
+    
+    private fun loadUserDataFromFirestore(greeting: String, userType: String, rollNumber: String) {
+        val db = FirebaseFirestore.getInstance()
+        
+        lifecycleScope.launch {
+            try {
+                Log.d(TAG, "Loading user data for rollNumber: $rollNumber")
+                val userDoc = db.collection("users").document(rollNumber).get().await()
+                
+                val userName = if (userDoc.exists()) {
+                    val name = userDoc.getString("name") ?: "User"
+                    Log.d(TAG, "Found user name: '$name'")
+                    name
+                } else {
+                    Log.w(TAG, "User document not found, using fallback")
+                    "User"
+                }
+                
+                _uiState.update {
+                    it.copy(
+                        greeting = greeting,
+                        userName = userName,
+                        isAdmin = userType.trim().equals("Admin", ignoreCase = true) || userType.trim().contains("Admin", ignoreCase = true),
+                        isNssInterface = false
+                    )
+                }
+                
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading user data from Firestore", e)
+                // Fallback to session data
+                val userName = sessionManager.fetchUserName().ifEmpty { "User" }
+                _uiState.update {
+                    it.copy(
+                        greeting = greeting,
+                        userName = userName,
+                        isAdmin = userType.trim().equals("Admin", ignoreCase = true) || userType.trim().contains("Admin", ignoreCase = true),
+                        isNssInterface = false
+                    )
+                }
+            }
         }
-        
-        // Log the final state
-        Log.d(TAG, "HomeFragment - Final UI State - isAdmin: ${_uiState.value.isAdmin}")
-        Log.d(TAG, "HomeFragment - Final UI State - isNssInterface: ${_uiState.value.isNssInterface}")
-        Log.d(TAG, "HomeFragment - Final UI State - userName: '${_uiState.value.userName}'")
     }
     
     private fun getGreetingBasedOnTime(): String {

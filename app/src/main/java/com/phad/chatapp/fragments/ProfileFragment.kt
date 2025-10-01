@@ -98,11 +98,15 @@ class ProfileFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         
+        Log.d(TAG, "=== PROFILE FRAGMENT INITIALIZATION ===")
+        
         // Initialize session manager
         sessionManager = SessionManager(requireContext())
         
         // Load user profile from session
         loadProfileFromSession()
+        
+        Log.d(TAG, "=== PROFILE FRAGMENT INITIALIZATION COMPLETE ===")
     }
     
     private fun logout() {
@@ -130,11 +134,13 @@ class ProfileFragment : Fragment() {
         val userType = sessionManager.fetchUserType()
         val rollNumber = sessionManager.fetchUserId()
         
-        if (userType == "Student") {
+        if (userType.equals("Student", ignoreCase = true)) {
             lifecycleScope.launch {
                 try {
-                    // Calculate new semester-based statistics
-                    val (sem1Stats, sem2Stats, eventsStats) = AttendanceStatsCalculator.calculateStudentStats(rollNumber)
+                    Log.d(TAG, "ProfileFragment: Starting to read statistics for rollNumber: $rollNumber")
+                    // Read statistics directly from users collection
+                    val (sem1Stats, sem2Stats, eventsStats) = AttendanceStatsCalculator.readStudentStatsFromUsers(rollNumber)
+                    Log.d(TAG, "ProfileFragment: Received stats - SEM1=$sem1Stats, SEM2=$sem2Stats, Events=$eventsStats")
                     
                     _uiState.update { 
                         it.copy(
@@ -191,123 +197,99 @@ class ProfileFragment : Fragment() {
     }
 
     private fun loadProfileFromSession() {
-        val profile = sessionManager.getProfileFromSession()
+        Log.d(TAG, "=== LOADING PROFILE FROM SESSION ===")
+        
         val attendanceStats = sessionManager.fetchAttendanceStats()
         val userType = sessionManager.fetchUserType()
+        val rollNumber = sessionManager.fetchUserId()
+        
+        Log.d(TAG, "Session data - rollNumber: $rollNumber, userType: $userType, attendanceStats: $attendanceStats")
 
-        // For Student users, load enhanced profile data from Firestore
-        if (userType == "Student") {
-            loadEnhancedStudentProfile(profile.copy(events = attendanceStats))
-        } else {
-            // For Admin users, load enhanced profile data from NSS_ADMINS collection
-            loadEnhancedAdminProfile(profile.copy(events = attendanceStats))
-        }
+        // Create base profile with session data
+        val baseProfile = ProfileUiState(
+            name = sessionManager.fetchUserName(),
+            rollNumber = rollNumber,
+            collegeEmail = "loading...",
+            email = "loading...",
+            events = attendanceStats,
+            userType = userType
+        )
+        
+        Log.d(TAG, "Base profile created: $baseProfile")
+
+        // Load enhanced profile data from unified users collection for both roles
+        loadEnhancedUserProfile(baseProfile)
+        
+        // Load attendance statistics
+        Log.d(TAG, "Calling loadStatistics with rollNumber: $rollNumber")
+        loadStatistics(rollNumber)
+        
+        Log.d(TAG, "=== PROFILE FROM SESSION LOADING COMPLETE ===")
     }
 
-    private fun loadEnhancedStudentProfile(baseProfile: ProfileUiState) {
+    private fun loadEnhancedUserProfile(baseProfile: ProfileUiState) {
         val rollNumber = sessionManager.fetchUserId()
         val db = FirebaseFirestore.getInstance()
 
         lifecycleScope.launch {
             try {
-                val studentDoc = db.collection("Student").document(rollNumber).get().await()
+                Log.d(TAG, "Loading user profile for rollNumber: $rollNumber")
+                val userDoc = db.collection("users").document(rollNumber).get().await()
 
-                if (studentDoc.exists()) {
-                    // Calculate new semester-based statistics
-                    val (sem1Stats, sem2Stats, eventsStats) = AttendanceStatsCalculator.calculateStudentStats(rollNumber)
+                if (userDoc.exists()) {
+                    val name = userDoc.getString("name") ?: "Unknown"
+                    val instituteOutlookId = userDoc.getString("instituteOutlookId") ?: "Not found"
                     
+                    Log.d(TAG, "Found user data: name='$name', instituteOutlookId='$instituteOutlookId'")
+
                     val enhancedProfile = baseProfile.copy(
                         // Basic information
-                        name = studentDoc.getString("Name") ?: baseProfile.name,
-                        rollNumber = studentDoc.getString("Roll_No_") ?: baseProfile.rollNumber,
-
-                        // Academic information
-                        academicGroup = studentDoc.getString("Academic_Grp_") ?: "N/A",
-                        courseCode = studentDoc.getString("Course_Code") ?: "N/A",
-                        nssGroup = studentDoc.getString("NSS_gro") ?: "N/A",
+                        name = name,
+                        rollNumber = rollNumber,
 
                         // Contact information
-                        gmailId = studentDoc.getString("Gmail_ID") ?: "N/A",
-                        instituteId = studentDoc.getString("Institute_ID") ?: "N/A",
-                        phone = studentDoc.getString("Mobile_no_") ?: baseProfile.phone,
+                        email = instituteOutlookId,
+                        collegeEmail = instituteOutlookId,
+                        instituteId = instituteOutlookId, // Set Institute ID to the same value
 
-                        // Subject preferences - removed from profile display
-                        subjectPreference1 = "",
-                        subjectPreference2 = "",
-                        subjectPreference3 = "",
-
-                        // Teaching Wing status
-                        teachingWingStatus = if (studentDoc.getBoolean("Teaching_wing") == true) "Teaching Wing" else "Not Applicable",
-                        
-                        // New semester-based statistics
-                        sem1Hours = sem1Stats,
-                        sem2Hours = sem2Stats,
-                        eventsAttended = eventsStats
+                        // Keep phone if already stored in session; no phone in users schema
+                        phone = baseProfile.phone
                     )
 
                     _uiState.value = enhancedProfile
-                    Log.d(TAG, "Enhanced student profile loaded successfully with new stats")
+                    Log.d(TAG, "Enhanced user profile loaded from users collection: name='$name', email='$instituteOutlookId'")
 
                 } else {
-                    Log.w(TAG, "Student document not found, using base profile")
-                    _uiState.value = baseProfile
+                    Log.w(TAG, "User document not found in users collection for rollNumber: $rollNumber")
+                    _uiState.value = baseProfile.copy(
+                        name = "User not found",
+                        collegeEmail = "Not found in users collection",
+                        email = "Not found in users collection"
+                    )
                 }
 
             } catch (e: Exception) {
-                Log.e(TAG, "Error loading enhanced student profile", e)
-                _uiState.value = baseProfile
+                Log.e(TAG, "Error loading enhanced user profile", e)
+                _uiState.value = baseProfile.copy(
+                    name = "Error loading profile",
+                    collegeEmail = "Error: ${e.message}",
+                    email = "Error: ${e.message}"
+                )
             }
         }
     }
 
-    private fun loadEnhancedAdminProfile(baseProfile: ProfileUiState) {
-        val rollNumber = sessionManager.fetchUserId()
-        val db = FirebaseFirestore.getInstance()
-
-        lifecycleScope.launch {
-            try {
-                val adminDoc = db.collection("NSS_ADMINS").document(rollNumber).get().await()
-
-                if (adminDoc.exists()) {
-                    val imageUrl = adminDoc.getString("image_url") ?: ""
-                    Log.d(TAG, "Admin document found. Image URL: '$imageUrl'")
-                    Log.d(TAG, "Admin document data: ${adminDoc.data}")
-
-                    val enhancedProfile = baseProfile.copy(
-                        // Basic information
-                        name = adminDoc.getString("Name") ?: baseProfile.name,
-                        rollNumber = adminDoc.getString("Roll_Number") ?: baseProfile.rollNumber,
-
-                        // Contact information
-                        collegeEmail = adminDoc.getString("College_Email") ?: "N/A",
-                        phone = adminDoc.getString("Contact_Number") ?: baseProfile.phone,
-                        email = adminDoc.getString("Personal_Email") ?: baseProfile.email,
-
-                        // Profile image
-                        profileImageUrl = imageUrl,
-
-                        // Mark as not student (Admin)
-                        isStudent = false
-                    )
-
-                    _uiState.value = enhancedProfile
-                    Log.d(TAG, "Enhanced admin profile loaded successfully")
-
-                } else {
-                    Log.w(TAG, "Admin document not found, using base profile")
-                    _uiState.value = baseProfile.copy(isStudent = false)
-                }
-
-            } catch (e: Exception) {
-                Log.e(TAG, "Error loading enhanced admin profile", e)
-                _uiState.value = baseProfile.copy(isStudent = false)
-            }
-        }
-    }
+    // Removed legacy admin/student enhancement; unified by loadEnhancedUserProfile()
     
     private fun loadStatistics(rollNumber: String?) {
+        Log.d(TAG, "=== LOADING STATISTICS ===")
+        Log.d(TAG, "loadStatistics called with rollNumber: $rollNumber")
+        
         val userType = sessionManager.fetchUserType()
-        if (userType != "Student") {
+        Log.d(TAG, "User type: $userType")
+        
+        if (!userType.equals("Student", ignoreCase = true)) {
+            Log.d(TAG, "User is not a student, setting admin stats")
             _uiState.update { 
                 it.copy(
                     sem1Hours = "-/-",
@@ -322,19 +304,30 @@ class ProfileFragment : Fragment() {
             return
         }
         
+        Log.d(TAG, "Starting coroutine to load statistics...")
         // Load new semester-based statistics
         lifecycleScope.launch {
             try {
-                val (sem1Stats, sem2Stats, eventsStats) = AttendanceStatsCalculator.calculateStudentStats(rollNumber)
-                _uiState.update { 
-                    it.copy(
+                Log.d(TAG, "Inside coroutine, calling readStudentStatsFromUsers...")
+                val (sem1Stats, sem2Stats, eventsStats) = AttendanceStatsCalculator.readStudentStatsFromUsers(rollNumber)
+                Log.d(TAG, "Received stats from readStudentStatsFromUsers: SEM1=$sem1Stats, SEM2=$sem2Stats, Events=$eventsStats")
+                
+                Log.d(TAG, "Updating UI state with new statistics...")
+                Log.d(TAG, "Current UI state before update: ${_uiState.value}")
+                _uiState.update { currentState ->
+                    val newState = currentState.copy(
                         sem1Hours = sem1Stats,
                         sem2Hours = sem2Stats,
                         eventsAttended = eventsStats
-                    ) 
+                    )
+                    Log.d(TAG, "New UI state after update: $newState")
+                    newState
                 }
+                Log.d(TAG, "UI state updated successfully")
+                Log.d(TAG, "Final UI state: ${_uiState.value}")
                 Log.d(TAG, "Loaded new statistics: SEM1=$sem1Stats, SEM2=$sem2Stats, Events=$eventsStats")
             } catch (e: Exception) {
+                Log.e(TAG, "Exception in loadStatistics coroutine", e)
                 _uiState.update { 
                     it.copy(
                         sem1Hours = "0/0",
@@ -345,5 +338,6 @@ class ProfileFragment : Fragment() {
                 Log.e(TAG, "Error loading new statistics", e)
             }
         }
+        Log.d(TAG, "=== LOADING STATISTICS COMPLETE ===")
     }
 } 

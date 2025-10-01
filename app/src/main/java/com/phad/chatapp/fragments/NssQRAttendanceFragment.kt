@@ -91,8 +91,8 @@ class NssQRAttendanceFragment : Fragment() {
         val userType = sessionManager.fetchUserType()
         Log.d(TAG, "User type from SessionManager: '$userType'")
 
-        // Check for Admin (Admin, Admin1, Admin2)
-        if (userType != "Admin" && userType != "Admin1" && userType != "Admin2") {
+        // Check for Admin per new schema (case-insensitive)
+        if (!userType.equals("Admin", ignoreCase = true)) {
             Log.w(TAG, "Non-admin user trying to access QR attendance: '$userType'")
             Toast.makeText(requireContext(), "Access denied. Admin privileges required.", Toast.LENGTH_LONG).show()
             // Navigate back or close fragment

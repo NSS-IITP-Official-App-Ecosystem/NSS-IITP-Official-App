@@ -188,9 +188,9 @@ class AttendanceManagerFragment : Fragment() {
                     Log.d("AttendanceManager", "User fetched: ${user.rollNumber}, Type: ${user.userType}")
                     this@AttendanceManagerFragment.currentUser = user
                     
-                    // Determine isAdmin and adminType based on user.userType
-                    isAdmin = user.userType == "Admin" || user.userType == "Admin1" || user.userType == "Admin2"
-                    adminType = if (isAdmin) user.userType else ""
+                    // Determine isAdmin based on consolidated schema (case-insensitive)
+                    isAdmin = user.userType.equals("Admin", ignoreCase = true)
+                    adminType = if (isAdmin) "Admin" else ""
                     
                     Log.d("AttendanceManager", "isAdmin: $isAdmin, adminType: $adminType")
 

@@ -191,21 +191,21 @@ class AttendanceQRRepository {
 
             Log.d(TAG, "✅ Firestore update completed successfully")
 
-            // Update student statistics in Student collection
+            // Update student statistics in users collection
             try {
-                                 Log.d(TAG, "Updating student statistics for: ${attendee.rollNumber}")
-                 val studentRef = firestore.collection("Student").document(attendee.rollNumber)
+                Log.d(TAG, "Updating student statistics for: ${attendee.rollNumber}")
+                val userRef = firestore.collection("users").document(attendee.rollNumber)
                 
-                // Get current student document
-                val studentDoc = studentRef.get().await()
-                if (studentDoc.exists()) {
+                // Get current user document
+                val userDoc = userRef.get().await()
+                if (userDoc.exists()) {
                     // Get current values
-                    val currentEventsAttended = studentDoc.getLong("events_attended") ?: 0L
-                    val currentHours = studentDoc.getLong("hours") ?: 0L
+                    val currentEventsAttended = userDoc.getLong("eventsAttended") ?: 0L
+                    val currentHours = userDoc.getLong("hours") ?: 0L
                     
-                    // Get current events_list
+                    // Get current eventsList
                     @Suppress("UNCHECKED_CAST")
-                    val currentEventsList = studentDoc.get("events_list") as? List<String> ?: emptyList()
+                    val currentEventsList = userDoc.get("eventsList") as? List<String> ?: emptyList()
                     
                     // Get event hours
                     val eventHours = event.hours
@@ -215,30 +215,30 @@ class AttendanceQRRepository {
                     val sem1Hours = if (semester == 1) eventHours else 0
                     val sem2Hours = if (semester == 2) eventHours else 0
                     
-                    // Add event ID to events_list if not already present
+                    // Add event ID to eventsList if not already present
                     val updatedEventsList = if (!currentEventsList.contains(eventId)) {
                         currentEventsList + eventId
                     } else {
                         currentEventsList
                     }
                     
-                    // Update student document
-                    val studentUpdates = mapOf(
-                        "events_attended" to (currentEventsAttended + 1),
+                    // Update user document
+                    val userUpdates = mapOf(
+                        "eventsAttended" to (currentEventsAttended + 1),
                         "hours" to (currentHours + eventHours),
-                        "sem1_hours" to FieldValue.increment(sem1Hours.toLong()),
-                        "sem2_hours" to FieldValue.increment(sem2Hours.toLong()),
-                        "events_list" to updatedEventsList
+                        "sem1Hours" to FieldValue.increment(sem1Hours.toLong()),
+                        "sem2Hours" to FieldValue.increment(sem2Hours.toLong()),
+                        "eventsList" to updatedEventsList
                     )
                     
-                    studentRef.update(studentUpdates).await()
-                    Log.d(TAG, "✅ Student statistics and events_list updated successfully")
+                    userRef.update(userUpdates).await()
+                    Log.d(TAG, "✅ User statistics and eventsList updated successfully")
                 } else {
-                    Log.w(TAG, "⚠️ Student document not found: ${attendee.rollNumber}")
+                    Log.w(TAG, "⚠️ User document not found: ${attendee.rollNumber}")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "❌ Error updating student statistics: ${e.message}", e)
-                // Don't fail the attendance marking if student stats update fails
+                Log.e(TAG, "❌ Error updating user statistics: ${e.message}", e)
+                // Don't fail the attendance marking if user stats update fails
             }
 
             // Verify the update was successful by reading back the document
@@ -487,23 +487,23 @@ class AttendanceQRRepository {
     }
 
     /**
-     * Get student information by roll number from Student collection
+     * Get student information by roll number from users collection (legacy support)
      */
     suspend fun getStudentByRollNumber(rollNumber: String): Result<Map<String, Any>?> = withContext(Dispatchers.IO) {
         try {
-            Log.d(TAG, "Getting student by roll number: $rollNumber")
+            Log.d(TAG, "Getting student by roll number from users collection: $rollNumber")
             
-            val studentCollection = firestore.collection("Student")
-            val document = studentCollection.document(rollNumber).get().await()
+            val usersCollection = firestore.collection("users")
+            val document = usersCollection.document(rollNumber).get().await()
             
             return@withContext if (document.exists()) {
-                val studentData = document.data
-                Log.d(TAG, "Student found for $rollNumber: $studentData")
-                Log.d(TAG, "Student name field: ${studentData?.get("name")}")
-                Log.d(TAG, "Student data keys: ${studentData?.keys}")
-                Result.success(studentData)
+                val userData = document.data
+                Log.d(TAG, "User found for $rollNumber: $userData")
+                Log.d(TAG, "User name field: ${userData?.get("name")}")
+                Log.d(TAG, "User data keys: ${userData?.keys}")
+                Result.success(userData)
             } else {
-                Log.w(TAG, "Student document does not exist for roll number: $rollNumber")
+                Log.w(TAG, "User document does not exist for roll number: $rollNumber")
                 Result.success(null)
             }
         } catch (e: Exception) {

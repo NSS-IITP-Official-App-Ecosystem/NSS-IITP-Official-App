@@ -157,20 +157,7 @@ class LoginActivity : AppCompatActivity() {
         
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                // First test Firebase connection before proceeding
-                try {
-                    Log.d(TAG, "Testing Firebase connection...")
-                    val testDoc = firestore.collection("test_connection")
-                        .document("test")
-                        .get()
-                        .await()
-                    
-                    Log.d(TAG, "Firebase connection test: ${if (testDoc.exists()) "Success" else "No test document, but connected"}")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Firebase connection test failed", e)
-                    showError("Firebase connection error: ${e.message}\nPlease check your internet connection and Firebase permissions.")
-                    return@launch
-                }
+                // Removed test connection diagnostics
                 
                 // First check if user exists in Firestore with the provided roll number
                 Log.d(TAG, "Checking for user in users collection with roll number: $rollNumber")
@@ -196,8 +183,8 @@ class LoginActivity : AppCompatActivity() {
                         return@launch
                     }
                     
-                    // Verify that the email in Firestore matches the provided email
-                    val firestoreEmail = userData["email"] as? String
+                    // Verify that the email in Firestore matches the provided email (instituteOutlookId)
+                    val firestoreEmail = userData["instituteOutlookId"] as? String
                     if (firestoreEmail.isNullOrEmpty()) {
                         Log.e(TAG, "No email found in user document")
                         showError("Email not found in user data. Please contact administrator.")
@@ -222,7 +209,7 @@ class LoginActivity : AppCompatActivity() {
                             Log.d(TAG, "User is already authenticated: ${currentUser.email}")
                             
                             // Login success - extract additional data
-                            val year = userData["year"] as? Long ?: 0L
+                            val year = 0L
                             
                             // Update FCM token and complete login
                             updateFCMTokenAndCompleteLogin(rollNumber, email, firestoreUserType, year.toInt())
@@ -270,7 +257,7 @@ class LoginActivity : AppCompatActivity() {
                         }
                         
                         // Extract additional data for session
-                        val userYearValue = userData["year"] as? Long ?: 0L
+                        val userYearValue = 0L
                         
                         // Update FCM token and complete login
                         updateFCMTokenAndCompleteLogin(rollNumber, email, firestoreUserType, userYearValue.toInt())

@@ -98,7 +98,7 @@ class ChatFragment : Fragment() {
                     onRefreshClick = {
                         loadRecentUsers()
                         loadCommunities()
-                        if (userType == "Admin") {
+                        if (userType.equals("Admin", ignoreCase = true)) {
                             CoroutineScope(Dispatchers.IO).launch {
                                 AttendanceStatsUpdater.updateAttendanceStatsInSession(requireContext())
                             }
@@ -134,7 +134,7 @@ class ChatFragment : Fragment() {
         userType = sessionManager.fetchUserType() ?: ""
         userRollNumber = sessionManager.fetchRollNumber() ?: ""
 
-        _uiState.update { it.copy(isUserAdmin = userType == "Admin" || userType == "Admin1" || userType == "Admin2") }
+        _uiState.update { it.copy(isUserAdmin = userType.equals("Admin", ignoreCase = true)) }
 
         // Instead, just load data:
         loadRecentUsers()
@@ -145,7 +145,7 @@ class ChatFragment : Fragment() {
         _uiState.update { it.copy(isLoading = true) }
         lifecycleScope.launch {
             try {
-                val query = if (userType == "Admin" || userType == "Admin1" || userType == "Admin2") {
+                val query = if (userType.equals("Admin", ignoreCase = true)) {
                     // If user is any type of admin, show all users
                     db.collection("users")
                 } else {
@@ -319,7 +319,7 @@ class ChatFragment : Fragment() {
         lifecycleScope.launch {
             try {
                 // Search users
-                val userQuery = if (userType == "Admin" || userType == "Admin1" || userType == "Admin2") {
+                val userQuery = if (userType.equals("Admin", ignoreCase = true)) {
                     db.collection("users")
                 } else {
                     db.collection("users").whereIn("userType", listOf("Admin", "Admin1", "Admin2"))

@@ -49,13 +49,13 @@ class SessionManager(context: Context) {
      * Create login session with user information
      */
     fun createLoginSession(userType: String, userRollNumber: String, userYear: Int) {
-        Log.d(TAG, "Creating login session for: userType=$userType, userRoll=$userRollNumber, userYear=$userYear")
+        Log.d(TAG, "Creating login session for: userType=$userType, userRoll=$userRollNumber")
         
         // Store login state and user info
         editor.putBoolean(KEY_IS_LOGGED_IN, true)
         editor.putString(KEY_USER_TYPE, userType)
         editor.putString(KEY_USER_ROLL_NUMBER, userRollNumber)
-        editor.putInt(KEY_USER_YEAR, userYear)
+        editor.putInt(KEY_USER_YEAR, 0)
         
         // Commit changes
         editor.apply()
@@ -68,9 +68,6 @@ class SessionManager(context: Context) {
         val firebaseUser = FirebaseAuth.getInstance().currentUser
         if (firebaseUser != null) {
             Log.d(TAG, "Firebase user is authenticated: ${firebaseUser.email}")
-            
-            // Test if we can access Firestore with this authentication
-            testFirestoreAccess()
         } else {
             Log.w(TAG, "Firebase user is NOT authenticated!")
         }
@@ -89,28 +86,7 @@ class SessionManager(context: Context) {
     /**
      * Test if we can access Firestore with the current authentication
      */
-    private fun testFirestoreAccess() {
-        try {
-            val db = FirebaseFirestore.getInstance()
-            val testData = mapOf(
-                "last_login" to com.google.firebase.Timestamp.now(),
-                "test" to "Testing auth access",
-                "user_id" to fetchUserId()
-            )
-            
-            db.collection("test_connection")
-                .document("auth_test")
-                .set(testData)
-                .addOnSuccessListener {
-                    Log.d(TAG, "Successfully wrote to Firestore from SessionManager")
-                }
-                .addOnFailureListener { e ->
-                    Log.e(TAG, "Failed to write to Firestore from SessionManager", e)
-                }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error testing Firestore access from SessionManager", e)
-        }
-    }
+    // Removed test connection diagnostics
     
     /**
      * Save user name to shared preferences

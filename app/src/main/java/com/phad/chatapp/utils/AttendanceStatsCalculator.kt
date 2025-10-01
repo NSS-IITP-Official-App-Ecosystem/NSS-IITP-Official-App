@@ -24,7 +24,80 @@ object AttendanceStatsCalculator {
     private val dateFormat = SimpleDateFormat("dd MMM yyyy", Locale.ENGLISH)
     
     /**
-     * Calculate semester-based statistics for a student
+     * Read semester-based statistics for a student directly from users collection
+     */
+    suspend fun readStudentStatsFromUsers(rollNumber: String): Triple<String, String, String> {
+        try {
+            Log.d(TAG, "=== ATTENDANCE STATS CALCULATOR DEBUG ===")
+            Log.d(TAG, "Reading stats from users collection for student: $rollNumber")
+            
+            val userRef = db.collection("users").document(rollNumber)
+            Log.d(TAG, "User reference created: ${userRef.path}")
+            
+            val userDoc = userRef.get().await()
+            Log.d(TAG, "User document retrieved, exists: ${userDoc.exists()}")
+            
+            if (userDoc.exists()) {
+                Log.d(TAG, "User document exists, reading fields...")
+                Log.d(TAG, "Document data: ${userDoc.data}")
+                
+                // Check all available fields
+                val allFields = userDoc.data?.keys ?: emptySet()
+                Log.d(TAG, "Available fields in document: $allFields")
+                
+                val eventsAttended = userDoc.getLong("eventsAttended") ?: 0L
+                val sem1Hours = userDoc.getLong("sem1Hours") ?: 0L
+                val sem2Hours = userDoc.getLong("sem2Hours") ?: 0L
+                
+                Log.d(TAG, "Raw values - eventsAttended: $eventsAttended, sem1Hours: $sem1Hours, sem2Hours: $sem2Hours")
+                
+                // Also check for old field names in case they exist
+                val eventsAttendedOld = userDoc.getLong("events_attended") ?: 0L
+                val sem1HoursOld = userDoc.getLong("sem1_hours") ?: 0L
+                val sem2HoursOld = userDoc.getLong("sem2_hours") ?: 0L
+                
+                Log.d(TAG, "Old field values - events_attended: $eventsAttendedOld, sem1_hours: $sem1HoursOld, sem2_hours: $sem2HoursOld")
+                
+                // Use the values that are not zero
+                val finalEventsAttended = if (eventsAttended > 0) eventsAttended else eventsAttendedOld
+                val finalSem1Hours = if (sem1Hours > 0) sem1Hours else sem1HoursOld
+                val finalSem2Hours = if (sem2Hours > 0) sem2Hours else sem2HoursOld
+                
+                Log.d(TAG, "Final values to use - eventsAttended: $finalEventsAttended, sem1Hours: $finalSem1Hours, sem2Hours: $finalSem2Hours")
+                
+                // Get total events count from NSS_Events_Attendence collection
+                val eventsSnapshot = db.collection("NSS_Events_Attendence").get().await()
+                val totalEvents = eventsSnapshot.size().toLong()
+                
+                Log.d(TAG, "Total events from NSS_Events_Attendence collection: $totalEvents")
+                
+                // Calculate total hours for each semester from all events
+                val totalSem1Hours = calculateTotalSemesterHours(eventsSnapshot.documents, 1)
+                val totalSem2Hours = calculateTotalSemesterHours(eventsSnapshot.documents, 2)
+                
+                Log.d(TAG, "Total semester hours - SEM1: $totalSem1Hours, SEM2: $totalSem2Hours")
+                
+                val sem1Stats = "$finalSem1Hours/$totalSem1Hours"
+                val sem2Stats = "$finalSem2Hours/$totalSem2Hours"
+                val eventsStats = "$finalEventsAttended/$totalEvents"
+                
+                Log.d(TAG, "Final stats - SEM1=$sem1Stats, SEM2=$sem2Stats, Events=$eventsStats")
+                Log.d(TAG, "=== ATTENDANCE STATS CALCULATOR DEBUG COMPLETE ===")
+                return Triple(sem1Stats, sem2Stats, eventsStats)
+            } else {
+                Log.w(TAG, "User document not found for rollNumber: $rollNumber")
+                Log.d(TAG, "=== ATTENDANCE STATS CALCULATOR DEBUG COMPLETE ===")
+                return Triple("0/0", "0/0", "0/0")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error reading student stats from users collection", e)
+            Log.d(TAG, "=== ATTENDANCE STATS CALCULATOR DEBUG COMPLETE ===")
+            return Triple("0/0", "0/0", "0/0")
+        }
+    }
+
+    /**
+     * Calculate semester-based statistics for a student (legacy method - now uses users collection)
      */
     suspend fun calculateStudentStats(rollNumber: String): Triple<String, String, String> {
         try {
@@ -151,17 +224,17 @@ object AttendanceStatsCalculator {
             val sem2Hours = sem2Stats.split("/")[0].toIntOrNull() ?: 0
             val eventsAttended = eventsStats.split("/")[0].toIntOrNull() ?: 0
             
-            // Update student document
-            val studentRef = db.collection("Student").document(rollNumber)
+            // Update user document
+            val userRef = db.collection("users").document(rollNumber)
             val updates = mapOf(
-                "sem1_hours" to sem1Hours,
-                "sem2_hours" to sem2Hours,
-                "events_attended" to eventsAttended,
+                "sem1Hours" to sem1Hours,
+                "sem2Hours" to sem2Hours,
+                "eventsAttended" to eventsAttended,
                 "hours" to (sem1Hours + sem2Hours) // Keep the old field updated
             )
             
-            studentRef.update(updates).await()
-            Log.d(TAG, "Updated student stats for $rollNumber: $updates")
+            userRef.update(updates).await()
+            Log.d(TAG, "Updated user stats for $rollNumber: $updates")
             
         } catch (e: Exception) {
             Log.e(TAG, "Error updating student stats", e)

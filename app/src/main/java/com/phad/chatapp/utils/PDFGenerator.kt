@@ -41,6 +41,82 @@ class PDFGenerator(private val context: Context) {
     }
     
     /**
+     * Generate a PDF for a student's attended events list for a semester
+     */
+    suspend fun generateStudentEventsList(
+        studentName: String,
+        rollNumber: String,
+        semester: Int,
+        rows: List<Triple<String, String, Int>>
+    ): String? = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "Generating student events list PDF for $studentName ($rollNumber), semester $semester")
+            val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+            val filename = "NSS_S${semester}_${rollNumber}_Events_${timestamp}.pdf"
+
+            val cacheDir = context.cacheDir
+            val pdfDir = File(cacheDir, "images")
+            if (!pdfDir.exists()) {
+                pdfDir.mkdirs()
+            }
+            val pdfFile = File(pdfDir, filename)
+
+            val pdfWriter = PdfWriter(FileOutputStream(pdfFile))
+            val pdfDocument = PdfDocument(pdfWriter)
+            val document = Document(pdfDocument)
+
+            val font = PdfFontFactory.createFont()
+            val boldFont = PdfFontFactory.createFont(com.itextpdf.io.font.constants.StandardFonts.HELVETICA_BOLD)
+
+            // Title
+            document.add(
+                Paragraph("Semester $semester Events Summary")
+                    .setFont(boldFont)
+                    .setFontSize(FONT_SIZE_HEADER)
+                    .setTextAlignment(TextAlignment.CENTER)
+                    .setMarginBottom(16f)
+            )
+
+            // Student details
+            val details = Table(2).setWidth(UnitValue.createPercentValue(100f)).setMarginBottom(16f)
+            details.addCell(createCell("Name:", boldFont, true))
+            details.addCell(createCell(studentName, font, false))
+            details.addCell(createCell("Roll Number:", boldFont, true))
+            details.addCell(createCell(rollNumber, font, false))
+            details.addCell(createCell("Semester:", boldFont, true))
+            details.addCell(createCell(semester.toString(), font, false))
+            val totalHours = rows.sumOf { it.third }
+            details.addCell(createCell("Total Hours:", boldFont, true))
+            details.addCell(createCell(totalHours.toString(), font, false))
+            details.addCell(createCell("Events Attended:", boldFont, true))
+            details.addCell(createCell(rows.size.toString(), font, false))
+            document.add(details)
+
+            // Table header
+            val table = Table(3).setWidth(UnitValue.createPercentValue(100f))
+            table.addCell(createHeaderCell("Event", boldFont))
+            table.addCell(createHeaderCell("Date", boldFont))
+            table.addCell(createHeaderCell("Hours", boldFont))
+
+            // Rows
+            rows.forEach { (name, date, hours) ->
+                table.addCell(createCell(name, font, false))
+                table.addCell(createCell(date, font, false))
+                table.addCell(createCell(hours.toString(), font, false))
+            }
+            document.add(table)
+
+            document.close()
+
+            Log.d(TAG, "Student events list PDF generated: ${pdfFile.absolutePath}")
+            return@withContext pdfFile.absolutePath
+        } catch (e: Exception) {
+            Log.e(TAG, "Error generating student events list PDF", e)
+            return@withContext null
+        }
+    }
+
+    /**
      * Generate PDF report for attendance event with attendees sorted by NSS group
      */
     suspend fun generateAttendanceReport(
