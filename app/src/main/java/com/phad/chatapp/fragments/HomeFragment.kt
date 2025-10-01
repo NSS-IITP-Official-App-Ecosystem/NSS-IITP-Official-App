@@ -681,61 +681,45 @@ class HomeFragment : Fragment() {
             // Get targeted users based on updateType
             val targetedUserIds = mutableListOf<String>()
 
-            // For Teaching Wing updates (updateType = 1), notify users with Teaching_wing = true
-            // Get students from Student collection
-            db.collection("Student")
-                .whereEqualTo("Teaching_wing", true)
+            // For Teaching Wing updates (updateType = 1), notify users who have the wing in their users.wings array
+            db.collection("users")
+                .whereArrayContains("wings", "Teaching and Technical Wing")
                 .get()
-                .addOnSuccessListener { studentSnapshot ->
-                    val studentIds = studentSnapshot.documents.mapNotNull { doc ->
-                        val rollNo = doc.id
+                .addOnSuccessListener { usersSnapshot ->
+                    val userIds = usersSnapshot.documents.mapNotNull { doc ->
+                        val rollNo = doc.id // users collection is keyed by rollNumber
                         if (rollNo != currentUserId) rollNo else null // Exclude current user
                     }
-                    targetedUserIds.addAll(studentIds)
+                    targetedUserIds.addAll(userIds)
 
-                    // Get NSS Admins with Teaching_wing = true
-                    db.collection("NSS_ADMINS")
-                        .whereEqualTo("Teaching_wing", true)
-                        .get()
-                        .addOnSuccessListener { adminSnapshot ->
-                            val adminIds = adminSnapshot.documents.mapNotNull { doc ->
-                                val rollNo = doc.getString("Roll_Number") ?: doc.id
-                                if (rollNo != currentUserId) rollNo else null // Exclude current user
-                            }
-                            targetedUserIds.addAll(adminIds)
+                    Log.d(TAG, "Found ${targetedUserIds.size} Teaching Wing users to notify about update ${update.id}")
 
-                            Log.d(TAG, "Found ${targetedUserIds.size} Teaching Wing users to notify about update ${update.id}")
+                    // Send notifications
+                    if (targetedUserIds.isNotEmpty()) {
+                        CoroutineScope(Dispatchers.Main).launch {
+                            try {
+                                Log.d(TAG, "Launching coroutine to send Teaching Wing update notification")
 
-                            // Send notifications
-                            if (targetedUserIds.isNotEmpty()) {
-                                CoroutineScope(Dispatchers.Main).launch {
-                                    try {
-                                        Log.d(TAG, "Launching coroutine to send Teaching Wing update notification")
+                                notificationHelper.sendUpdateNotification(
+                                    updateId = update.id,
+                                    updateTitle = title,
+                                    updateMessage = fullMessage,
+                                    senderRollNumber = update.authorId,
+                                    senderName = update.authorName,
+                                    allUserIds = targetedUserIds
+                                )
 
-                                        notificationHelper.sendUpdateNotification(
-                                            updateId = update.id,
-                                            updateTitle = title,
-                                            updateMessage = fullMessage,
-                                            senderRollNumber = update.authorId,
-                                            senderName = update.authorName,
-                                            allUserIds = targetedUserIds
-                                        )
-
-                                        Log.d(TAG, "Teaching Wing update notification successfully sent via NotificationHelper")
-                                    } catch (e: Exception) {
-                                        Log.e(TAG, "Error in coroutine sending notification: ${e.message}", e)
-                                    }
-                                }
-                            } else {
-                                Log.w(TAG, "No Teaching Wing users found to notify")
+                                Log.d(TAG, "Teaching Wing update notification successfully sent via NotificationHelper")
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Error in coroutine sending notification: ${e.message}", e)
                             }
                         }
-                        .addOnFailureListener { e ->
-                            Log.e(TAG, "Error fetching NSS_ADMINS for notification: ${e.message}", e)
-                        }
+                    } else {
+                        Log.w(TAG, "No Teaching Wing users found to notify")
+                    }
                 }
                 .addOnFailureListener { e ->
-                    Log.e(TAG, "Error fetching Student collection for notification: ${e.message}", e)
+                    Log.e(TAG, "Error fetching users for notification: ${e.message}", e)
                     Toast.makeText(
                         requireContext(),
                         "Failed to send notifications: ${e.localizedMessage}",

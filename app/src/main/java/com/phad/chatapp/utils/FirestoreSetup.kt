@@ -51,25 +51,20 @@ object FirestoreSetup {
         }
 
         // Don't check for google-services.json file anymore since it's not reliable at runtime
-        // Instead, try a simple Firestore operation directly
+        // Instead, perform a non-creating read to validate Firestore access
         return try {
-            Log.d(TAG, "Testing Firestore connectivity...")
-            firestore.collection("_connectivity_test_").document("test").set(mapOf("timestamp" to System.currentTimeMillis()))
+            Log.d(TAG, "Testing Firestore connectivity with non-creating read...")
+            firestore.collection("users").limit(1).get()
                 .addOnSuccessListener {
-                    Log.d(TAG, "Firestore test succeeded")
-                    // Clean up test document
-                    firestore.collection("_connectivity_test_").document("test").delete()
+                    Log.d(TAG, "Firestore read test succeeded")
                 }
                 .addOnFailureListener { e ->
-                    Log.e(TAG, "Firestore test failed", e)
-                    
-                    // Log detailed error information
+                    Log.e(TAG, "Firestore read test failed", e)
                     if (e is FirebaseFirestoreException) {
                         Log.e(TAG, "Firestore error code: ${e.code}")
                     }
                 }
-            
-            Pair(true, "Firebase configuration appears valid. Check network connection and Firebase console for security rules issues.")
+            Pair(true, "Firebase configuration appears valid. If issues persist, check network and security rules.")
         } catch (e: Exception) {
             Log.e(TAG, "Error testing Firestore", e)
             return Pair(false, "Error testing Firestore: ${e.message}")

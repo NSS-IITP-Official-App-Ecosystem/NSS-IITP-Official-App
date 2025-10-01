@@ -59,8 +59,8 @@ class NssProfileFragment : Fragment() {
                     onChatClick = {},
                     onScheduleClick = {},
                     onSwitchInterfaceClick = {
-                        // Only launch if eligible (teaching wing users - both admins and students)
-                        if (state.Teaching_wing) {
+                        // Use session flag to determine eligibility
+                        if (sessionManager.getTeachingWing()) {
                             // Directly switch to Teaching Wing interface (symmetric to Teaching Wing -> NSS switch)
                             sessionManager.setLastInterfaceChoice("TEACHING_WING")
                             val intent = Intent(requireContext(), com.phad.chatapp.MainActivity::class.java)
@@ -204,7 +204,8 @@ class NssProfileFragment : Fragment() {
             collegeEmail = "loading...",
             email = "loading...",
             events = attendanceStats,
-            userType = userType
+            userType = userType,
+            isStudent = userType.equals("Student", ignoreCase = true)
         )
         
         Log.d(TAG, "NSS Base profile created: $baseProfile")
@@ -231,26 +232,26 @@ class NssProfileFragment : Fragment() {
                 if (userDoc.exists()) {
                     val name = userDoc.getString("name") ?: "Unknown"
                     val instituteOutlookId = userDoc.getString("instituteOutlookId") ?: "Not found"
-                    val userType = userDoc.getString("userType") ?: "Student"
+                    val userTypeFromDb = userDoc.getString("userType") ?: baseProfile.userType
                     
-                    Log.d(TAG, "Found user data: name='$name', instituteOutlookId='$instituteOutlookId', userType='$userType'")
-
+                    Log.d(TAG, "Found user data: name='$name', instituteOutlookId='$instituteOutlookId', userType='$userTypeFromDb'")
+                    
                     val enhancedProfile = baseProfile.copy(
                         // Basic information
                         name = name,
                         rollNumber = rollNumber,
-                        userType = userType,
-
+                        userType = userTypeFromDb,
+                        
                         // Contact information
                         email = instituteOutlookId,
                         collegeEmail = instituteOutlookId,
                         instituteId = instituteOutlookId, // Set Institute ID to the same value
-
+                        
                         // Keep phone if already stored in session; no phone in users schema
                         phone = baseProfile.phone,
                         
                         // Set isStudent based on userType
-                        isStudent = userType.equals("Student", ignoreCase = true)
+                        isStudent = userTypeFromDb.equals("Student", ignoreCase = true)
                     )
 
                     _uiState.value = enhancedProfile

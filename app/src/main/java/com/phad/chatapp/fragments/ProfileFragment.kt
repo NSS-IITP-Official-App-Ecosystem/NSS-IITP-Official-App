@@ -212,7 +212,8 @@ class ProfileFragment : Fragment() {
             collegeEmail = "loading...",
             email = "loading...",
             events = attendanceStats,
-            userType = userType
+            userType = userType,
+            isStudent = userType.equals("Student", ignoreCase = true)
         )
         
         Log.d(TAG, "Base profile created: $baseProfile")
@@ -239,21 +240,26 @@ class ProfileFragment : Fragment() {
                 if (userDoc.exists()) {
                     val name = userDoc.getString("name") ?: "Unknown"
                     val instituteOutlookId = userDoc.getString("instituteOutlookId") ?: "Not found"
+                    val userTypeFromDb = userDoc.getString("userType") ?: baseProfile.userType
                     
-                    Log.d(TAG, "Found user data: name='$name', instituteOutlookId='$instituteOutlookId'")
-
+                    Log.d(TAG, "Found user data: name='$name', instituteOutlookId='$instituteOutlookId', userType='$userTypeFromDb'")
+                    
                     val enhancedProfile = baseProfile.copy(
                         // Basic information
                         name = name,
                         rollNumber = rollNumber,
-
+                        userType = userTypeFromDb,
+                        
                         // Contact information
                         email = instituteOutlookId,
                         collegeEmail = instituteOutlookId,
                         instituteId = instituteOutlookId, // Set Institute ID to the same value
-
+                        
                         // Keep phone if already stored in session; no phone in users schema
-                        phone = baseProfile.phone
+                        phone = baseProfile.phone,
+                        
+                        // Set isStudent based on userType from Firestore
+                        isStudent = userTypeFromDb.equals("Student", ignoreCase = true)
                     )
 
                     _uiState.value = enhancedProfile

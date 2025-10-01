@@ -95,20 +95,7 @@ class ChatApplication : Application() {
                 }
                 val versionName = packageInfo?.versionName ?: "unknown"
                 
-                // Add a test document to verify write capabilities
-                db.collection("diagnostics")
-                    .document("init_test")
-                    .set(mapOf(
-                        "timestamp" to com.google.firebase.Timestamp.now(),
-                        "device" to "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}",
-                        "app_version" to versionName
-                    ))
-                    .addOnSuccessListener {
-                        Log.d(TAG, "Firestore diagnostic write successful")
-                    }
-                    .addOnFailureListener { e ->
-                        Log.e(TAG, "Firestore diagnostic write failed", e)
-                    }
+                // Removed diagnostics write to avoid creating collections/documents
             } catch (e: Exception) {
                 Log.e(TAG, "Error initializing Firestore", e)
             }
@@ -141,20 +128,8 @@ class ChatApplication : Application() {
             // Initialize the secondary Firebase app using our helper
             MultiDatabaseHelper.initializeSecondaryFirebase(this)
             
-            // Test connection to secondary Firestore
+            // Avoid creating any diagnostics documents in secondary Firestore
             val secondaryDb = MultiDatabaseHelper.getSecondaryFirestore()
-            secondaryDb.collection("diagnostics")
-                .document("init_test")
-                .set(mapOf(
-                    "timestamp" to com.google.firebase.Timestamp.now(),
-                    "message" to "Secondary Firestore initialized successfully"
-                ))
-                .addOnSuccessListener {
-                    Log.d(TAG, "Secondary Firestore diagnostic write successful")
-                }
-                .addOnFailureListener { e ->
-                    Log.e(TAG, "Secondary Firestore diagnostic write failed", e)
-                }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize secondary Firebase", e)
         }

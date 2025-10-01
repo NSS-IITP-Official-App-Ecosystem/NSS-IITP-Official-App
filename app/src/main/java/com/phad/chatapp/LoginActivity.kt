@@ -144,11 +144,10 @@ class LoginActivity : AppCompatActivity() {
         showLoading(true)
         textViewStatus.text = "Authenticating..."
         
-        // Normalize user type to proper case
-        val normalizedUserType = when (userType.toUpperCase()) {
+        // Normalize user type to app's canonical values
+        val normalizedUserType = when (userType.uppercase()) {
             "STUDENT" -> "Student"
-            "ADMIN1" -> "Admin1"
-            "ADMIN2" -> "Admin2"
+            "ADMIN", "ADMIN1", "ADMIN2" -> "Admin"
             else -> userType
         }
         
@@ -198,7 +197,8 @@ class LoginActivity : AppCompatActivity() {
                     }
                     
                     // Extract the userType from Firestore
-                    val firestoreUserType = userData["userType"] as? String ?: normalizedUserType
+                    val firestoreUserTypeRaw = userData["userType"] as? String ?: normalizedUserType
+                    val firestoreUserType = if (firestoreUserTypeRaw.equals("admin", ignoreCase = true)) "Admin" else "Student"
                     Log.d(TAG, "User found in Firestore with email: $firestoreEmail and type: $firestoreUserType")
                     
                     // Now attempt to authenticate with Firebase Auth

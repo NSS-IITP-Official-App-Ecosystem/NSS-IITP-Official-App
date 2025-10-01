@@ -47,7 +47,7 @@
 
         <!-- Custom navigation bar with simple buttons -->
         <LinearLayout
-            android:layout_width="280dp"
+            android:layout_width="210dp"
             android:layout_height="56dp"
             android:orientation="horizontal"
             android:background="@drawable/bg_bottom_nav_transparent"
@@ -92,14 +92,7 @@
                 android:contentDescription="Schedule"
                 android:visibility="gone" />
 
-            <ImageButton
-                android:id="@+id/btn_interview"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_weight="1"
-                android:src="@drawable/ic_interview"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="Interview" />
+            <!-- Interview button removed -->
 
             <ImageButton
                 android:id="@+id/btn_profile"

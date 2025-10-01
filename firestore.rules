@@ -10,9 +10,9 @@ service cloud.firestore {
     function isAdmin() {
       return isAuthenticated() &&
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userType == 'Admin1' ||
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userType == 'Admin2' ||
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userType == 'Admin');
+        (
+          lower(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userType) == 'admin'
+        );
     }
 
     // Alternative admin check by querying users collection with UID field

@@ -58,26 +58,16 @@ object NetworkUtils {
         return try {
             val db = FirebaseFirestore.getInstance()
             
-            // Try to ping Firestore by getting a simple document
-            val result = withTimeoutOrNull(CONNECTION_TEST_TIMEOUT_MS) {
-                // Test query to check connectivity - can be any collection
-                db.collection("_connectivity_test_").document("test").get().await()
-            }
+            // Perform a non-creating read against an existing collection
+            val metadataResult = withTimeoutOrNull(CONNECTION_TEST_TIMEOUT_MS) {
+                db.collection("users").limit(1).get().await()
+                true
+            } ?: false
             
-            if (result != null) {
+            if (metadataResult) {
                 Pair(true, "Firestore connection successful")
             } else {
-                // Try a different approach - simple metadata operation
-                val metadataResult = withTimeoutOrNull(CONNECTION_TEST_TIMEOUT_MS) {
-                    db.collection("Admin1").get().await()
-                    true
-                } ?: false
-                
-                if (metadataResult) {
-                    Pair(true, "Firestore connection successful")
-                } else {
-                    Pair(false, "Firestore connection timed out")
-                }
+                Pair(false, "Firestore connection timed out")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error checking Firestore connectivity", e)

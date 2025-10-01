@@ -74,11 +74,7 @@
         android:label="Attendance Approval"
         tools:layout="@layout/fragment_admin_attendance_approval" />
 
-    <fragment
-        android:id="@+id/interviewFragment"
-        android:name="com.phad.chatapp.features.interview.InterviewFragment"
-        android:label="Interview"
-        tools:layout="@layout/fragment_interview" />
+    <!-- Interview fragment removed -->
 
     <fragment
         android:id="@+id/pendingAttendanceListFragment"

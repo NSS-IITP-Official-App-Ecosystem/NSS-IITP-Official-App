@@ -121,11 +121,10 @@ class CalendarFragment : Fragment() {
             Log.d("CalendarFragment", "Fetched user type from SessionManager: $userType")
 
             // Set user role based on user type - include sanitization for null/empty values
-            val role = when {
-                userType.equals("Admin1", ignoreCase = true) -> UserRole.ADMIN1
-                userType.equals("Admin2", ignoreCase = true) -> UserRole.ADMIN2
-                userType.equals("Admin", ignoreCase = true) -> UserRole.ADMIN1 // Default Admin to ADMIN1 role
-                else -> UserRole.USER // Default to USER for Student or any other value
+            val role = if (userType.equals("Admin", ignoreCase = true)) {
+                UserRole.ADMIN1
+            } else {
+                UserRole.USER
             }
             
             _currentUserRole.value = role

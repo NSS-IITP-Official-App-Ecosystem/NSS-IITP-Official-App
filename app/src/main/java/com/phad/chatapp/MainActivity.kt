@@ -449,20 +449,15 @@ class MainActivity : AppCompatActivity() {
         // val btnCalendar = findViewById<ImageButton>(R.id.btn_calendar) // Calendar button hidden
         val btnSchedule = findViewById<ImageButton>(R.id.btn_schedule)
         val btnProfile = findViewById<ImageButton>(R.id.btn_profile)
-        val btnInterview = findViewById<ImageButton>(R.id.btn_interview)
 
-        // Get user type from session
-        val isStudent = sessionManager.fetchIsStudent()
+        // Determine admin from unified userType
+        val isAdmin = sessionManager.fetchUserType().equals("Admin", ignoreCase = true)
         
-        // Show/hide scheduling button based on user type
-        if (!isStudent) {
-            // For admins: show scheduling button and interview button
+        // Show/hide scheduling button based on admin status
+        if (isAdmin) {
             btnSchedule.visibility = View.VISIBLE
-            btnInterview.visibility = View.VISIBLE
         } else {
-            // For regular users: hide scheduling button and interview button
             btnSchedule.visibility = View.GONE
-            btnInterview.visibility = View.GONE
         }
         
         // Set initial selection
@@ -499,11 +494,7 @@ class MainActivity : AppCompatActivity() {
             btnProfile.setColorFilter(ContextCompat.getColor(this, R.color.blue))
         }
 
-        btnInterview.setOnClickListener {
-            navController.navigate(R.id.interviewFragment)
-            resetNavButtonColors()
-            btnInterview.setColorFilter(ContextCompat.getColor(this, R.color.blue))
-        }
+        // Interview feature removed
     }
     
     /**
@@ -515,7 +506,6 @@ class MainActivity : AppCompatActivity() {
         // findViewById<ImageButton>(R.id.btn_calendar).clearColorFilter() // Calendar button hidden
         findViewById<ImageButton>(R.id.btn_schedule).clearColorFilter()
         findViewById<ImageButton>(R.id.btn_profile).clearColorFilter()
-        findViewById<ImageButton>(R.id.btn_interview).clearColorFilter()
     }
 
     /**

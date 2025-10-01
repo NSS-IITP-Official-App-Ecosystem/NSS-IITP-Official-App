@@ -27,7 +27,7 @@ private const val AVAILABILITY_COLLECTION = "volunteerAvailability"
 private const val TEACHING_SLOT_PRESETS_COLLECTION = "teachingSlotPresets"
 private const val GENERATED_SCHEDULES_COLLECTION = "generatedSchedules"
 private const val GENERATE_SCHEDULE_COLLECTION = "generateSchedule"
-private const val STUDENTS_COLLECTION = "students"
+private const val STUDENTS_COLLECTION = "ttwStudents"
 
 // School represents a VA preset
 data class School(
@@ -1049,55 +1049,30 @@ class ScheduleGenerationViewModel : ViewModel() {
             Log.d(TAG, "📋 Preference field: '$key' = '${data[key]}'")
         }
 
-        // Handle subject preferences - first try students collection format (preferences array)
-        val preferencesArray = data["preferences"] as? List<*>
-        val subjectPref1 = preferencesArray?.getOrNull(0)?.toString()
-            ?: data["Subj_Preference_1"] as? String
-            ?: data["Subj_Preference1"] as? String
-            ?: data["subj_preference_1"] as? String
-            ?: data["subjPreference1"] as? String
-            ?: data["Subject_Preference_1"] as? String
-            ?: data["Subj_Prefrence_1"] as? String  // Common typo
-            ?: data["subjec_prefrence_1"] as? String  // Another typo variant
-            // Try to find any field that contains "1" and "preference"
-            ?: data.entries.find { (key, _) ->
-                key.contains("1", ignoreCase = true) &&
-                key.contains("preference", ignoreCase = true)
-            }?.value as? String
+        // New ttwStudents fields
+        val subjectPref1 = data["subjectPreference1"] as? String
+            ?: data["SubjectPreference1"] as? String
             ?: ""
 
-        val subjectPref2 = preferencesArray?.getOrNull(1)?.toString()
-            ?: data["Sub_Preference2"] as? String
-            ?: data["Sub_Preference_2"] as? String
-            ?: data["Subj_Preference_2"] as? String
+        val subjectPref2 = data["subjectPreference2"] as? String
+            ?: data["SubjectPreference2"] as? String
             ?: ""
 
-        val subjectPref3 = preferencesArray?.getOrNull(2)?.toString()
-            ?: data["Sub_Preference_3"] as? String
-            ?: data["Sub_Preference3"] as? String
-            ?: data["Subj_Preference_3"] as? String
+        val subjectPref3 = data["subjectPreference3"] as? String
+            ?: data["SubjectPreference3"] as? String
             ?: ""
 
-        // Handle interview score from both collection formats
-        val interviewScore = (data["interviewScore"] as? Number)?.toInt()
-            ?: (data["interview_score"] as? Number)?.toInt()
-            ?: (data["Interview_Score"] as? Number)?.toInt()
-            ?: 0
+        // Interview score may be absent in new collection
+        val interviewScore = (data["interviewScore"] as? Number)?.toInt() ?: 0
 
-        // Handle name from both collection formats
-        val name = data["name"] as? String
-            ?: data["Name"] as? String
-            ?: ""
+        val name = data["name"] as? String ?: ""
 
-        // Handle group from both collection formats
-        val group = data["group"] as? String
-            ?: data["Academic_Grp"]?.toString()
-            ?: data["academic_grp"]?.toString()
-            ?: ""
+        // Map academicGroup (stringified) to group
+        val group = (data["academicGroup"] ?: data["AcademicGroup"])?.toString() ?: ""
 
         Log.d(TAG, "📋 Subject preferences found: 1='$subjectPref1', 2='$subjectPref2', 3='$subjectPref3'")
         Log.d(TAG, "📋 Interview score: $interviewScore")
-        Log.d(TAG, "📋 Raw field values: preferences=$preferencesArray, interviewScore=${data["interviewScore"]}")
+        Log.d(TAG, "📋 Raw field values: interviewScore=${data["interviewScore"]}")
 
         return VolunteerDetails(
             name = name,

@@ -332,8 +332,8 @@ fun ManageVolunteersScreen(
 
         Log.d(TAG, "Starting to load users from Firestore")
 
-        // Try these collections in order - prioritize generateSchedule collection
-        val collectionsToTry = listOf("generateSchedule", "students", "Student", "Users", "users")
+        // Try these collections in order - prefer new ttwStudents collection
+        val collectionsToTry = listOf("ttwStudents", "generateSchedule", "users")
         tryNextCollection(collectionsToTry, 0)
     }
 

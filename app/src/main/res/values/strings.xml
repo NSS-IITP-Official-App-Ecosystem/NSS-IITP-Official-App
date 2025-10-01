@@ -13,7 +13,7 @@
     <string name="search">Search</string>
     <string name="more">More</string>
     <string name="message_admin">Message Admin</string>
-    <string name="no_admins_found">No Admin1 members found</string>
+    <string name="no_admins_found">No Admins found</string>
     <string name="new_chat">New Chat</string>
     <string name="new_group">New Group</string>
     <string name="no_chats_available">No chats available</string>
@@ -23,8 +23,8 @@
     <string name="password">Password</string>
     <string name="login">Login</string>
     <string name="submit">Submit</string>
-    <string name="admin1">Admin1</string>
-    <string name="admin2">Admin2</string>
+    <string name="admin1">Admin</string>
+    <string name="admin2">Admin</string>
     <string name="student">Student</string>
     <string name="invalid_email">Invalid Email Address</string>
     <string name="invalid_password">Password must be at least 6 characters</string>

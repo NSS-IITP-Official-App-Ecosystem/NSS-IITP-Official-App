@@ -146,11 +146,11 @@ class ChatFragment : Fragment() {
         lifecycleScope.launch {
             try {
                 val query = if (userType.equals("Admin", ignoreCase = true)) {
-                    // If user is any type of admin, show all users
+                    // If user is admin, show all users
                     db.collection("users")
                 } else {
-                    // If user is student, show only admins (Admin, Admin1, Admin2)
-                    db.collection("users").whereIn("userType", listOf("Admin", "Admin1", "Admin2"))
+                    // If user is student, show only admins
+                    db.collection("users").whereEqualTo("userType", "Admin")
                 }
                 val snapshot = query.get().await()
                 val users = snapshot.toObjects(User::class.java).filter { it.id != userRollNumber }
@@ -322,7 +322,7 @@ class ChatFragment : Fragment() {
                 val userQuery = if (userType.equals("Admin", ignoreCase = true)) {
                     db.collection("users")
                 } else {
-                    db.collection("users").whereIn("userType", listOf("Admin", "Admin1", "Admin2"))
+                    db.collection("users").whereEqualTo("userType", "Admin")
                 }
                 val userSnapshot = userQuery.get().await()
                 val userResults = userSnapshot.documents.mapNotNull { document ->

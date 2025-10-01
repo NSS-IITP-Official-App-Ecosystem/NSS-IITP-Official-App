@@ -39,18 +39,11 @@ object FirestoreHelper {
         return try {
             val db = getFirestore()
             
-            // Try to write a small test document
-            val testDoc = hashMapOf(
-                "timestamp" to com.google.firebase.Timestamp.now(),
-                "test" to "connectivity_check"
-            )
-            
-            // Use a unique collection name to avoid conflicts
-            db.collection("_connectivity_test_")
-                .document("test_${System.currentTimeMillis()}")
-                .set(testDoc)
+            // Perform a non-creating read on an expected collection
+            db.collection("users")
+                .limit(1)
+                .get()
                 .await()
-                
             true
         } catch (e: Exception) {
             Log.e(TAG, "Firestore connectivity check failed", e)

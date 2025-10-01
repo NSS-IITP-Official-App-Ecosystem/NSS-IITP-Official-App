@@ -199,8 +199,8 @@ fun ProfileScreen(
                             Spacer(modifier = Modifier.size(12.dp))
                         }
 
-                        // Show library button only for teaching wing users
-                        if (teachingWing) {
+                        // Show library button only in Teaching Wing interface
+                        if (teachingWing && currentInterface == "Teaching Wing") {
                             Image(
                                 painter = painterResource(id = R.drawable.ic_library),
                                 contentDescription = "Library Icon",
