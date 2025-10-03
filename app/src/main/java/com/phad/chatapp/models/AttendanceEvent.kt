@@ -32,6 +32,12 @@ data class AttendanceEvent(
     @PropertyName("hours")
     val hours: Int = 0, // Volunteer hours/tokens awarded for event participation
 
+    @PropertyName("mandatory")
+    val isMandatory: Boolean = false, // Whether attendance is mandatory
+
+    @PropertyName("negativeHours")
+    val negativeHours: Int = 0, // Hours to deduct for absentees when mandatory
+
     @PropertyName("location")
     val location: String = "", // Location where the event will take place
 
@@ -67,6 +73,8 @@ data class AttendanceEvent(
         eventDate = "",
         eventTime = "",
         hours = 0,
+        isMandatory = false,
+        negativeHours = 0,
         location = "",
         description = "",
         createdBy = "",

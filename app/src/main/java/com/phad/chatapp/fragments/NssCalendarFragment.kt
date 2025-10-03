@@ -337,8 +337,8 @@ class NssCalendarFragment : Fragment() {
                     val preselected = java.util.Date.from(selectedDate.atStartOfDay(ZoneId.systemDefault()).toInstant())
                     CreateEventDialog(
                         isCreating = adminUi.isCreatingEvent,
-                        onCreateEvent = { name, desc, location, date, open, close, hours ->
-                            viewModel.createAttendanceEvent(name, desc, location, date, open, close, hours)
+                        onCreateEvent = { name, desc, location, date, open, close, hours, isMandatory, negativeHours ->
+                            viewModel.createAttendanceEvent(name, desc, location, date, open, close, hours, isMandatory, negativeHours)
                         },
                         onDismiss = { viewModel.hideCreateEventDialog() },
                         errorMessage = adminUi.errorMessage,
@@ -453,7 +453,7 @@ private fun EventDetailsCard(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = if (event.isMandatory) Color(0xFFFFFDE7) else Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         shape = RoundedCornerShape(12.dp)
     ) {
@@ -583,7 +583,13 @@ private fun EventDetailsCard(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (event.hours > 0) "Hours: ${event.hours}" else "Hours not specified",
+                        text = if (event.hours > 0) {
+                            if (event.isMandatory && event.negativeHours > 0) {
+                                "Hours: ${event.hours} / -${event.negativeHours}"
+                            } else {
+                                "Hours: ${event.hours}"
+                            }
+                        } else "Hours not specified",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
                         color = if (event.hours > 0) Color(0xFF333333) else Color.Gray
@@ -1024,14 +1030,32 @@ private fun DayCell(
     ) {
         Box(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(8.dp),
+                .fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
+            // Blue star in top-right if any mandatory event exists for this day
+            val hasMandatory = events.any { it.isMandatory }
+            if (hasMandatory) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 2.dp, end = 2.dp)
+                        .size(14.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Star,
+                        contentDescription = "Mandatory Event",
+                        tint = Color(0xFF1E88E5), // Blue
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(8.dp)
             ) {
                 Text(
                     text = date.dayOfMonth.toString(),
@@ -1110,7 +1134,7 @@ private fun UpcomingEventCard(event: AttendanceEvent) {
                 .fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFFFF))
+            colors = CardDefaults.cardColors(containerColor = if (event.isMandatory) Color(0xFFFFFDE7) else Color(0xFFFFFFFF))
         ) {
             Column(
                 modifier = Modifier.padding(20.dp)
@@ -1206,7 +1230,13 @@ private fun UpcomingEventCard(event: AttendanceEvent) {
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (event.hours > 0) "Hours: ${event.hours}" else "Hours not specified",
+                                text = if (event.hours > 0) {
+                                    if (event.isMandatory && event.negativeHours > 0) {
+                                        "Hours: ${event.hours} / -${event.negativeHours}"
+                                    } else {
+                                        "Hours: ${event.hours}"
+                                    }
+                                } else "Hours not specified",
                                 fontSize = 16.sp, // Increased font size
                                 fontWeight = FontWeight.Medium,
                                 color = if (event.hours > 0) Color(0xFF333333) else Color.Gray // Gray out if not specified

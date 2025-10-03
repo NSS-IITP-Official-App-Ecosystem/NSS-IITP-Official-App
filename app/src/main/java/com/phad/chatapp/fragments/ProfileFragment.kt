@@ -23,6 +23,13 @@ import com.phad.chatapp.ui.profile.ProfileScreen
 import com.phad.chatapp.ui.profile.ProfileUiState
 import com.phad.chatapp.utils.SessionManager
 import com.phad.chatapp.utils.AttendanceStatsCalculator
+import com.phad.chatapp.utils.PDFGenerator
+import com.phad.chatapp.models.AttendanceEvent
+import com.phad.chatapp.models.User
+import androidx.core.content.FileProvider
+import android.content.ActivityNotFoundException
+import android.net.Uri
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -58,6 +65,7 @@ class ProfileFragment : Fragment() {
                     },
                     onChatClick = {},
                     onScheduleClick = {},
+                    onExportAttendanceClick = { exportAttendanceMatrix() },
                     onSwitchInterfaceClick = {
                         val currentInterface = "Teaching Wing"
                         if (teachingWing) {
@@ -91,6 +99,87 @@ class ProfileFragment : Fragment() {
                     currentInterface = "Teaching Wing",
                     teachingWing = teachingWing
                 )
+            }
+        }
+    }
+
+    private fun exportAttendanceMatrix() {
+        val userType = sessionManager.fetchUserType()
+        if (!userType.equals("Admin", ignoreCase = true)) {
+            Toast.makeText(requireContext(), "Only admins can export attendance", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        lifecycleScope.launch {
+            try {
+                Toast.makeText(requireContext(), "Preparing attendance sheet...", Toast.LENGTH_SHORT).show()
+                val db = FirebaseFirestore.getInstance()
+
+                // Fetch all events to build dynamic columns
+                val eventsSnapshot = db.collection("NSS_Events_Attendence").get().await()
+                val events = eventsSnapshot.documents.mapNotNull { it.toObject(AttendanceEvent::class.java) }
+                    .sortedBy { it.getEventDateAsDate().time }
+
+                // Fetch all students (case-insensitive userType)
+                val usersSnapshot = db.collection("users")
+                    .whereIn("userType", listOf("Student", "student"))
+                    .get()
+                    .await()
+
+                val students = usersSnapshot.documents.map { doc ->
+                    // Map to User while preserving document ID as roll number if field empty
+                    val user = doc.toObject(User::class.java) ?: User()
+                    if (user.rollNumber.isEmpty()) user.apply { rollNumber = doc.id } else user
+                }.sortedWith(compareBy({ it.name.lowercase() }, { it.rollNumber }))
+
+                // Build per-student event hours based on users.eventsList and total hours from users.hours
+                val perStudentEventHours: MutableMap<String, MutableMap<String, Int>> = mutableMapOf()
+                val totalHoursPerStudent: MutableMap<String, Int> = mutableMapOf()
+
+                val eventHoursById = events.associate { it.id to it.hours }
+
+                usersSnapshot.documents.forEach { doc ->
+                    val roll = doc.id
+                    @Suppress("UNCHECKED_CAST")
+                    val eventsList = doc.get("eventsList") as? List<String> ?: emptyList()
+                    val totalHours = (doc.getLong("hours") ?: 0L).toInt()
+                    totalHoursPerStudent[roll] = totalHours
+                    val perEvent = perStudentEventHours.getOrPut(roll) { mutableMapOf() }
+                    eventsList.forEach { eventId ->
+                        eventHoursById[eventId]?.let { hours -> perEvent[eventId] = hours }
+                    }
+                }
+
+                // Generate PDF via utility
+                val pdfPath = PDFGenerator(requireContext()).generateAttendanceMatrixReport(
+                    students = students,
+                    events = events,
+                    perStudentEventHours = perStudentEventHours,
+                    totalHoursPerStudent = totalHoursPerStudent
+                )
+
+                if (pdfPath != null) {
+                    val file = java.io.File(pdfPath)
+                    val uri: Uri = FileProvider.getUriForFile(
+                        requireContext(),
+                        "${requireContext().packageName}.fileprovider",
+                        file
+                    )
+                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                        setDataAndType(uri, "application/pdf")
+                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    try {
+                        startActivity(intent)
+                    } catch (e: ActivityNotFoundException) {
+                        Toast.makeText(requireContext(), "No PDF viewer found. File saved to: ${file.absolutePath}", Toast.LENGTH_LONG).show()
+                    }
+                } else {
+                    Toast.makeText(requireContext(), "Failed to generate PDF", Toast.LENGTH_LONG).show()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error exporting attendance matrix", e)
+                Toast.makeText(requireContext(), "Error: ${e.message}", Toast.LENGTH_LONG).show()
             }
         }
     }

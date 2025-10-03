@@ -132,8 +132,8 @@ class NssQRAttendanceFragment : Fragment() {
                     onClearError = {
                         viewModel.clearError()
                     },
-                    onCreateEvent = { name, description, location, date, openingTime, closingTime, hours ->
-                        viewModel.createAttendanceEvent(name, description, location, date, openingTime, closingTime, hours)
+                    onCreateEvent = { name, description, location, date, openingTime, closingTime, hours, isMandatory, negativeHours ->
+                        viewModel.createAttendanceEvent(name, description, location, date, openingTime, closingTime, hours, isMandatory, negativeHours)
                     },
                     onShowCreateDialog = {
                         viewModel.showCreateEventDialog()
@@ -156,8 +156,8 @@ class NssQRAttendanceFragment : Fragment() {
                     onHideEditDialog = {
                         viewModel.hideEditEventDialog()
                     },
-                    onUpdateEvent = { name, description, location, date, openingTime, closingTime, hours, eventId ->
-                        viewModel.updateAttendanceEvent(name, description, location, date, openingTime, closingTime, hours, eventId)
+                    onUpdateEvent = { name, description, location, date, openingTime, closingTime, hours, isMandatory, negativeHours, eventId ->
+                        viewModel.updateAttendanceEvent(name, description, location, date, openingTime, closingTime, hours, isMandatory, negativeHours, eventId)
                     },
                     onGeneratePDF = { event ->
                         viewModel.generateAttendancePDF(event)
@@ -217,7 +217,7 @@ fun QRAttendanceAdminScreen(
     onEndSession: () -> Unit,
     onLoadEvents: () -> Unit,
     onClearError: () -> Unit,
-    onCreateEvent: (String, String, String, Date, Date, Date, Int) -> Unit,
+    onCreateEvent: (String, String, String, Date, Date, Date, Int, Boolean, Int) -> Unit,
     onShowCreateDialog: () -> Unit,
     onHideCreateDialog: () -> Unit,
     onClearCreateSuccess: () -> Unit,
@@ -225,7 +225,7 @@ fun QRAttendanceAdminScreen(
     onNavigateBack: () -> Unit = {},
     onShowEditDialog: (AttendanceEvent) -> Unit, // New parameter
     onHideEditDialog: () -> Unit, // New parameter
-    onUpdateEvent: (String, String, String, Date, Date, Date, Int, String) -> Unit, // New parameter (added eventId)
+    onUpdateEvent: (String, String, String, Date, Date, Date, Int, Boolean, Int, String) -> Unit, // New parameter (added eventId)
     onGeneratePDF: (AttendanceEvent) -> Unit, // PDF generation callback
     onClearSuccessMessage: () -> Unit, // Clear success message callback
     onAddManualAttendance: (AttendanceEvent, String) -> Unit // Manual attendance callback
@@ -527,7 +527,7 @@ fun EventSelectionScreen(
 fun EditEventDialog(
     event: AttendanceEvent,
     isUpdating: Boolean,
-    onUpdateEvent: (String, String, String, Date, Date, Date, Int, String) -> Unit,
+    onUpdateEvent: (String, String, String, Date, Date, Date, Int, Boolean, Int, String) -> Unit,
     onDismiss: () -> Unit,
     errorMessage: String?
 ) {
@@ -550,6 +550,8 @@ fun EditEventDialog(
     var showClosingTimePicker by remember { mutableStateOf(false) }
     var showError by remember { mutableStateOf(false) }
     var validationErrorMessage by remember { mutableStateOf("") }
+    var isMandatory by remember { mutableStateOf(event.isMandatory) }
+    var negativeHours by remember { mutableStateOf(if (event.negativeHours > 0) event.negativeHours.toString() else "") }
 
     // Reset error state when dialog opens or event changes
     LaunchedEffect(event) {
@@ -563,6 +565,8 @@ fun EditEventDialog(
         val updatedTimePair = com.phad.chatapp.utils.AttendanceEventUtils.parseTimeRange(event.eventTime)
         openingTime = updatedTimePair?.first ?: com.phad.chatapp.utils.AttendanceEventUtils.createTimeFromHourMinute(Date(), 9, 0)
         closingTime = updatedTimePair?.second ?: com.phad.chatapp.utils.AttendanceEventUtils.createTimeFromHourMinute(Date(), 17, 0)
+        isMandatory = event.isMandatory
+        negativeHours = if (event.negativeHours > 0) event.negativeHours.toString() else ""
     }
 
     // Show error if there's an error message
@@ -791,6 +795,48 @@ fun EditEventDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
+                // Mandatory Event checkbox
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = isMandatory,
+                        onCheckedChange = { isMandatory = it },
+                        enabled = !isUpdating
+                    )
+                    Text("Mandatory event", modifier = Modifier.padding(start = 8.dp))
+                }
+
+                if (isMandatory) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = negativeHours,
+                        onValueChange = { newValue ->
+                            if (newValue.isEmpty() || newValue.all { it.isDigit() }) {
+                                negativeHours = newValue
+                                showError = false
+                            }
+                        },
+                        label = { Text("Negative Hours *") },
+                        placeholder = { Text("Hours to deduct for absentees") },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isUpdating,
+                        textStyle = TextStyle(
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 14.sp,
+                            color = Color(0xFF333333)
+                        ),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        isError = showError && negativeHours.trim().isEmpty(),
+                        supportingText = {
+                            if (showError && negativeHours.trim().isEmpty()) {
+                                Text(
+                                    text = "Negative hours are required for mandatory events",
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+                    )
+                }
+
                 // Event Description Field
                 OutlinedTextField(
                     value = eventDescription,
@@ -841,6 +887,7 @@ fun EditEventDialog(
                     val trimmedName = eventName.trim()
                     val trimmedHours = eventHours.trim()
                     val hoursValue = trimmedHours.toIntOrNull() ?: -1
+                    val negHoursValue = negativeHours.trim().toIntOrNull() ?: 0
 
                     when {
                         trimmedName.isEmpty() -> {
@@ -851,18 +898,19 @@ fun EditEventDialog(
                             showError = true
                             validationErrorMessage = "Please enter valid hours (0 or greater)"
                         }
+                        isMandatory && negativeHours.trim().isEmpty() -> {
+                            showError = true
+                            validationErrorMessage = "Negative hours are required for mandatory events"
+                        }
                         !com.phad.chatapp.utils.AttendanceEventUtils.validateEventTimes(openingTime, closingTime) -> {
                             showError = true
                             validationErrorMessage = "Closing time must be after opening time"
                         }
-                        !com.phad.chatapp.utils.AttendanceEventUtils.validateOpeningTimeNotInPast(selectedDate, openingTime) -> {
-                            showError = true
-                            validationErrorMessage = "Opening time cannot be in the past"
-                        }
+                        // Allow edits regardless of whether opening time is in the past
                         else -> {
                             showError = false
                             validationErrorMessage = ""
-                            onUpdateEvent(trimmedName, eventDescription.trim(), eventLocation.trim(), selectedDate, openingTime, closingTime, hoursValue, event.id)
+                            onUpdateEvent(trimmedName, eventDescription.trim(), eventLocation.trim(), selectedDate, openingTime, closingTime, hoursValue, isMandatory, negHoursValue, event.id)
                         }
                     }
                 },
@@ -994,7 +1042,7 @@ fun EventCard(
                 indication = null, // No visual indication for long press
                 interactionSource = remember { MutableInteractionSource() }
             ),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = if (event.isMandatory) Color(0xFFFFFDE7) else Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         shape = RoundedCornerShape(12.dp)
     ) {
@@ -1162,7 +1210,13 @@ fun EventCard(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (event.hours > 0) "Hours: ${event.hours}" else "Not Specified",
+                                text = if (event.hours > 0) {
+                                    if (event.isMandatory && event.negativeHours > 0) {
+                                        "Hours: ${event.hours} / -${event.negativeHours}"
+                                    } else {
+                                        "Hours: ${event.hours}"
+                                    }
+                                } else "Not Specified",
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = if (event.hours > 0) Color(0xFF333333) else Color.Gray
@@ -1394,8 +1448,12 @@ fun ActiveSessionScreen(
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "Hours: ${event.hours}",
+                            Text(
+                                text = if (event.isMandatory && event.negativeHours > 0) {
+                                    "Hours: ${event.hours} / -${event.negativeHours}"
+                                } else {
+                                    "Hours: ${event.hours}"
+                                },
                                     color = Color.White.copy(alpha = 0.9f),
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Medium
@@ -1446,7 +1504,9 @@ fun ActiveSessionScreen(
         // QR Code display
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = Color.White)
+            colors = CardDefaults.cardColors(
+                containerColor = if (uiState.selectedEvent?.isMandatory == true) Color(0xFFFFFDE7) else Color.White
+            )
         ) {
             Column(
                 modifier = Modifier
@@ -1500,7 +1560,7 @@ fun ActiveSessionScreen(
 @Composable
 fun CreateEventDialog(
     isCreating: Boolean,
-    onCreateEvent: (String, String, String, Date, Date, Date, Int) -> Unit,
+    onCreateEvent: (String, String, String, Date, Date, Date, Int, Boolean, Int) -> Unit,
     onDismiss: () -> Unit,
     errorMessage: String?,
     initialDate: Date? = null
@@ -1521,6 +1581,8 @@ fun CreateEventDialog(
     var showClosingTimePicker by remember { mutableStateOf(false) }
     var showError by remember { mutableStateOf(false) }
     var validationErrorMessage by remember { mutableStateOf("") }
+    var isMandatory by remember { mutableStateOf(false) }
+    var negativeHours by remember { mutableStateOf("") }
 
     // Reset error state when dialog opens
     LaunchedEffect(Unit) {
@@ -1753,6 +1815,49 @@ fun CreateEventDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
+                // Mandatory Event checkbox
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = isMandatory,
+                        onCheckedChange = { isMandatory = it },
+                        enabled = !isCreating
+                    )
+                    Text("Mandatory event", modifier = Modifier.padding(start = 8.dp))
+                }
+
+                // Negative hours input shown only when mandatory
+                if (isMandatory) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = negativeHours,
+                        onValueChange = { newValue ->
+                            if (newValue.isEmpty() || newValue.all { it.isDigit() }) {
+                                negativeHours = newValue
+                                showError = false
+                            }
+                        },
+                        label = { Text("Negative Hours *") },
+                        placeholder = { Text("Hours to deduct for absentees") },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isCreating,
+                        textStyle = TextStyle(
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 14.sp,
+                            color = Color(0xFF333333)
+                        ),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        isError = showError && negativeHours.trim().isEmpty(),
+                        supportingText = {
+                            if (showError && negativeHours.trim().isEmpty()) {
+                                Text(
+                                    text = "Negative hours are required for mandatory events",
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+                    )
+                }
+
                 // Event Description Field
                 OutlinedTextField(
                     value = eventDescription,
@@ -1803,6 +1908,7 @@ fun CreateEventDialog(
                     val trimmedName = eventName.trim()
                     val trimmedHours = eventHours.trim()
                     val hoursValue = trimmedHours.toIntOrNull() ?: -1
+                    val negHoursValue = negativeHours.trim().toIntOrNull() ?: 0
 
                     when {
                         trimmedName.isEmpty() -> {
@@ -1813,18 +1919,19 @@ fun CreateEventDialog(
                             showError = true
                             validationErrorMessage = "Please enter valid hours (0 or greater)"
                         }
+                        isMandatory && negativeHours.trim().isEmpty() -> {
+                            showError = true
+                            validationErrorMessage = "Negative hours are required for mandatory events"
+                        }
                         !com.phad.chatapp.utils.AttendanceEventUtils.validateEventTimes(openingTime, closingTime) -> {
                             showError = true
                             validationErrorMessage = "Closing time must be after opening time"
                         }
-                        !com.phad.chatapp.utils.AttendanceEventUtils.validateOpeningTimeNotInPast(selectedDate, openingTime) -> {
-                            showError = true
-                            validationErrorMessage = "Opening time cannot be in the past"
-                        }
+                        // Allow creation even if opening time is in the past (no restriction)
                         else -> {
                             showError = false
                             validationErrorMessage = ""
-                            onCreateEvent(trimmedName, eventDescription.trim(), eventLocation.trim(), selectedDate, openingTime, closingTime, hoursValue)
+                            onCreateEvent(trimmedName, eventDescription.trim(), eventLocation.trim(), selectedDate, openingTime, closingTime, hoursValue, isMandatory, negHoursValue)
                         }
                     }
                 },
@@ -1962,7 +2069,7 @@ fun ManualRollNumberDialog(
                         showError = false
                     },
                     label = { Text("Roll Numbers") },
-                    placeholder = { Text("e.g., 12345, 67890, 11111\nor\n12345\n67890\n11111") },
+                    // Removed placeholder examples per request to keep input empty
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 3,
                     maxLines = 6,

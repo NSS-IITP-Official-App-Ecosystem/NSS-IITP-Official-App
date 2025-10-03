@@ -16,6 +16,7 @@ import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.auth.FirebaseAuth
 import com.phad.chatapp.adapters.GroupRemoveAdapter
 import com.phad.chatapp.models.Group
 import com.phad.chatapp.utils.SessionManager
@@ -32,6 +33,7 @@ class RemoveGroupFragment : Fragment() {
     private lateinit var groupAdapter: GroupRemoveAdapter
     private lateinit var sessionManager: SessionManager
     private val db = FirebaseFirestore.getInstance()
+    private var lastDebugInfo: String = ""
     
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -108,17 +110,82 @@ class RemoveGroupFragment : Fragment() {
         // Get user type to check if we should only show groups they can manage
         val userType = sessionManager.fetchUserType()
         val currentUserId = sessionManager.fetchUserId()
+        val authUid = FirebaseAuth.getInstance().currentUser?.uid ?: "<no-uid>"
+        Log.d(TAG, "loadGroups(): session.userType='$userType', session.roll='$currentUserId', auth.uid='$authUid'")
+        lastDebugInfo = "sessionType='$userType' roll='$currentUserId' uid='$authUid'"
         
-        // Only Admin users can delete groups
-        if (userType != "Admin" && userType != "Admin1" && userType != "Admin2") {
-            // Show a message that only Admin users can remove groups
-            emptyView.visibility = View.VISIBLE
-            loadingProgress.visibility = View.GONE
-            groupsRecyclerView.visibility = View.GONE
-            emptyView.findViewById<TextView>(R.id.empty_text)?.text = "Only Admin users can remove groups"
+        // Only Admin users can delete groups (new unified role check)
+        if (!userType.equals("Admin", ignoreCase = true)) {
+            // Double-check from Firestore in case session is stale
+            Log.d(TAG, "Session not admin. Verifying from Firestore...")
+            val userDocRef = if (!currentUserId.isNullOrEmpty()) {
+                db.collection("users").document(currentUserId)
+            } else if (!authUid.isNullOrEmpty()) {
+                db.collection("users").document(authUid)
+            } else null
+
+            if (userDocRef != null) {
+                userDocRef.get()
+                    .addOnSuccessListener { doc ->
+                        val docUserType = doc.getString("userType") ?: ""
+                        val isAdminDoc = doc.exists() && (docUserType.equals("Admin", true) || docUserType.equals("admin", true))
+                        Log.d(TAG, "Doc(${doc.id}) exists=${doc.exists()} userType='$docUserType' -> isAdminDoc=$isAdminDoc")
+                        lastDebugInfo = "$lastDebugInfo | docId='${doc.id}' type='$docUserType' isAdminDoc=$isAdminDoc"
+                        if (isAdminDoc) {
+                            fetchAndDisplayGroups()
+                        } else {
+                            // Try querying by rollNumber attribute when doc id is UID
+                            val rollNum = sessionManager.fetchUserId()
+                            Log.d(TAG, "Doc not admin. Querying by rollNumber='$rollNum'")
+                            if (rollNum.isNotEmpty()) {
+                                db.collection("users")
+                                    .whereEqualTo("rollNumber", rollNum)
+                                    .limit(1)
+                                    .get()
+                                    .addOnSuccessListener { qs ->
+                                        val queriedType = qs.documents.firstOrNull()?.getString("userType") ?: ""
+                                        Log.d(TAG, "Query by rollNumber returned type='$queriedType'")
+                                        lastDebugInfo = "$lastDebugInfo | queryType='$queriedType'"
+                                        if (queriedType.equals("Admin", true) || queriedType.equals("admin", true)) {
+                                            fetchAndDisplayGroups()
+                                        } else {
+                                            showOnlyAdminMessage()
+                                        }
+                                    }
+                                    .addOnFailureListener { e ->
+                                        Log.e(TAG, "Query by rollNumber failed", e)
+                                        lastDebugInfo = "$lastDebugInfo | queryError='${e.message}'"
+                                        showOnlyAdminMessage()
+                                    }
+                            } else {
+                                showOnlyAdminMessage()
+                            }
+                        }
+                    }
+                    .addOnFailureListener { e ->
+                        Log.e(TAG, "Fetching user doc failed", e)
+                        lastDebugInfo = "$lastDebugInfo | docError='${e.message}'"
+                        showOnlyAdminMessage()
+                    }
+            } else {
+                showOnlyAdminMessage()
+            }
             return
         }
         
+        // Session says admin; proceed
+        fetchAndDisplayGroups()
+    }
+
+    private fun showOnlyAdminMessage() {
+        emptyView.visibility = View.VISIBLE
+        loadingProgress.visibility = View.GONE
+        groupsRecyclerView.visibility = View.GONE
+        val tv = emptyView.findViewById<TextView>(R.id.empty_text)
+        tv?.text = "Only Admin users can remove groups\n$lastDebugInfo"
+    }
+
+    private fun fetchAndDisplayGroups() {
         // Query Firestore for all groups
         db.collection("groups")
             .get()

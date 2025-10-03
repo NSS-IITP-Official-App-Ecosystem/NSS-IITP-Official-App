@@ -39,7 +39,7 @@ class AdminListFragment : Fragment() {
         
         setupToolbar()
         setupRecyclerView()
-        loadAdmin1Only()
+        loadAdminsOnly()
     }
     
     private fun setupToolbar() {
@@ -61,37 +61,37 @@ class AdminListFragment : Fragment() {
     }
     
     /**
-     * Load only Admin1 users from Firestore
+     * Load only admin users from Firestore (unified role)
      */
-    private fun loadAdmin1Only() {
+    private fun loadAdminsOnly() {
         showLoading()
-        Log.d(TAG, "Starting to load Admin1 data...")
+        Log.d(TAG, "Starting to load admin data...")
         
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                // Fetch only Admin1 users from users collection
-                Log.d(TAG, "Calling repository.getAdmin1UsersOnly()")
-                val admin1List = repository.getAdmin1UsersOnly()
-                Log.d(TAG, "Received ${admin1List.size} Admin1 users from repository")
+                // Fetch only admin users from users collection
+                Log.d(TAG, "Calling repository.getAdminUsersOnly()")
+                val adminList = repository.getAdminUsersOnly()
+                Log.d(TAG, "Received ${adminList.size} admin users from repository")
                 
                 // Debug each admin
-                admin1List.forEachIndexed { index, admin ->
+                adminList.forEachIndexed { index, admin ->
                     Log.d(TAG, "Admin $index: name=${admin.name}, desc=${admin.description}, roll=${admin.rollNumber}")
                 }
                 
                 activity?.runOnUiThread {
-                    if (admin1List.isNotEmpty()) {
+                    if (adminList.isNotEmpty()) {
                         // Update adapter with new data
-                        adapter.updateData(admin1List)
+                        adapter.updateData(adminList)
                         showContent()
                     } else {
                         // Show empty state
-                        Log.w(TAG, "No Admin1 users found in users collection")
-                        showEmptyState("No Admin1 users found")
+                        Log.w(TAG, "No admin users found in users collection")
+                        showEmptyState("No admin users found")
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error loading Admin1 data", e)
+                Log.e(TAG, "Error loading admin data", e)
                 e.printStackTrace()
                 
                 val errorMessage = when (e) {

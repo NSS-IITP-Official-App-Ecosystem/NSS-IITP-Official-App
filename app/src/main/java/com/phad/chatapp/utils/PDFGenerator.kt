@@ -19,6 +19,7 @@ import com.itextpdf.kernel.font.PdfFontFactory
 import com.itextpdf.kernel.font.PdfFont
 import com.phad.chatapp.models.AttendanceEvent
 import com.phad.chatapp.models.AttendeeRecord
+import com.phad.chatapp.models.User
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.tasks.await
@@ -112,6 +113,93 @@ class PDFGenerator(private val context: Context) {
             return@withContext pdfFile.absolutePath
         } catch (e: Exception) {
             Log.e(TAG, "Error generating student events list PDF", e)
+            return@withContext null
+        }
+    }
+
+    /**
+     * Generate an Attendance Matrix PDF with columns: Name, Roll, Wing, Total Hours, and all Event Names.
+     * For each student row, place event hours if present, blank if absent.
+     */
+    suspend fun generateAttendanceMatrixReport(
+        students: List<User>,
+        events: List<AttendanceEvent>,
+        perStudentEventHours: Map<String, Map<String, Int>>, // roll -> (eventId -> hours)
+        totalHoursPerStudent: Map<String, Int>
+    ): String? = withContext(Dispatchers.IO) {
+        try {
+            val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+            val filename = "NSS_Attendance_Matrix_${timestamp}.pdf"
+
+            val cacheDir = context.cacheDir
+            val pdfDir = File(cacheDir, "images")
+            if (!pdfDir.exists()) pdfDir.mkdirs()
+            val pdfFile = File(pdfDir, filename)
+
+            val pdfWriter = PdfWriter(FileOutputStream(pdfFile))
+            val pdfDocument = PdfDocument(pdfWriter)
+            val document = Document(pdfDocument)
+
+            val font = PdfFontFactory.createFont()
+            val boldFont = PdfFontFactory.createFont(com.itextpdf.io.font.constants.StandardFonts.HELVETICA_BOLD)
+
+            // Title
+            document.add(
+                Paragraph("NSS Attendance Matrix")
+                    .setFont(boldFont)
+                    .setFontSize(FONT_SIZE_HEADER)
+                    .setTextAlignment(TextAlignment.CENTER)
+                    .setMarginBottom(16f)
+            )
+
+            // Subtitle: total events
+            document.add(
+                Paragraph("Events: ${events.size} | Students: ${students.size}")
+                    .setFont(font)
+                    .setFontSize(FONT_SIZE_NORMAL)
+                    .setTextAlignment(TextAlignment.CENTER)
+                    .setMarginBottom(12f)
+            )
+
+            // Build table: fixed first 4 columns + dynamic events
+            val totalColumns = 4 + events.size
+            val table = Table(totalColumns)
+                .setWidth(UnitValue.createPercentValue(100f))
+
+            // Header cells
+            table.addCell(createHeaderCell("Name", boldFont))
+            table.addCell(createHeaderCell("Roll", boldFont))
+            table.addCell(createHeaderCell("Wing", boldFont))
+            table.addCell(createHeaderCell("Total Hours", boldFont))
+
+            events.forEach { event ->
+                table.addCell(createHeaderCell(event.getEventName(), boldFont))
+            }
+
+            // Rows per student
+            for (student in students) {
+                val roll = student.rollNumber.ifEmpty { student.id }
+                val wing = if (student.wings.isNotEmpty()) student.wings.joinToString(",") else ""
+                val totalHours = totalHoursPerStudent[roll]?.toString() ?: "0"
+
+                table.addCell(createCell(student.name, font, false))
+                table.addCell(createCell(roll, font, false))
+                table.addCell(createCell(wing, font, false))
+                table.addCell(createCell(totalHours, font, false))
+
+                val perEvent = perStudentEventHours[roll] ?: perStudentEventHours[student.rollNumber] ?: emptyMap()
+                events.forEach { event ->
+                    val hours = perEvent[event.id]
+                    table.addCell(createCell(hours?.toString() ?: "", font, false))
+                }
+            }
+
+            document.add(table)
+            document.close()
+
+            return@withContext pdfFile.absolutePath
+        } catch (e: Exception) {
+            Log.e(TAG, "Error generating attendance matrix PDF", e)
             return@withContext null
         }
     }

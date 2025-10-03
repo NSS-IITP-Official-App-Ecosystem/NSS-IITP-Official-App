@@ -55,18 +55,18 @@ class FirestoreRepository {
         Log.d(TAG, "users collection path: ${usersCollection.path}")
     }
     
-    // Method to fetch users with userType "Admin1" from the users collection
-    suspend fun getAdmin1UsersOnly(): List<Admin> = withContext(Dispatchers.IO) {
+    // Method to fetch users with userType "admin" from the users collection (unified)
+    suspend fun getAdminUsersOnly(): List<Admin> = withContext(Dispatchers.IO) {
         return@withContext try {
-            Log.d(TAG, "Fetching users with userType = Admin1 from users collection")
+            Log.d(TAG, "Fetching users with userType = admin from users collection")
             
-            // Query users collection directly for Admin1 users
+            // Query users collection directly for admin users
             val querySnapshot = usersCollection
-                .whereEqualTo("userType", "Admin1")
+                .whereEqualTo("userType", "admin")
                 .get(Source.SERVER) // Force server fetch to ensure fresh data
                 .await()
             
-            Log.d(TAG, "Total Admin1 users found: ${querySnapshot.size()}")
+            Log.d(TAG, "Total admin users found: ${querySnapshot.size()}")
             
             // Convert to Admin objects
             querySnapshot.documents.mapNotNull { document ->
@@ -103,10 +103,10 @@ class FirestoreRepository {
         }
     }
     
-    // Method to fetch all users for Admin1, sorted by conversation timestamp
-    suspend fun getAllUsersForAdmin1WithTimestamps(): List<Admin> = withContext(Dispatchers.IO) {
+    // Method to fetch all users for admin, sorted by conversation timestamp
+    suspend fun getAllUsersForAdminWithTimestamps(): List<Admin> = withContext(Dispatchers.IO) {
         return@withContext try {
-            Log.d(TAG, "Fetching all users for Admin1 with timestamps")
+            Log.d(TAG, "Fetching all users for admin with timestamps")
             
             // Get all users except the current user
             val currentUserId = FirebaseAuth.getInstance().currentUser?.uid
@@ -227,23 +227,23 @@ class FirestoreRepository {
             
             sortedUsers
         } catch (e: Exception) {
-            Log.e(TAG, "Error fetching all users for Admin1", e)
+            Log.e(TAG, "Error fetching all users for admin", e)
             throw e
         }
     }
     
-    // Method to fetch only Admin1 users for Admin2 users
-    suspend fun getAdmin1UsersForAdmin2(): List<Admin> = withContext(Dispatchers.IO) {
+    // Method to fetch only admin users for admin users (kept for compatibility)
+    suspend fun getAdminUsersForAdmins(): List<Admin> = withContext(Dispatchers.IO) {
         return@withContext try {
-            Log.d(TAG, "Fetching Admin1 users for Admin2 from users collection")
+            Log.d(TAG, "Fetching admin users from users collection")
             
-            // Query users collection directly for Admin1 users
+            // Query users collection directly for admin users
             val querySnapshot = usersCollection
-                .whereEqualTo("userType", "Admin1")
+                .whereEqualTo("userType", "admin")
                 .get(Source.SERVER) // Force server fetch to ensure fresh data
                 .await()
             
-            Log.d(TAG, "Total Admin1 users found for Admin2: ${querySnapshot.size()}")
+            Log.d(TAG, "Total admin users found: ${querySnapshot.size()}")
             
             // Convert to Admin objects
             val userList = querySnapshot.documents.mapNotNull { document ->

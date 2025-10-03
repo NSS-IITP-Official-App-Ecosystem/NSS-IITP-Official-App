@@ -378,21 +378,83 @@ class AttendanceQRRepository {
         try {
             Log.d(TAG, "Updating attendance event in consolidated collection: ${event.getEventName()} (ID: ${event.id})")
 
-            // Prepare data for update. Only update fields that can be changed by admin.
-            val updates = mapOf(
+            // 1) Fetch the existing event to compute differences
+            val eventDocRef = eventsAttendanceCollection.document(event.id)
+            val existingSnapshot = eventDocRef.get().await()
+            val oldEvent = existingSnapshot.toObject(AttendanceEvent::class.java)
+
+            if (oldEvent == null) {
+                Log.w(TAG, "Event not found when attempting update: ${event.id}")
+                return@withContext Result.failure(IllegalStateException("Event not found: ${event.id}"))
+            }
+
+            val oldHours = oldEvent.hours
+            val newHours = event.hours
+            val hoursDelta = newHours - oldHours
+
+            val oldSemester = getSemesterFromDate(oldEvent.eventDate)
+            val newSemester = getSemesterFromDate(event.eventDate)
+
+            Log.d(TAG, "Old hours=$oldHours, New hours=$newHours, Delta=$hoursDelta; Old semester=$oldSemester, New semester=$newSemester")
+
+            // 2) Build a batched write: update the event, then adjust user stats for attendees
+            val batch = firestore.batch()
+
+            // Update event fields that are editable
+            val eventUpdates = mapOf(
                 "description" to event.description,
                 "eventDate" to event.eventDate,
                 "eventTime" to event.eventTime,
                 "hours" to event.hours,
-                "location" to event.location
-                // Do not update 'id', 'createdBy', 'creatorName', 'createdAt', 'attendees', 'closedAt', 'is_live'
+                "location" to event.location,
+                // Ensure mandatory penalty config is persisted on edit
+                "mandatory" to event.isMandatory,
+                "negativeHours" to event.negativeHours
             )
+            batch.update(eventDocRef, eventUpdates)
 
-            eventsAttendanceCollection.document(event.id)
-                .update(updates)
-                .await()
+            // If there are attendees, propagate hour/semester changes to their user docs
+            if ((hoursDelta != 0 || oldSemester != newSemester) && oldEvent.attendees.isNotEmpty()) {
+                oldEvent.attendees.forEach { attendee ->
+                    val userRef = usersCollection.document(attendee.rollNumber)
 
-            Log.d(TAG, "Attendance event updated successfully in consolidated collection: ${event.id}")
+                    // Prepare per-user updates depending on delta and semester change
+                    val userUpdates = mutableMapOf<String, Any>()
+
+                    // Always adjust total hours if hours changed
+                    if (hoursDelta != 0) {
+                        userUpdates["hours"] = FieldValue.increment(hoursDelta.toLong())
+                    }
+
+                    // Adjust semester-specific hours
+                    if (oldSemester == newSemester) {
+                        // Same semester: just increment that semester by delta
+                        when (newSemester) {
+                            1 -> userUpdates["sem1Hours"] = FieldValue.increment(hoursDelta.toLong())
+                            2 -> userUpdates["sem2Hours"] = FieldValue.increment(hoursDelta.toLong())
+                        }
+                    } else {
+                        // Semester moved: subtract old hours from old semester, add new hours to new semester
+                        when (oldSemester) {
+                            1 -> userUpdates["sem1Hours"] = FieldValue.increment((-oldHours).toLong())
+                            2 -> userUpdates["sem2Hours"] = FieldValue.increment((-oldHours).toLong())
+                        }
+                        when (newSemester) {
+                            1 -> userUpdates.merge("sem1Hours", FieldValue.increment(newHours.toLong())) { _, new -> new }
+                            2 -> userUpdates.merge("sem2Hours", FieldValue.increment(newHours.toLong())) { _, new -> new }
+                        }
+                    }
+
+                    if (userUpdates.isNotEmpty()) {
+                        batch.update(userRef, userUpdates)
+                    }
+                }
+            }
+
+            // Commit batch
+            batch.commit().await()
+
+            Log.d(TAG, "Attendance event and user stats updated successfully: ${event.id}")
             return@withContext Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Error updating attendance event in consolidated collection", e)
@@ -556,6 +618,115 @@ class AttendanceQRRepository {
                 .await()
 
             Log.d(TAG, "Attendance event closed successfully: $eventId")
+
+            // Fetch event to check mandatory and negative hours
+            val eventSnap = eventsAttendanceCollection.document(eventId).get().await()
+            val event = eventSnap.toObject(AttendanceEvent::class.java)
+
+            // Read penalty metadata
+            val penaltyApplied = (eventSnap.get("absentPenaltyApplied") as? Boolean) == true
+            val previouslyUsedPenalty = (eventSnap.get("penaltyHoursUsed") as? Number)?.toInt() ?: 0
+            @Suppress("UNCHECKED_CAST")
+            val storedAbsentees: List<String> = (eventSnap.get("absentee_roll_numbers") as? List<String>) ?: emptyList()
+
+            if (event != null) {
+                val isMandatory = try { eventSnap.getBoolean("mandatory") ?: event.isMandatory } catch (e: Exception) { event.isMandatory }
+                val negativeHours = try { (eventSnap.get("negativeHours") as? Number)?.toInt() ?: event.negativeHours } catch (e: Exception) { event.negativeHours }
+
+                Log.d(TAG, "Close event penalty check: isMandatory=$isMandatory, negativeHours=$negativeHours, alreadyApplied=$penaltyApplied")
+
+                if (isMandatory && negativeHours > 0 && !penaltyApplied) {
+                    // First-time application
+                    val attendeeRolls = event.attendees.map { it.rollNumber }.toSet()
+                    val semester = getSemesterFromDate(event.eventDate)
+
+                    var allUsers = usersCollection.get().await().documents
+                    if (allUsers.isEmpty()) {
+                        // Fallback to ttwStudents if users is empty
+                        Log.w(TAG, "users collection is empty; falling back to ttwStudents")
+                        val fallback = firestore.collection("ttwStudents").get().await().documents
+                        allUsers = fallback
+                    }
+
+                    val absentees = allUsers.map { it.id }
+                        .filter { it.isNotBlank() && !attendeeRolls.contains(it) }
+
+                    Log.d(TAG, "Found ${absentees.size} absentees for initial penalty application")
+
+                    val chunkSize = 400
+                    absentees.chunked(chunkSize).forEachIndexed { idx, chunk ->
+                        val batch = firestore.batch()
+                        chunk.forEach { roll ->
+                            val userRef = usersCollection.document(roll)
+                            val userUpdates = mutableMapOf<String, Any>(
+                                "hours" to FieldValue.increment((-negativeHours).toLong())
+                            )
+                            when (semester) {
+                                1 -> userUpdates["sem1Hours"] = FieldValue.increment((-negativeHours).toLong())
+                                2 -> userUpdates["sem2Hours"] = FieldValue.increment((-negativeHours).toLong())
+                            }
+                            batch.update(userRef, userUpdates)
+                        }
+                        batch.commit().await()
+                        Log.d(TAG, "Penalty batch ${idx + 1} committed with ${chunk.size} users")
+                    }
+
+                    // Persist metadata to support future delta adjustments
+                    eventsAttendanceCollection.document(eventId)
+                        .update(
+                            mapOf(
+                                "absentPenaltyApplied" to true,
+                                "penaltyHoursUsed" to negativeHours,
+                                "absenteeRollNumbers" to absentees,
+                                "absentPenaltyCount" to absentees.size
+                            )
+                        )
+                        .await()
+
+                    Log.d(TAG, "Absent penalties applied (first time) and metadata stored for event: $eventId")
+                } else if (isMandatory && penaltyApplied) {
+                    // Adjust existing penalties via delta if hours changed
+                    val delta = negativeHours - previouslyUsedPenalty
+                    Log.d(TAG, "Penalty delta check: previous=$previouslyUsedPenalty, current=$negativeHours, delta=$delta")
+                    if (delta != 0) {
+                        val semester = getSemesterFromDate(event.eventDate)
+                        val targetRolls = if (storedAbsentees.isNotEmpty()) storedAbsentees else run {
+                            // Fallback: recompute from all users and attendees
+                            val attendeeRolls = event.attendees.map { it.rollNumber }.toSet()
+                            val allUsers = usersCollection.get().await().documents
+                            allUsers.map { it.id }.filter { it.isNotBlank() && !attendeeRolls.contains(it) }
+                        }
+
+                        val inc = (-delta).toLong() // if reduced hours (delta negative), this becomes positive to refund
+                        Log.d(TAG, "Applying delta=$delta to ${targetRolls.size} users (increment=$inc)")
+
+                        val chunkSize = 400
+                        targetRolls.chunked(chunkSize).forEachIndexed { idx, chunk ->
+                            val batch = firestore.batch()
+                            chunk.forEach { roll ->
+                                val userRef = usersCollection.document(roll)
+                                val userUpdates = mutableMapOf<String, Any>(
+                                    "hours" to FieldValue.increment(inc)
+                                )
+                                when (semester) {
+                                    1 -> userUpdates["sem1Hours"] = FieldValue.increment(inc)
+                                    2 -> userUpdates["sem2Hours"] = FieldValue.increment(inc)
+                                }
+                                batch.update(userRef, userUpdates)
+                            }
+                            batch.commit().await()
+                            Log.d(TAG, "Delta batch ${idx + 1} committed with ${chunk.size} users")
+                        }
+
+                        // Update metadata to reflect the new penalty hours
+                        eventsAttendanceCollection.document(eventId)
+                            .update(mapOf("penaltyHoursUsed" to negativeHours))
+                            .await()
+                        Log.d(TAG, "Penalty metadata updated to $negativeHours for event: $eventId")
+                    }
+                }
+            }
+
             return@withContext Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Error closing attendance event", e)

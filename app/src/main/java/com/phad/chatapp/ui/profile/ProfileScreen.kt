@@ -50,6 +50,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.phad.chatapp.R
@@ -96,6 +98,8 @@ fun ProfileScreen(
     onLibraryClick: () -> Unit,
     onChatClick: () -> Unit,
     onScheduleClick: () -> Unit,
+    // New admin-only export button
+    onExportAttendanceClick: () -> Unit = {},
     onSwitchInterfaceClick: () -> Unit,
     onSem1HoursClick: () -> Unit,
     onSem2HoursClick: () -> Unit,
@@ -337,6 +341,10 @@ fun ProfileScreen(
                         // College Email only
                         LabeledInfoItem(label = "College Email", value = state.collegeEmail, color = onSurfaceColor)
                         
+                        // Admin-only actions
+                        Spacer(modifier = Modifier.height(24.dp))
+                        AdminActions(onExportAttendanceClick = onExportAttendanceClick)
+
                         // Add bottom spacing to ensure content is not cut off
                         Spacer(modifier = Modifier.height(32.dp))
                     }
@@ -434,6 +442,28 @@ fun LabeledInfoItem(label: String, value: String, color: Color) {
             modifier = Modifier.fillMaxWidth(),
             softWrap = true
         )
+    }
+}
+
+@Composable
+private fun AdminActions(
+    onExportAttendanceClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+    ) {
+        // Removed label text above admin actions per design request
+        Button(
+            onClick = onExportAttendanceClick,
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2))
+        ) {
+            Text(
+                text = "Export Attendance Matrix (PDF)",
+                color = Color.White,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
     }
 }
 

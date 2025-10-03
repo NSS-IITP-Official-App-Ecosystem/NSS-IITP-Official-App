@@ -374,10 +374,7 @@ class AttendanceManagerFragment : Fragment() {
                         Toast.makeText(requireContext(), "Closing time must be after opening time", Toast.LENGTH_SHORT).show()
                         return@setPositiveButton
                     }
-                    !AttendanceEventUtils.validateOpeningTimeNotInPast(selectedDate.time, openingTime) -> {
-                        Toast.makeText(requireContext(), "Opening time cannot be in the past", Toast.LENGTH_SHORT).show()
-                        return@setPositiveButton
-                    }
+                    // Allow past opening times while editing/creating
                     else -> {
                         createAttendanceEvent(eventName, description, selectedDate.time, openingTime, closingTime, hours)
                     }

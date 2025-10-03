@@ -136,7 +136,7 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
     /**
      * Create a new attendance event
      */
-    fun createAttendanceEvent(name: String, description: String, location: String, eventDate: java.util.Date, openingTime: java.util.Date, closingTime: java.util.Date, hours: Int) {
+    fun createAttendanceEvent(name: String, description: String, location: String, eventDate: java.util.Date, openingTime: java.util.Date, closingTime: java.util.Date, hours: Int, isMandatory: Boolean = false, negativeHours: Int = 0) {
         viewModelScope.launch {
             try {
                 Log.d(TAG, "Creating attendance event: $name")
@@ -160,6 +160,8 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                     eventDate = dateString,
                     eventTime = timeRangeString,
                     hours = hours,
+                    isMandatory = isMandatory,
+                    negativeHours = negativeHours,
                     location = location.trim(),
                     description = description.trim(),
                     createdBy = _adminUiState.value.adminId,
@@ -259,7 +261,7 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
     /**
      * Update an existing attendance event
      */
-    fun updateAttendanceEvent(name: String, description: String, location: String, eventDate: java.util.Date, openingTime: java.util.Date, closingTime: java.util.Date, hours: Int, eventId: String) {
+    fun updateAttendanceEvent(name: String, description: String, location: String, eventDate: java.util.Date, openingTime: java.util.Date, closingTime: java.util.Date, hours: Int, isMandatory: Boolean, negativeHours: Int, eventId: String) {
         viewModelScope.launch {
             try {
                 Log.d(TAG, "Updating attendance event: $name (ID: $eventId)")
@@ -279,6 +281,8 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                     eventDate = dateString,
                     eventTime = timeRangeString,
                     hours = hours,
+                    isMandatory = isMandatory,
+                    negativeHours = negativeHours,
                     location = location.trim(),
                     description = description.trim()
                 ) ?: throw IllegalStateException("No event selected for update")

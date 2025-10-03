@@ -72,9 +72,9 @@ class ManagePermissionsActivity : AppCompatActivity() {
             return
         }
         
-        // Check if user is Admin
+        // Check if user is Admin (new unified role check)
         val userType = sessionManager.fetchUserType()
-        if (userType != "Admin" && userType != "Admin1" && userType != "Admin2") {
+        if (!userType.equals("Admin", ignoreCase = true)) {
             Toast.makeText(this, "Only Admin users can manage permissions", Toast.LENGTH_SHORT).show()
             finish()
             return

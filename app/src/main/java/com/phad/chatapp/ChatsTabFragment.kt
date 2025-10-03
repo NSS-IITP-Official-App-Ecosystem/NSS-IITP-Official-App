@@ -256,7 +256,7 @@ class ChatsTabFragment : Fragment() {
                     ).show()
                 }
                 
-                val userList = repository.getAllUsersForAdmin1WithTimestamps()
+                val userList = repository.getAllUsersForAdminWithTimestamps()
                 
                 if (!isAdded) return@launch
                 
@@ -303,7 +303,7 @@ class ChatsTabFragment : Fragment() {
                     ).show()
                 }
                 
-                val userList = repository.getAdmin1UsersOnly()
+                val userList = repository.getAdminUsersOnly()
                 
                 if (!isAdded) return@launch
                 
@@ -399,7 +399,7 @@ class ChatsTabFragment : Fragment() {
                 }
                 
                 // Get all users
-                val userList = repository.getAllUsersForAdmin1WithTimestamps()
+                val userList = repository.getAllUsersForAdminWithTimestamps()
                 
                 Log.d(TAG, "Retrieved ${userList.size} users for display in forced Admin1 mode")
                 Log.d(TAG, "User types in list: ${userList.map { it.userType }.distinct()}")
