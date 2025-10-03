@@ -15,7 +15,7 @@ android {
         applicationId = "com.phad.chatapp"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
+        versionCode = 15
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -65,6 +65,13 @@ android {
             excludes += "META-INF/DEPENDENCIES"
             excludes += "META-INF/INDEX.LIST"
             excludes += "META-INF/io.netty.versions.properties"
+        }
+    }
+    
+    // Force SoLoader version resolution to prevent 64-bit crashes
+    configurations.all {
+        resolutionStrategy {
+            force("com.facebook.soloader:soloader:0.10.4")
         }
     }
 
@@ -221,4 +228,7 @@ dependencies {
     // PDF generation dependencies
     implementation("com.itextpdf:itext7-core:7.2.5")
     implementation("com.itextpdf:html2pdf:4.0.5")
+    
+    // Force SoLoader version to fix 64-bit device crashes
+    implementation("com.facebook.soloader:soloader:0.10.4")
 }
