@@ -73,7 +73,6 @@ class AdminListFragment : Fragment() {
                 Log.d(TAG, "Calling repository.getAdminUsersOnly()")
                 val adminList = repository.getAdminUsersOnly()
                 Log.d(TAG, "Received ${adminList.size} admin users from repository")
-                
                 // Debug each admin
                 adminList.forEachIndexed { index, admin ->
                     Log.d(TAG, "Admin $index: name=${admin.name}, desc=${admin.description}, roll=${admin.rollNumber}")

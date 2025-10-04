@@ -23,7 +23,7 @@ import com.phad.chatapp.ui.profile.ProfileScreen
 import com.phad.chatapp.ui.profile.ProfileUiState
 import com.phad.chatapp.utils.SessionManager
 import com.phad.chatapp.utils.AttendanceStatsCalculator
-import com.phad.chatapp.utils.PDFGenerator
+import com.phad.chatapp.utils.ExcelGenerator
 import com.phad.chatapp.models.AttendanceEvent
 import com.phad.chatapp.models.User
 import androidx.core.content.FileProvider
@@ -390,31 +390,31 @@ class NssProfileFragment : Fragment() {
                     }
                 }
 
-                val pdfPath = PDFGenerator(requireContext()).generateAttendanceMatrixReport(
+                val excelPath = ExcelGenerator(requireContext()).generateAttendanceMatrixReport(
                     students = students,
                     events = events,
                     perStudentEventHours = perStudentEventHours,
                     totalHoursPerStudent = totalHoursPerStudent
                 )
 
-                if (pdfPath != null) {
-                    val file = java.io.File(pdfPath)
+                if (excelPath != null) {
+                    val file = java.io.File(excelPath)
                     val uri: Uri = FileProvider.getUriForFile(
                         requireContext(),
                         "${requireContext().packageName}.fileprovider",
                         file
                     )
                     val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
-                        setDataAndType(uri, "application/pdf")
+                        setDataAndType(uri, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                         addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     }
                     try {
                         startActivity(intent)
                     } catch (e: ActivityNotFoundException) {
-                        Toast.makeText(requireContext(), "No PDF viewer found. File saved to: ${file.absolutePath}", Toast.LENGTH_LONG).show()
+                        Toast.makeText(requireContext(), "No Excel viewer found. File saved to: ${file.absolutePath}", Toast.LENGTH_LONG).show()
                     }
                 } else {
-                    Toast.makeText(requireContext(), "Failed to generate PDF", Toast.LENGTH_LONG).show()
+                    Toast.makeText(requireContext(), "Failed to generate Excel file", Toast.LENGTH_LONG).show()
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error exporting attendance matrix", e)
