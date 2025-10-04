@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.firebase.firestore.FirebaseFirestore
 import com.phad.chatapp.models.AttendanceEvent
-import com.phad.chatapp.utils.PDFGenerator
+import com.phad.chatapp.utils.ExcelGenerator
 import kotlinx.coroutines.tasks.await
 import android.net.Uri
 import androidx.core.content.FileProvider
@@ -48,8 +48,8 @@ fun EventsListScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var studentName by remember { mutableStateOf("") }
     var nssGroup by remember { mutableStateOf("") }
-    var isGeneratingPDF by remember { mutableStateOf(false) }
-    var showPDFMessage by remember { mutableStateOf<String?>(null) }
+    var isGeneratingFile by remember { mutableStateOf(false) }
+    var showFileMessage by remember { mutableStateOf<String?>(null) }
     
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -129,13 +129,13 @@ fun EventsListScreen(
                     }
                 },
                 actions = {
-                    if (events.isNotEmpty() && !isGeneratingPDF) {
+                    if (events.isNotEmpty() && !isGeneratingFile) {
                         IconButton(
                             onClick = {
-                                isGeneratingPDF = true
+                                isGeneratingFile = true
                                 scope.launch {
                                     try {
-                                        val generator = PDFGenerator(context)
+                                        val generator = ExcelGenerator(context)
                                         val rows = events.map { Triple(it.name, it.date, it.hours) }
                                         val path = generator.generateStudentEventsList(studentName, rollNumber, semester, rows)
                                         if (path != null) {
@@ -148,40 +148,40 @@ fun EventsListScreen(
                                                 )
                                                 // Try to open first (like QR attendance flow)
                                                 val viewIntent = Intent(Intent.ACTION_VIEW).apply {
-                                                    setDataAndType(uri, "application/pdf")
+                                                    setDataAndType(uri, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                                                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                                 }
                                                 if (viewIntent.resolveActivity(context.packageManager) != null) {
                                                     context.startActivity(viewIntent)
                                                 } else {
                                                     val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                                        type = "application/pdf"
+                                                        type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                                                         putExtra(Intent.EXTRA_STREAM, uri)
                                                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                                     }
-                                                    context.startActivity(Intent.createChooser(shareIntent, "Share PDF"))
+                                                    context.startActivity(Intent.createChooser(shareIntent, "Share Excel"))
                                                 }
                                             } catch (_: Exception) { }
-                                            showPDFMessage = "PDF generated successfully"
+                                            showFileMessage = "Excel file generated successfully"
                                         } else {
-                                            showPDFMessage = "Failed to generate PDF"
+                                            showFileMessage = "Failed to generate Excel file"
                                         }
                                     } catch (e: Exception) {
-                                        showPDFMessage = e.message ?: "Failed to generate PDF"
+                                        showFileMessage = e.message ?: "Failed to generate Excel file"
                                     } finally {
-                                        isGeneratingPDF = false
+                                        isGeneratingFile = false
                                     }
                                 }
                             }
                         ) {
                             Icon(
                                 Icons.Default.Download,
-                                contentDescription = "Download PDF",
+                                contentDescription = "Download Excel",
                                 tint = Color.White
                             )
                         }
                     }
-                    if (isGeneratingPDF) {
+                    if (isGeneratingFile) {
                         Box(
                             modifier = Modifier.padding(16.dp),
                             contentAlignment = Alignment.Center
@@ -203,11 +203,11 @@ fun EventsListScreen(
         },
         containerColor = Color(0xff0d0302)
     ) { paddingValues ->
-        // Show PDF generation messages
-        showPDFMessage?.let { message ->
+        // Show file generation messages
+        showFileMessage?.let { message ->
             LaunchedEffect(message) {
                 kotlinx.coroutines.delay(3000)
-                showPDFMessage = null
+                showFileMessage = null
             }
         }
         
@@ -313,7 +313,7 @@ fun EventsListScreen(
         }
         
         // Show PDF message as overlay
-        showPDFMessage?.let { message ->
+        showFileMessage?.let { message ->
             Box(
                 modifier = Modifier
                     .fillMaxSize()

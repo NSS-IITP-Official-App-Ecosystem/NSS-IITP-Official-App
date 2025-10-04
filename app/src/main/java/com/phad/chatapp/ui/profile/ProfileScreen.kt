@@ -459,7 +459,7 @@ private fun AdminActions(
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2))
         ) {
             Text(
-                text = "Export Attendance Matrix (PDF)",
+                text = "Export Attendance Matrix (Excel)",
                 color = Color.White,
                 fontWeight = FontWeight.SemiBold
             )
