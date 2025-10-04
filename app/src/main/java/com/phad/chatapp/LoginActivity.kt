@@ -42,6 +42,56 @@ class LoginActivity : AppCompatActivity() {
     private lateinit var sessionManager: SessionManager
     private val TAG = "LoginActivity"
     
+    /**
+     * Generate all possible case combinations for a roll number in NNNNAANN format
+     * For example: 2301CS06 -> [2301CS06, 2301Cs06, 2301cS06, 2301cs06]
+     */
+    private fun generateRollNumberCaseCombinations(rollNumber: String): List<String> {
+        if (rollNumber.length != 8) return listOf(rollNumber)
+        
+        val digits = rollNumber.substring(0, 4) // First 4 digits
+        val letters = rollNumber.substring(4, 6) // Two letters
+        val lastDigits = rollNumber.substring(6, 8) // Last 2 digits
+        
+        val combinations = mutableListOf<String>()
+        
+        // Generate all 4 combinations of the two letters
+        val letter1 = letters[0]
+        val letter2 = letters[1]
+        
+        combinations.add("$digits${letter1.uppercase()}${letter2.uppercase()}$lastDigits") // CS
+        combinations.add("$digits${letter1.uppercase()}${letter2.lowercase()}$lastDigits") // Cs
+        combinations.add("$digits${letter1.lowercase()}${letter2.uppercase()}$lastDigits") // cS
+        combinations.add("$digits${letter1.lowercase()}${letter2.lowercase()}$lastDigits") // cs
+        
+        return combinations
+    }
+
+    /**
+     * Find the correct roll number case in the database
+     * Returns the actual roll number from database if found, null otherwise
+     */
+    private suspend fun findCorrectRollNumberCase(inputRollNumber: String): String? {
+        val combinations = generateRollNumberCaseCombinations(inputRollNumber)
+        
+        for (combination in combinations) {
+            try {
+                val documentSnapshot = firestore.collection("users")
+                    .document(combination)
+                    .get()
+                    .await()
+                
+                if (documentSnapshot.exists()) {
+                    return combination // Return the actual roll number from database
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error checking roll number combination: $combination", e)
+            }
+        }
+        
+        return null // No valid combination found
+    }
+    
     // UI components
     private lateinit var editTextRollNumber: EditText
     private lateinit var editTextEmail: EditText
@@ -144,6 +194,8 @@ class LoginActivity : AppCompatActivity() {
         showLoading(true)
         textViewStatus.text = "Authenticating..."
         
+        val inputRollNumber = rollNumber.trim()
+        
         // Normalize user type to app's canonical values
         val normalizedUserType = when (userType.uppercase()) {
             "STUDENT" -> "Student"
@@ -152,25 +204,33 @@ class LoginActivity : AppCompatActivity() {
         }
         
         // Add detailed logging of credentials being used
-        Log.d(TAG, "Login attempt - Email: $email, Roll: $rollNumber, UserType: $normalizedUserType")
+        Log.d(TAG, "Login attempt - Email: $email, Roll: $inputRollNumber, UserType: $normalizedUserType")
         
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                // Removed test connection diagnostics
+                // Find the correct case-insensitive roll number
+                val correctRollNumber = findCorrectRollNumberCase(inputRollNumber)
                 
-                // First check if user exists in Firestore with the provided roll number
-                Log.d(TAG, "Checking for user in users collection with roll number: $rollNumber")
+                if (correctRollNumber == null) {
+                    Log.e(TAG, "User not found in users collection with roll number: $inputRollNumber")
+                    showError("User not found with roll number: $inputRollNumber")
+                    return@launch
+                }
+                
+                // Use the correct roll number from database for further operations
+                val actualRollNumber = correctRollNumber
+                Log.d(TAG, "Found correct roll number case: $actualRollNumber")
                 
                 try {
                     // Get the user document from Firestore
                     val documentSnapshot = firestore.collection("users")
-                        .document(rollNumber)
+                        .document(actualRollNumber)
                         .get()
                         .await()
                     
                     if (!documentSnapshot.exists()) {
-                        Log.e(TAG, "User not found in users collection with roll number: $rollNumber")
-                        showError("User not found with roll number: $rollNumber")
+                        Log.e(TAG, "User not found in users collection with roll number: $actualRollNumber")
+                        showError("User not found with roll number: $actualRollNumber")
                         return@launch
                     }
                     
@@ -212,7 +272,7 @@ class LoginActivity : AppCompatActivity() {
                             val year = 0L
                             
                             // Update FCM token and complete login
-                            updateFCMTokenAndCompleteLogin(rollNumber, email, firestoreUserType, year.toInt())
+                            updateFCMTokenAndCompleteLogin(actualRollNumber, email, firestoreUserType, year.toInt())
                             return@launch
                         }
                         
@@ -251,7 +311,7 @@ class LoginActivity : AppCompatActivity() {
                         if (bypassSecurityRules) {
                             Log.w(TAG, "⚠️ USING SECURITY BYPASS! This should only be used for testing")
                             val userYearValue = userData["year"] as? Long ?: 0L  // Get year from userData
-                            sessionManager.createLoginSession(firestoreUserType, rollNumber, userYearValue.toInt())
+                            sessionManager.createLoginSession(firestoreUserType, actualRollNumber, userYearValue.toInt())
                             redirectToMain()
                             return@launch
                         }
@@ -260,7 +320,7 @@ class LoginActivity : AppCompatActivity() {
                         val userYearValue = 0L
                         
                         // Update FCM token and complete login
-                        updateFCMTokenAndCompleteLogin(rollNumber, email, firestoreUserType, userYearValue.toInt())
+                        updateFCMTokenAndCompleteLogin(actualRollNumber, email, firestoreUserType, userYearValue.toInt())
                         
                     } catch (e: FirebaseAuthInvalidUserException) {
                         Log.e(TAG, "Firebase Auth error: User not found", e)

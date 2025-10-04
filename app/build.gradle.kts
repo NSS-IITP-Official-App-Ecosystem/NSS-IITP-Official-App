@@ -15,10 +15,15 @@ android {
         applicationId = "com.phad.chatapp"
         minSdk = 24
         targetSdk = 35
-        versionCode = 15
-        versionName = "1.0"
+        versionCode = 17
+        versionName = "1.0.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        
+        // Configure NDK ABI filters for 16KB page size compatibility
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
+        }
     }
 
     buildTypes {
@@ -56,7 +61,7 @@ android {
         buildConfig = false
     }
 
-    // Add packaging options to handle conflicts
+    // Add packaging options to handle conflicts and 16KB page size alignment
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -66,7 +71,14 @@ android {
             excludes += "META-INF/INDEX.LIST"
             excludes += "META-INF/io.netty.versions.properties"
         }
+        // Configure native library alignment for 16KB page size compatibility
+        jniLibs {
+            useLegacyPackaging = false
+        }
     }
+    
+    // Configure NDK for 16KB page size alignment (use default NDK)
+    // NDK version will be automatically detected from Android SDK
     
     // Force SoLoader version resolution to prevent 64-bit crashes
     configurations.all {
