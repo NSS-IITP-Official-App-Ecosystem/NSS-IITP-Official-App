@@ -15,10 +15,15 @@ android {
         applicationId = "com.phad.chatapp"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 17
+        versionName = "1.0.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        
+        // Configure NDK ABI filters for 16KB page size compatibility
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
+        }
     }
 
     buildTypes {
@@ -56,7 +61,7 @@ android {
         buildConfig = false
     }
 
-    // Add packaging options to handle conflicts
+    // Add packaging options to handle conflicts and 16KB page size alignment
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -65,6 +70,20 @@ android {
             excludes += "META-INF/DEPENDENCIES"
             excludes += "META-INF/INDEX.LIST"
             excludes += "META-INF/io.netty.versions.properties"
+        }
+        // Configure native library alignment for 16KB page size compatibility
+        jniLibs {
+            useLegacyPackaging = false
+        }
+    }
+    
+    // Configure NDK for 16KB page size alignment (use default NDK)
+    // NDK version will be automatically detected from Android SDK
+    
+    // Force SoLoader version resolution to prevent 64-bit crashes
+    configurations.all {
+        resolutionStrategy {
+            force("com.facebook.soloader:soloader:0.10.4")
         }
     }
 
@@ -222,5 +241,6 @@ dependencies {
     implementation("com.itextpdf:itext7-core:7.2.5")
     implementation("com.itextpdf:html2pdf:4.0.5")
     
-    // Excel generation dependencies - using native CSV generation for better compatibility
+    // Force SoLoader version to fix 64-bit device crashes
+    implementation("com.facebook.soloader:soloader:0.10.4")
 }

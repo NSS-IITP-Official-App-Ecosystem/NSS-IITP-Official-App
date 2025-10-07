@@ -39,6 +39,56 @@ class LoginFormActivity : AppCompatActivity() {
     private var isPasswordVisible = false
     private var originalBottomCurveY = 0f
 
+    /**
+     * Generate all possible case combinations for a roll number in NNNNAANN format
+     * For example: 2301CS06 -> [2301CS06, 2301Cs06, 2301cS06, 2301cs06]
+     */
+    private fun generateRollNumberCaseCombinations(rollNumber: String): List<String> {
+        if (rollNumber.length != 8) return listOf(rollNumber)
+        
+        val digits = rollNumber.substring(0, 4) // First 4 digits
+        val letters = rollNumber.substring(4, 6) // Two letters
+        val lastDigits = rollNumber.substring(6, 8) // Last 2 digits
+        
+        val combinations = mutableListOf<String>()
+        
+        // Generate all 4 combinations of the two letters
+        val letter1 = letters[0]
+        val letter2 = letters[1]
+        
+        combinations.add("$digits${letter1.uppercase()}${letter2.uppercase()}$lastDigits") // CS
+        combinations.add("$digits${letter1.uppercase()}${letter2.lowercase()}$lastDigits") // Cs
+        combinations.add("$digits${letter1.lowercase()}${letter2.uppercase()}$lastDigits") // cS
+        combinations.add("$digits${letter1.lowercase()}${letter2.lowercase()}$lastDigits") // cs
+        
+        return combinations
+    }
+
+    /**
+     * Find the correct roll number case in the database
+     * Returns the actual roll number from database if found, null otherwise
+     */
+    private suspend fun findCorrectRollNumberCase(inputRollNumber: String): String? {
+        val combinations = generateRollNumberCaseCombinations(inputRollNumber)
+        
+        for (combination in combinations) {
+            try {
+                val documentSnapshot = db.collection("users")
+                    .document(combination)
+                    .get()
+                    .await()
+                
+                if (documentSnapshot.exists()) {
+                    return combination // Return the actual roll number from database
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error checking roll number combination: $combination", e)
+            }
+        }
+        
+        return null // No valid combination found
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityLoginFormBinding.inflate(layoutInflater)
@@ -159,16 +209,11 @@ class LoginFormActivity : AppCompatActivity() {
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                // Fetch from unified users collection
-                val documentSnapshot = db.collection("users")
-                    .document(rollNumber)
-                    .get()
-                    .await()
+                // Find the correct case-insensitive roll number
+                val correctRollNumber = findCorrectRollNumberCase(rollNumber)
 
                 withContext(Dispatchers.Main) {
-                    if (documentSnapshot.exists()) {
-                        val userData = documentSnapshot.data
-                        // We no longer use legacy collections for validation here; presence in users is enough
+                    if (correctRollNumber != null) {
                         binding.rollNumberCheckMark.visibility = View.VISIBLE
                         binding.progressBar.visibility = View.GONE
                     } else {
@@ -189,13 +234,27 @@ class LoginFormActivity : AppCompatActivity() {
     }
 
     private fun performLogin(userType: String) {
-        val rollNumber = binding.etRollNumber.text.toString().trim()
+        val inputRollNumber = binding.etRollNumber.text.toString().trim()
         val password = binding.etPassword.text.toString().trim()
 
         binding.progressBar.visibility = View.VISIBLE
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                // Find the correct case-insensitive roll number
+                val correctRollNumber = findCorrectRollNumberCase(inputRollNumber)
+                
+                if (correctRollNumber == null) {
+                    withContext(Dispatchers.Main) {
+                        binding.progressBar.visibility = View.GONE
+                        showToast("User not found with this roll number")
+                    }
+                    return@launch
+                }
+
+                // Use the correct roll number from database for further operations
+                val rollNumber = correctRollNumber
+                
                 // New unified users collection lookup by rollNumber (document id)
                 val documentSnapshot = db.collection("users")
                     .document(rollNumber)
@@ -378,9 +437,9 @@ class LoginFormActivity : AppCompatActivity() {
     }
 
     private fun handleForgotPassword() {
-        val rollNumber = binding.etRollNumber.text.toString().trim()
+        val inputRollNumber = binding.etRollNumber.text.toString().trim()
 
-        if (rollNumber.isEmpty()) {
+        if (inputRollNumber.isEmpty()) {
             showToast("Please enter your roll number first")
             return
         }
@@ -389,6 +448,20 @@ class LoginFormActivity : AppCompatActivity() {
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                // Find the correct case-insensitive roll number
+                val correctRollNumber = findCorrectRollNumberCase(inputRollNumber)
+                
+                if (correctRollNumber == null) {
+                    withContext(Dispatchers.Main) {
+                        binding.progressBar.visibility = View.GONE
+                        showToast("User not found with this roll number")
+                    }
+                    return@launch
+                }
+
+                // Use the correct roll number from database
+                val rollNumber = correctRollNumber
+                
                 // Look up unified users collection for email
                 val userDoc = db.collection("users")
                     .document(rollNumber)

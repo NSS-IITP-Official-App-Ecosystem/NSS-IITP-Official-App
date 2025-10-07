@@ -63,9 +63,16 @@ class FaqViewModel(
                     )
                 }
                 is FaqNavigationItem.Question -> {
-                    // For questions, just add to history without changing navigation stack
+                    // For questions, add to history only if it's not the same as the last question
+                    val lastQuestion = state.history.lastOrNull()
+                    val shouldAddToHistory = lastQuestion?.id != item.question.id
+                    
                     state.copy(
-                        history = state.history + item.question
+                        history = if (shouldAddToHistory) {
+                            state.history + item.question
+                        } else {
+                            state.history // Keep the same history if it's a consecutive duplicate
+                        }
                     )
                 }
             }
