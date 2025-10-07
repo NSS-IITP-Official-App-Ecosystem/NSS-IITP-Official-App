@@ -10,15 +10,14 @@ object AttendanceStatsUpdater {
         val userType = sessionManager.fetchUserType()
         val rollNumber = sessionManager.fetchUserId()
         val db = FirebaseFirestore.getInstance()
-        val metaRef = db.collection("meta").document("statistics")
         if (userType.equals("Student", ignoreCase = true)) {
             val userRef = db.collection("users").document(rollNumber)
             try {
                 val userDoc = userRef.get().await()
                 val attended = userDoc.getLong("eventsAttended") ?: 0
-                // Get total events count from NSS_Events_Attendence collection
-                val eventsSnapshot = db.collection("NSS_Events_Attendence").get().await()
-                val total = eventsSnapshot.size()
+                // Read total events count from meta/statistics
+                val metaSnap = db.collection("meta").document("statistics").get().await()
+                val total = (metaSnap.getLong("totalEvents") ?: 0L).toInt()
                 val stats = "$attended/$total"
                 sessionManager.saveAttendanceStats(stats)
             } catch (e: Exception) {
@@ -26,9 +25,9 @@ object AttendanceStatsUpdater {
             }
         } else {
             try {
-                // Get total events count from NSS_Events_Attendence collection
-                val eventsSnapshot = db.collection("NSS_Events_Attendence").get().await()
-                val total = eventsSnapshot.size()
+                // Read total events from meta/statistics
+                val metaSnap = db.collection("meta").document("statistics").get().await()
+                val total = (metaSnap.getLong("totalEvents") ?: 0L).toInt()
                 val stats = "-/$total"
                 sessionManager.saveAttendanceStats(stats)
             } catch (e: Exception) {

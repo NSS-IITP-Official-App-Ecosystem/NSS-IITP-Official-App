@@ -36,10 +36,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import com.phad.chatapp.repositories.ProfileRepository
+import androidx.fragment.app.activityViewModels
+import com.phad.chatapp.viewmodels.ProfileViewModel
 
 class ProfileFragment : Fragment() {
     private val TAG = "ProfileFragment"
     private lateinit var sessionManager: SessionManager
+    private lateinit var profileRepository: ProfileRepository
+    private val viewModel: ProfileViewModel by activityViewModels()
     
     private val _uiState = MutableStateFlow(ProfileUiState())
     private val uiState: StateFlow<ProfileUiState> = _uiState.asStateFlow()
@@ -50,7 +55,7 @@ class ProfileFragment : Fragment() {
     ): View {
         return ComposeView(requireContext()).apply {
             setContent {
-                val state by uiState.collectAsState()
+                val state by viewModel.uiState.collectAsState()
                 val teachingWing = sessionManager.getTeachingWing()
                 ProfileScreen(
                     state = state,
@@ -191,6 +196,8 @@ class ProfileFragment : Fragment() {
         
         // Initialize session manager
         sessionManager = SessionManager(requireContext())
+        profileRepository = ProfileRepository(requireContext())
+        viewModel.initialize()
         
         // Load user profile from session
         loadProfileFromSession()
@@ -257,10 +264,10 @@ class ProfileFragment : Fragment() {
         } else { // Admin or other
             lifecycleScope.launch {
                 try {
-                    // For admins, just show total events conducted
+                    // For admins, just show total events conducted from meta/statistics
                     val db = FirebaseFirestore.getInstance()
-                    val eventsSnapshot = db.collection("NSS_Events_Attendence").get().await()
-                    val totalEvents = eventsSnapshot.size()
+                    val meta = db.collection("meta").document("statistics").get().await()
+                    val totalEvents = (meta.getLong("totalEvents") ?: 0L).toInt()
                     
                     _uiState.update { 
                         it.copy(
@@ -319,57 +326,31 @@ class ProfileFragment : Fragment() {
 
     private fun loadEnhancedUserProfile(baseProfile: ProfileUiState) {
         val rollNumber = sessionManager.fetchUserId()
-        val db = FirebaseFirestore.getInstance()
 
         lifecycleScope.launch {
             try {
-                Log.d(TAG, "Loading user profile for rollNumber: $rollNumber")
-                val userDoc = db.collection("users").document(rollNumber).get().await()
+                Log.d(TAG, "Loading user profile (cache-first) for rollNumber: $rollNumber")
+                val map = profileRepository.getUserDocMap(rollNumber)
+                if (map != null) {
+                    val name = (map["name"] as? String) ?: "Unknown"
+                    val outlook = (map["instituteOutlookId"] as? String) ?: "Not found"
+                    val userTypeFromDb = (map["userType"] as? String) ?: baseProfile.userType
 
-                if (userDoc.exists()) {
-                    val name = userDoc.getString("name") ?: "Unknown"
-                    val instituteOutlookId = userDoc.getString("instituteOutlookId") ?: "Not found"
-                    val userTypeFromDb = userDoc.getString("userType") ?: baseProfile.userType
-                    
-                    Log.d(TAG, "Found user data: name='$name', instituteOutlookId='$instituteOutlookId', userType='$userTypeFromDb'")
-                    
-                    val enhancedProfile = baseProfile.copy(
-                        // Basic information
+                    _uiState.value = baseProfile.copy(
                         name = name,
                         rollNumber = rollNumber,
                         userType = userTypeFromDb,
-                        
-                        // Contact information
-                        email = instituteOutlookId,
-                        collegeEmail = instituteOutlookId,
-                        instituteId = instituteOutlookId, // Set Institute ID to the same value
-                        
-                        // Keep phone if already stored in session; no phone in users schema
+                        email = outlook,
+                        collegeEmail = outlook,
+                        instituteId = outlook,
                         phone = baseProfile.phone,
-                        
-                        // Set isStudent based on userType from Firestore
                         isStudent = userTypeFromDb.equals("Student", ignoreCase = true)
                     )
-
-                    _uiState.value = enhancedProfile
-                    Log.d(TAG, "Enhanced user profile loaded from users collection: name='$name', email='$instituteOutlookId'")
-
                 } else {
-                    Log.w(TAG, "User document not found in users collection for rollNumber: $rollNumber")
-                    _uiState.value = baseProfile.copy(
-                        name = "User not found",
-                        collegeEmail = "Not found in users collection",
-                        email = "Not found in users collection"
-                    )
+                    Log.w(TAG, "User document not found for $rollNumber")
                 }
-
             } catch (e: Exception) {
                 Log.e(TAG, "Error loading enhanced user profile", e)
-                _uiState.value = baseProfile.copy(
-                    name = "Error loading profile",
-                    collegeEmail = "Error: ${e.message}",
-                    email = "Error: ${e.message}"
-                )
             }
         }
     }

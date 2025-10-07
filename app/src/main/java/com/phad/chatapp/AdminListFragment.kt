@@ -68,7 +68,7 @@ class AdminListFragment : Fragment() {
         Log.d(TAG, "Starting to load admin data...")
         
         viewLifecycleOwner.lifecycleScope.launch {
-            try {
+            try {{}
                 // Fetch only admin users from users collection
                 Log.d(TAG, "Calling repository.getAdminUsersOnly()")
                 val adminList = repository.getAdminUsersOnly()
@@ -92,7 +92,7 @@ class AdminListFragment : Fragment() {
             } catch (e: Exception) {
                 Log.e(TAG, "Error loading admin data", e)
                 e.printStackTrace()
-                
+
                 val errorMessage = when (e) {
                     is FirebaseFirestoreException -> {
                         when (e.code) {

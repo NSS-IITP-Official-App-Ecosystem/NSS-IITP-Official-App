@@ -23,6 +23,100 @@ const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 admin.initializeApp();
 
+// Increment counters and update user stats when a new attendance record is written
+exports.onAttendanceCreate = functions.firestore
+  .document('NSS_Events_Attendence/{eventId}/attendance/{rollNumber}')
+  .onCreate(async (snapshot, context) => {
+    const {eventId, rollNumber} = context.params;
+    const db = admin.firestore();
+    const attendee = snapshot.data() || {};
+    try {
+      // Increment total_marked on parent event
+      const eventRef = db.collection('NSS_Events_Attendence').doc(eventId);
+      const eventSnap = await eventRef.get();
+      if (!eventSnap.exists) {
+        console.warn('Event not found for attendance create:', eventId);
+        return null;
+      }
+      const event = eventSnap.data() || {};
+      const hours = Number(event.hours) || 0;
+      const eventDate = event.eventDate || '';
+
+      await eventRef.update({ total_marked: admin.firestore.FieldValue.increment(1) });
+
+      // Ensure meta.totalEvents exists and is equal to number of events documents
+      // Increment events count only when event document is newly created elsewhere.
+
+      // Update user stats atomically
+      const userRef = db.collection('users').doc(rollNumber);
+      const semester = (() => {
+        // Expecting format like "dd MMM yyyy"; fallback to 0 if unknown
+        try {
+          const parts = eventDate.split(' ');
+          const month = parts[1];
+          const year = parseInt(parts[2], 10);
+          const monthIndex = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].indexOf(month);
+          if ((year === 2025 && monthIndex >= 6) || (year === 2026 && monthIndex <= 4)) {
+            return year === 2025 ? 1 : 2;
+          }
+        } catch (e) {}
+        return 0;
+      })();
+
+      const updates = {
+        eventsAttended: admin.firestore.FieldValue.increment(1),
+        hours: admin.firestore.FieldValue.increment(hours),
+        eventsList: admin.firestore.FieldValue.arrayUnion(eventId)
+      };
+      if (semester === 1) updates.sem1Hours = admin.firestore.FieldValue.increment(hours);
+      if (semester === 2) updates.sem2Hours = admin.firestore.FieldValue.increment(hours);
+
+      await userRef.set(updates, { merge: true });
+
+      // Do not change totalEvents here; that belongs to event create. Optionally maintain semester totals of actual consumed hours if desired per attendance, but
+      // to avoid over-counting for multiple attendees, we skip meta updates here.
+
+      console.log('Attendance processed for', rollNumber, 'event', eventId);
+      return null;
+    } catch (e) {
+      console.error('onAttendanceCreate error', e);
+      return null;
+    }
+  });
+
+// Maintain meta.statistics when an event is created or deleted
+exports.onEventWrite = functions.firestore
+  .document('NSS_Events_Attendence/{eventId}')
+  .onCreate(async (snap, context) => {
+    try {
+      const db = admin.firestore();
+      const metaRef = db.collection('meta').doc('statistics');
+      await metaRef.set({
+        totalEvents: admin.firestore.FieldValue.increment(1)
+      }, { merge: true });
+      return null;
+    } catch (e) {
+      console.error('onEventWrite create error', e);
+      return null;
+    }
+  });
+
+exports.onEventDelete = functions.firestore
+  .document('NSS_Events_Attendence/{eventId}')
+  .onDelete(async (snap, context) => {
+    try {
+      const db = admin.firestore();
+      const metaRef = db.collection('meta').doc('statistics');
+      await metaRef.set({
+        totalEvents: admin.firestore.FieldValue.increment(-1)
+      }, { merge: true });
+      return null;
+    } catch (e) {
+      console.error('onEventWrite delete error', e);
+      return null;
+    }
+  });
+
 /**
  * Firebase Cloud Function triggered when a new document is created in the notifications collection
  * It processes the notification data and sends FCM messages to the intended recipients

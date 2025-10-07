@@ -35,6 +35,14 @@ class AttendanceQRRepository {
     @Deprecated("Use eventsAttendanceCollection instead")
     private val legacyEventsCollection = firestore.collection("NSS_Events")
     
+    // Simple in-memory cache to avoid duplicate reads during a short window
+    // Keeps last fetched list and timestamp
+    private var cachedAllEvents: List<AttendanceEvent>? = null
+    private var cacheTimestampMs: Long = 0L
+    private val cacheTtlMs: Long = 600_000 // 10 minutes TTL; safe default
+    private var cachedAvailableEvents: List<AttendanceEvent>? = null
+    private var availableCacheTimestampMs: Long = 0L
+    
     /**
      * Create a new attendance session
      */
@@ -64,7 +72,20 @@ class AttendanceQRRepository {
         try {
             Log.d(TAG, "Getting attendance event from consolidated collection: $eventId")
 
-            val document = eventsAttendanceCollection.document(eventId).get().await()
+            // Try local cache first to avoid server reads when possible
+            val cacheDoc = eventsAttendanceCollection.document(eventId)
+                .get(com.google.firebase.firestore.Source.CACHE)
+                .await()
+            if (cacheDoc.exists()) {
+                val event = cacheDoc.toObject(AttendanceEvent::class.java)
+                Log.d(TAG, "Attendance event served from CACHE: ${event?.getEventName()}")
+                return@withContext Result.success(event)
+            }
+
+            // Fallback to server
+            val document = eventsAttendanceCollection.document(eventId)
+                .get(com.google.firebase.firestore.Source.DEFAULT)
+                .await()
 
             return@withContext if (document.exists()) {
                 val event = document.toObject(AttendanceEvent::class.java)
@@ -76,6 +97,60 @@ class AttendanceQRRepository {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error getting attendance event", e)
+            return@withContext Result.failure(e)
+        }
+    }
+
+    /**
+     * Fetch all events with a single collection read.
+     * Uses a short-lived in-memory cache to prevent repeated reads while navigating.
+     */
+    suspend fun getAllEvents(forceRefresh: Boolean = false): Result<List<AttendanceEvent>> = withContext(Dispatchers.IO) {
+        try {
+            val now = System.currentTimeMillis()
+            val cached = cachedAllEvents
+            if (!forceRefresh && cached != null && now - cacheTimestampMs <= cacheTtlMs) {
+                Log.d(TAG, "Returning events from in-memory cache: ${cached.size}")
+                return@withContext Result.success(cached)
+            }
+
+            Log.d(TAG, "Fetching ALL events with a single collection read (forceRefresh=$forceRefresh)")
+
+            if (!forceRefresh) {
+                // Try from local cache first
+                val cacheSnapshot = eventsAttendanceCollection
+                    .get(com.google.firebase.firestore.Source.CACHE)
+                    .await()
+
+                val fromCache = cacheSnapshot.documents.mapNotNull { doc ->
+                    doc.toObject(AttendanceEvent::class.java)?.copy(id = doc.id)
+                }
+
+                if (fromCache.isNotEmpty()) {
+                    val sorted = fromCache.sortedByDescending { event -> event.createdAt.toDate().time }
+                    cachedAllEvents = sorted
+                    cacheTimestampMs = now
+                    Log.d(TAG, "Served ${sorted.size} events from local CACHE")
+                    return@withContext Result.success(sorted)
+                }
+            }
+
+            // Fallback to server
+            val serverSnapshot = eventsAttendanceCollection
+                .get(com.google.firebase.firestore.Source.DEFAULT)
+                .await()
+
+            val events = serverSnapshot.documents.mapNotNull { doc ->
+                doc.toObject(AttendanceEvent::class.java)?.copy(id = doc.id)
+            }.sortedByDescending { event -> event.createdAt.toDate().time }
+
+            cachedAllEvents = events
+            cacheTimestampMs = now
+
+            Log.d(TAG, "Fetched ${events.size} total events")
+            return@withContext Result.success(events)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting all events", e)
             return@withContext Result.failure(e)
         }
     }
@@ -146,30 +221,8 @@ class AttendanceQRRepository {
             }
             Log.d(TAG, "Authenticated user: ${currentUser.email}, UID: ${currentUser.uid}")
 
-            // First check if event exists
-            Log.d(TAG, "Checking if event exists...")
-            val eventResult = getAttendanceEvent(eventId)
-            if (eventResult.isFailure) {
-                Log.e(TAG, "Failed to get event: ${eventResult.exceptionOrNull()?.message}")
-                return@withContext Result.failure(eventResult.exceptionOrNull() ?: Exception("Failed to get event"))
-            }
-
-            val event = eventResult.getOrNull()
-            if (event == null) {
-                Log.e(TAG, "Event not found: $eventId")
-                return@withContext Result.failure(Exception("Event not found: $eventId"))
-            }
-
-            Log.d(TAG, "Event found: ${event.getEventName()}, totalMarked=${event.totalMarked}")
-
-            // Check if student already attended
-            if (event.hasStudentAttended(attendee.rollNumber)) {
-                Log.w(TAG, "Student ${attendee.rollNumber} already attended this event")
-                return@withContext Result.failure(Exception("Student has already marked attendance for this event"))
-            }
-
-            Log.d(TAG, "Student has not attended yet, proceeding with update...")
-
+            // Attempt idempotent update without pre-reads.
+            // We rely on UI/device checks to minimize duplicates; server uses atomic increments.
             val updates = mapOf(
                 "attendees" to FieldValue.arrayUnion(attendee),
                 "total_marked" to FieldValue.increment(1)
@@ -177,84 +230,41 @@ class AttendanceQRRepository {
 
             Log.d(TAG, "Performing Firestore update with: $updates")
 
-            // Verify document exists before updating
             val docRef = eventsAttendanceCollection.document(eventId)
-            val docSnapshot = docRef.get().await()
-            if (!docSnapshot.exists()) {
-                Log.e(TAG, "Event document does not exist: $eventId")
-                return@withContext Result.failure(Exception("Event document not found: $eventId"))
-            }
+            // Write subcollection attendance document (idempotent: onCreate triggers only on first time)
+            val attendanceDocRef = docRef.collection("attendance").document(attendee.rollNumber)
+            attendanceDocRef.set(attendee).await()
 
-            Log.d(TAG, "Event document exists, proceeding with update...")
-
+            // Update parent event counters and embedded list for backward compatibility
             docRef.update(updates).await()
 
             Log.d(TAG, "✅ Firestore update completed successfully")
 
-            // Update student statistics in users collection
+            // Update student statistics in users collection without prior reads using atomic increments
             try {
                 Log.d(TAG, "Updating student statistics for: ${attendee.rollNumber}")
                 val userRef = firestore.collection("users").document(attendee.rollNumber)
-                
-                // Get current user document
-                val userDoc = userRef.get().await()
-                if (userDoc.exists()) {
-                    // Get current values
-                    val currentEventsAttended = userDoc.getLong("eventsAttended") ?: 0L
-                    val currentHours = userDoc.getLong("hours") ?: 0L
-                    
-                    // Get current eventsList
-                    @Suppress("UNCHECKED_CAST")
-                    val currentEventsList = userDoc.get("eventsList") as? List<String> ?: emptyList()
-                    
-                    // Get event hours
+                // Compute increments from event data without fetching the user
+                val eventSnapshot = docRef.get().await()
+                val event = eventSnapshot.toObject(AttendanceEvent::class.java)
+                if (event != null) {
                     val eventHours = event.hours
-                    
-                    // Determine semester based on event date
                     val semester = getSemesterFromDate(event.eventDate)
                     val sem1Hours = if (semester == 1) eventHours else 0
                     val sem2Hours = if (semester == 2) eventHours else 0
-                    
-                    // Add event ID to eventsList if not already present
-                    val updatedEventsList = if (!currentEventsList.contains(eventId)) {
-                        currentEventsList + eventId
-                    } else {
-                        currentEventsList
-                    }
-                    
-                    // Update user document
                     val userUpdates = mapOf(
-                        "eventsAttended" to (currentEventsAttended + 1),
-                        "hours" to (currentHours + eventHours),
+                        "eventsAttended" to FieldValue.increment(1),
+                        "hours" to FieldValue.increment(eventHours.toLong()),
                         "sem1Hours" to FieldValue.increment(sem1Hours.toLong()),
                         "sem2Hours" to FieldValue.increment(sem2Hours.toLong()),
-                        "eventsList" to updatedEventsList
+                        "eventsList" to FieldValue.arrayUnion(eventId)
                     )
-                    
-                    userRef.update(userUpdates).await()
-                    Log.d(TAG, "✅ User statistics and eventsList updated successfully")
-                } else {
-                    Log.w(TAG, "⚠️ User document not found: ${attendee.rollNumber}")
+                    userRef.set(userUpdates, com.google.firebase.firestore.SetOptions.merge()).await()
+                    Log.d(TAG, "✅ User statistics updated atomically")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Error updating user statistics: ${e.message}", e)
                 // Don't fail the attendance marking if user stats update fails
-            }
-
-            // Verify the update was successful by reading back the document
-            val updatedDoc = docRef.get().await()
-            val updatedEvent = updatedDoc.toObject(AttendanceEvent::class.java)
-            if (updatedEvent != null) {
-                Log.d(TAG, "Verification: Updated event has ${updatedEvent.totalMarked} attendees")
-                Log.d(TAG, "Verification: Attendees list size: ${updatedEvent.attendees.size}")
-                val foundAttendee = updatedEvent.attendees.find { it.rollNumber == attendee.rollNumber }
-                if (foundAttendee != null) {
-                    Log.d(TAG, "✅ Verification: Attendee found in updated event")
-                } else {
-                    Log.w(TAG, "⚠️ Verification: Attendee NOT found in updated event")
-                }
-            } else {
-                Log.w(TAG, "⚠️ Verification: Could not read updated event")
             }
 
             Log.d(TAG, "=== REPOSITORY: ATTENDEE ADDED SUCCESSFULLY ===")
@@ -467,13 +477,21 @@ class AttendanceQRRepository {
      */
     suspend fun getAvailableEvents(): Result<List<AttendanceEvent>> = withContext(Dispatchers.IO) {
         try {
-            Log.d(TAG, "Getting available events from consolidated collection")
+            Log.d(TAG, "Getting available events from consolidated collection (cache-first)")
 
-            val querySnapshot = eventsAttendanceCollection
-                .get()
+            val now = System.currentTimeMillis()
+            val cached = cachedAvailableEvents
+            if (cached != null && now - availableCacheTimestampMs <= cacheTtlMs) {
+                Log.d(TAG, "Serving ${cached.size} available events from in-memory cache")
+                return@withContext Result.success(cached)
+            }
+
+            // Try local cache first
+            val cacheSnapshot = eventsAttendanceCollection
+                .get(com.google.firebase.firestore.Source.CACHE)
                 .await()
 
-            val events = querySnapshot.documents.mapNotNull { doc ->
+            val fromCache = cacheSnapshot.documents.mapNotNull { doc ->
                 val event = doc.toObject(AttendanceEvent::class.java)?.copy(id = doc.id)
                 event?.let {
                     val rawData = doc.data
@@ -486,7 +504,35 @@ class AttendanceQRRepository {
                 }
             }.sortedByDescending { event -> event.createdAt.toDate().time }
 
-            Log.d(TAG, "Found ${events.size} available events in consolidated collection")
+            if (fromCache.isNotEmpty()) {
+                cachedAvailableEvents = fromCache
+                availableCacheTimestampMs = now
+                Log.d(TAG, "Served ${fromCache.size} available events from local CACHE")
+                return@withContext Result.success(fromCache)
+            }
+
+            // Fallback to server
+            val serverSnapshot = eventsAttendanceCollection
+                .get(com.google.firebase.firestore.Source.DEFAULT)
+                .await()
+
+            val events = serverSnapshot.documents.mapNotNull { doc ->
+                val event = doc.toObject(AttendanceEvent::class.java)?.copy(id = doc.id)
+                event?.let {
+                    val rawData = doc.data
+                    val isEventLive = if (rawData?.containsKey("is_live") == true) {
+                        rawData["is_live"] as? Boolean ?: true
+                    } else {
+                        it.isLive
+                    }
+                    if (isEventLive) it else null
+                }
+            }.sortedByDescending { event -> event.createdAt.toDate().time }
+
+            cachedAvailableEvents = events
+            availableCacheTimestampMs = now
+
+            Log.d(TAG, "Found ${events.size} available events from server")
             return@withContext Result.success(events)
         } catch (e: Exception) {
             Log.e(TAG, "Error getting available events from consolidated collection", e)

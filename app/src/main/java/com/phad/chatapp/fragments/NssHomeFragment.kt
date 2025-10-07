@@ -59,6 +59,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import android.content.SharedPreferences
 
 class NssHomeFragment : Fragment() {
     private val TAG = "NssHomeFragment"
@@ -67,6 +68,17 @@ class NssHomeFragment : Fragment() {
     private val db = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
     private lateinit var driveServiceHelper: DriveServiceHelper
+    private lateinit var sharedPreferences: SharedPreferences
+    
+    // Caching system for updates
+    private data class CachedUpdate(
+        val updates: List<Update>,
+        val timestamp: Long
+    )
+    
+    private var updateCache: CachedUpdate? = null
+    private val CACHE_TTL = 5 * 60 * 1000L // 5 minutes
+    private val CACHE_KEY_LAST_REFRESH = "last_nss_update_refresh"
     
     // Create update dialog
     private var createUpdateDialog: Dialog? = null
@@ -127,9 +139,10 @@ class NssHomeFragment : Fragment() {
         
         sessionManager = SessionManager(requireContext())
         driveServiceHelper = DriveServiceHelper.getInstance(requireContext())
+        sharedPreferences = requireContext().getSharedPreferences("nss_update_cache", android.content.Context.MODE_PRIVATE)
         
         loadGreetingAndNextClass()
-        loadUpdates()
+        loadUpdatesIfNeeded()
     }
     
     private fun loadGreetingAndNextClass() {
@@ -192,11 +205,33 @@ class NssHomeFragment : Fragment() {
         }
     }
     
+    private fun loadUpdatesIfNeeded() {
+        if (shouldRefreshUpdates()) {
+            Log.d(TAG, "NssHomeFragment - Cache expired or empty, loading fresh updates...")
+            loadUpdates()
+        } else {
+            Log.d(TAG, "NssHomeFragment - Using cached updates")
+            updateCache?.let { cached ->
+                _uiState.update { it.copy(updates = cached.updates) }
+            }
+        }
+    }
+    
+    private fun shouldRefreshUpdates(): Boolean {
+        val lastRefresh = sharedPreferences.getLong(CACHE_KEY_LAST_REFRESH, 0)
+        val now = System.currentTimeMillis()
+        val isExpired = (now - lastRefresh) > CACHE_TTL
+        val isCacheEmpty = updateCache == null
+        
+        Log.d(TAG, "NssHomeFragment - Cache check: lastRefresh=$lastRefresh, now=$now, expired=$isExpired, empty=$isCacheEmpty")
+        return isExpired || isCacheEmpty
+    }
+    
     private fun loadUpdates() {
         Log.d(TAG, "NssHomeFragment - Starting to load updates...")
         db.collection("nss_updates")
             .orderBy("timestamp", Query.Direction.DESCENDING)
-            .limit(10)
+            .limit(5) // Reduced from 10 to 5 for better performance
             .get()
             .addOnSuccessListener { documents ->
                 Log.d(TAG, "NssHomeFragment - Successfully loaded ${documents.size()} documents from Firestore")
@@ -221,6 +256,11 @@ class NssHomeFragment : Fragment() {
                 }
                 
                 Log.d(TAG, "NssHomeFragment - After filtering, ${updates.size} valid updates remaining")
+                
+                // Update cache
+                updateCache = CachedUpdate(updates, System.currentTimeMillis())
+                sharedPreferences.edit().putLong(CACHE_KEY_LAST_REFRESH, System.currentTimeMillis()).apply()
+                
                 _uiState.update { it.copy(updates = updates) }
             }
             .addOnFailureListener { e ->
@@ -591,7 +631,8 @@ class NssHomeFragment : Fragment() {
                             Toast.makeText(requireContext(), "Update posted to both NSS and Teaching Wing!", Toast.LENGTH_SHORT).show()
                             createUpdateDialog?.dismiss()
 
-                            // Reload updates
+                            // Reload updates and clear cache to show new update
+                            updateCache = null
                             loadUpdates()
 
                             // Send notification to all users
@@ -600,6 +641,7 @@ class NssHomeFragment : Fragment() {
                         .addOnFailureListener { e ->
                             Toast.makeText(requireContext(), "Posted to NSS but failed to cross-post to Teaching Wing: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
                             createUpdateDialog?.dismiss()
+                            updateCache = null
                             loadUpdates()
                             sendUpdateNotification(update)
                         }
@@ -607,7 +649,8 @@ class NssHomeFragment : Fragment() {
                     Toast.makeText(requireContext(), "NSS Update posted", Toast.LENGTH_SHORT).show()
                     createUpdateDialog?.dismiss()
 
-                    // Reload updates
+                    // Reload updates and clear cache to show new update
+                    updateCache = null
                     loadUpdates()
 
                     // Send notification to all users
@@ -761,9 +804,9 @@ class NssHomeFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        // Only reload updates if the view exists
+        // Only reload updates if the view exists and cache is expired
         if (createUpdateDialog != null) {
-            loadUpdates()
+            loadUpdatesIfNeeded()
         }
     }
 
@@ -841,15 +884,18 @@ class NssHomeFragment : Fragment() {
                         .delete()
                         .addOnSuccessListener {
                             Toast.makeText(requireContext(), "Update deleted from both NSS and Teaching Wing", Toast.LENGTH_SHORT).show()
+                            updateCache = null
                             loadUpdates()
                         }
                         .addOnFailureListener { e ->
                             Log.e(TAG, "Error deleting cross-posted update: ${e.localizedMessage}", e)
                             Toast.makeText(requireContext(), "Update deleted from NSS but failed to delete from Teaching Wing", Toast.LENGTH_SHORT).show()
+                            updateCache = null
                             loadUpdates()
                         }
                 } else {
                     Toast.makeText(requireContext(), "Update deleted successfully", Toast.LENGTH_SHORT).show()
+                    updateCache = null
                     loadUpdates()
                 }
             }

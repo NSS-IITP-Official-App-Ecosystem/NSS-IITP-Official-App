@@ -102,10 +102,10 @@ class NssCalendarFragment : Fragment() {
                 LaunchedEffect(Unit, adminUi.createEventSuccess) {
                     isLoading = true
                     errorMessage = null
-                    val live = repository.getAvailableEvents()
-                    val past = repository.getEventHistory()
-                    allEvents = (live.getOrNull().orEmpty() + past.getOrNull().orEmpty())
-                    errorMessage = live.exceptionOrNull()?.message ?: past.exceptionOrNull()?.message
+                    // After successful creation, force refresh; otherwise use cache
+                    val all = repository.getAllEvents(forceRefresh = adminUi.createEventSuccess)
+                    allEvents = all.getOrNull().orEmpty()
+                    errorMessage = all.exceptionOrNull()?.message
                     isLoading = false
                 }
 
@@ -178,17 +178,16 @@ class NssCalendarFragment : Fragment() {
                                 }
 
                                 IconButton(
-                                    onClick = {
-                                        // Manual refresh
-                                        lifecycleScope.launch {
-                                            isLoading = true
-                                            val live = repository.getAvailableEvents()
-                                            val past = repository.getEventHistory()
-                                            allEvents = (live.getOrNull().orEmpty() + past.getOrNull().orEmpty())
-                                            errorMessage = live.exceptionOrNull()?.message ?: past.exceptionOrNull()?.message
-                                            isLoading = false
-                                        }
-                                    },
+                                onClick = {
+                                    // Manual refresh (bypass cache by resetting timestamp)
+                                    lifecycleScope.launch {
+                                        isLoading = true
+                                        val all = repository.getAllEvents(forceRefresh = true)
+                                        allEvents = all.getOrNull().orEmpty()
+                                        errorMessage = all.exceptionOrNull()?.message
+                                        isLoading = false
+                                    }
+                                },
                                     modifier = Modifier.size(40.dp)
                                 ) {
                                     Icon(

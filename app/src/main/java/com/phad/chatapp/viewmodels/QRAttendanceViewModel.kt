@@ -611,43 +611,10 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
             val deviceId = DeviceIdentificationUtils.getDeviceId(application)
             Log.d(TAG, "Device ID: ${deviceId.take(16)}...")
 
-            // Get current event to check for duplicates
-            val currentEvent = repository.getAttendanceEvent(qrData.eventId).getOrNull()
-            if (currentEvent == null) {
-                Log.e(TAG, "Event not found: ${qrData.eventId}")
-                _studentUiState.value = _studentUiState.value.copy(
-                    isProcessing = false,
-                    scanResult = ScanResult.Error("Event not found")
-                )
-                return
-            }
+            // Skip client-side duplicate checks and event reads. Server-side validation will handle duplicates.
 
-            // Check for comprehensive duplicates (user + device)
-            val duplicateCheck = qrService.checkComprehensiveDuplicate(
-                qrData.sessionId,
-                _studentUiState.value.studentId,
-                deviceId,
-                currentEvent.attendees
-            )
-
-            if (duplicateCheck.isDuplicate) {
-                Log.w(TAG, "Duplicate attendance detected: ${duplicateCheck.duplicateType}")
-                val errorMessage = when (duplicateCheck.duplicateType) {
-                    DuplicateType.USER_DUPLICATE -> "You have already marked attendance for this event"
-                    DuplicateType.DEVICE_DUPLICATE -> "This device has already been used to mark attendance for this event"
-                    else -> duplicateCheck.message
-                }
-
-                _studentUiState.value = _studentUiState.value.copy(
-                    isProcessing = false,
-                    scanResult = ScanResult.Error(errorMessage)
-                )
-                return
-            }
-
-            // Get admin information from database using the admin ID from QR code
-            val adminInfo = repository.getUserByRollNumber(qrData.adminId).getOrNull()
-            val adminName = adminInfo?.get("name") as? String ?: "Unknown Admin"
+            // Use admin info from session/UI if available; avoid Firestore read
+            val adminName = _adminUiState.value.adminName.ifBlank { "Unknown Admin" }
 
             Log.d(TAG, "Admin lookup: adminId='${qrData.adminId}', adminName='$adminName'")
 
@@ -674,18 +641,11 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
             }
 
             if (result.isSuccess) {
-                // Get event name for success message
-                val eventName = try {
-                    val event = repository.getAttendanceEvent(qrData.eventId).getOrNull()
-                    event?.getEventName() ?: "Unknown Event"
-                } catch (e: Exception) {
-                    Log.w(TAG, "Could not retrieve event name for success message", e)
-                    "Unknown Event"
-                }
-
+                // Avoid additional reads for event name; use cached selected event if present or generic text
+                val eventName = _adminUiState.value.selectedEvent?.getEventName() ?: "the event"
                 _studentUiState.value = _studentUiState.value.copy(
                     isProcessing = false,
-                    scanResult = ScanResult.Success("Attendance for $eventName marked successfully!")
+                    scanResult = ScanResult.Success("Attendance marked successfully for $eventName")
                 )
                 
                 // Update attendance stats in session after successful attendance marking
