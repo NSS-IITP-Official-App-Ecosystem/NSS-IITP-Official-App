@@ -65,17 +65,13 @@ object AttendanceStatsCalculator {
                 
                 Log.d(TAG, "Final values to use - eventsAttended: $finalEventsAttended, sem1Hours: $finalSem1Hours, sem2Hours: $finalSem2Hours")
                 
-                // Get total events count from NSS_Events_Attendence collection
-                val eventsSnapshot = db.collection("NSS_Events_Attendence").get().await()
-                val totalEvents = eventsSnapshot.size().toLong()
+                // Read global totals from meta/statistics to avoid scanning all events
+                val metaSnap = db.collection("meta").document("statistics").get().await()
+                val totalEvents = metaSnap.getLong("totalEvents") ?: 0L
+                val totalSem1Hours = (metaSnap.getLong("totalSem1Hours") ?: 0L).toInt()
+                val totalSem2Hours = (metaSnap.getLong("totalSem2Hours") ?: 0L).toInt()
                 
-                Log.d(TAG, "Total events from NSS_Events_Attendence collection: $totalEvents")
-                
-                // Calculate total hours for each semester from all events
-                val totalSem1Hours = calculateTotalSemesterHours(eventsSnapshot.documents, 1)
-                val totalSem2Hours = calculateTotalSemesterHours(eventsSnapshot.documents, 2)
-                
-                Log.d(TAG, "Total semester hours - SEM1: $totalSem1Hours, SEM2: $totalSem2Hours")
+                Log.d(TAG, "Totals (from meta) - events=$totalEvents, SEM1=$totalSem1Hours, SEM2=$totalSem2Hours")
                 
                 val sem1Stats = "$finalSem1Hours/$totalSem1Hours"
                 val sem2Stats = "$finalSem2Hours/$totalSem2Hours"
