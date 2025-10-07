@@ -4,4 +4,5 @@
     <external-files-path name="my_documents" path="Documents/ChatApp/" />
     <external-files-path name="my_files" path="." />
     <cache-path name="shared_images" path="images/" />
+    <cache-path name="shared_files" path="." />
 </paths> 

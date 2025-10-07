@@ -36,9 +36,16 @@ class ExcelGenerator(private val context: Context) {
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
             val filename = "NSS_Attendance_Matrix_${timestamp}.csv"
 
-            val cacheDir = context.cacheDir
-            val excelDir = File(cacheDir, "images")
-            if (!excelDir.exists()) excelDir.mkdirs()
+            // Use Downloads directory instead of cache
+            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            val excelDir = File(downloadsDir, "NSS_Reports")
+            if (!excelDir.exists()) {
+                val created = excelDir.mkdirs()
+                if (!created) {
+                    Log.e(TAG, "Failed to create directory: ${excelDir.absolutePath}")
+                    return@withContext null
+                }
+            }
             val excelFile = File(excelDir, filename)
 
             val writer = FileWriter(excelFile)
@@ -82,6 +89,12 @@ class ExcelGenerator(private val context: Context) {
 
             Log.d(TAG, "CSV file generated: ${excelFile.absolutePath}")
             return@withContext excelFile.absolutePath
+        } catch (e: SecurityException) {
+            Log.e(TAG, "Permission denied for file access", e)
+            return@withContext null
+        } catch (e: java.io.IOException) {
+            Log.e(TAG, "File I/O error during CSV generation", e)
+            return@withContext null
         } catch (e: Exception) {
             Log.e(TAG, "Error generating attendance matrix CSV", e)
             return@withContext null
@@ -102,10 +115,14 @@ class ExcelGenerator(private val context: Context) {
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
             val filename = "NSS_S${semester}_${rollNumber}_Events_${timestamp}.csv"
 
-            val cacheDir = context.cacheDir
-            val excelDir = File(cacheDir, "images")
+            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            val excelDir = File(downloadsDir, "NSS_Reports")
             if (!excelDir.exists()) {
-                excelDir.mkdirs()
+                val created = excelDir.mkdirs()
+                if (!created) {
+                    Log.e(TAG, "Failed to create directory: ${excelDir.absolutePath}")
+                    return@withContext null
+                }
             }
             val excelFile = File(excelDir, filename)
 
@@ -135,6 +152,12 @@ class ExcelGenerator(private val context: Context) {
 
             Log.d(TAG, "Student events list CSV generated: ${excelFile.absolutePath}")
             return@withContext excelFile.absolutePath
+        } catch (e: SecurityException) {
+            Log.e(TAG, "Permission denied for file access", e)
+            return@withContext null
+        } catch (e: java.io.IOException) {
+            Log.e(TAG, "File I/O error during student events list generation", e)
+            return@withContext null
         } catch (e: Exception) {
             Log.e(TAG, "Error generating student events list CSV", e)
             return@withContext null
@@ -154,10 +177,14 @@ class ExcelGenerator(private val context: Context) {
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
             val filename = "NSS_Attendance_${event.getEventName().replace(" ", "_")}_$timestamp.csv"
             
-            val cacheDir = context.cacheDir
-            val excelDir = File(cacheDir, "images")
+            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            val excelDir = File(downloadsDir, "NSS_Reports")
             if (!excelDir.exists()) {
-                excelDir.mkdirs()
+                val created = excelDir.mkdirs()
+                if (!created) {
+                    Log.e(TAG, "Failed to create directory: ${excelDir.absolutePath}")
+                    return@withContext null
+                }
             }
             val excelFile = File(excelDir, filename)
 
@@ -207,6 +234,12 @@ class ExcelGenerator(private val context: Context) {
 
             Log.d(TAG, "CSV file generated: ${excelFile.absolutePath}")
             return@withContext excelFile.absolutePath
+        } catch (e: SecurityException) {
+            Log.e(TAG, "Permission denied for file access", e)
+            return@withContext null
+        } catch (e: java.io.IOException) {
+            Log.e(TAG, "File I/O error during attendance report generation", e)
+            return@withContext null
         } catch (e: Exception) {
             Log.e(TAG, "Error generating CSV report", e)
             return@withContext null

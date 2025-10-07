@@ -399,23 +399,16 @@ class NssProfileFragment : Fragment() {
 
                 if (excelPath != null) {
                     val file = java.io.File(excelPath)
-                    val uri: Uri = FileProvider.getUriForFile(
-                        requireContext(),
-                        "${requireContext().packageName}.fileprovider",
-                        file
-                    )
-                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
-                        setDataAndType(uri, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    }
-                    try {
-                        startActivity(intent)
-                    } catch (e: ActivityNotFoundException) {
-                        Toast.makeText(requireContext(), "No Excel viewer found. File saved to: ${file.absolutePath}", Toast.LENGTH_LONG).show()
-                    }
+                    Toast.makeText(requireContext(), "File saved to: ${file.absolutePath}", Toast.LENGTH_LONG).show()
                 } else {
-                    Toast.makeText(requireContext(), "Failed to generate Excel file", Toast.LENGTH_LONG).show()
+                    Toast.makeText(requireContext(), "Failed to generate attendance report", Toast.LENGTH_LONG).show()
                 }
+            } catch (e: SecurityException) {
+                Log.e(TAG, "Permission denied for file access", e)
+                Toast.makeText(requireContext(), "Permission denied. Please check app permissions.", Toast.LENGTH_LONG).show()
+            } catch (e: java.io.IOException) {
+                Log.e(TAG, "File I/O error during export", e)
+                Toast.makeText(requireContext(), "File system error. Please try again.", Toast.LENGTH_LONG).show()
             } catch (e: Exception) {
                 Log.e(TAG, "Error exporting attendance matrix", e)
                 Toast.makeText(requireContext(), "Error: ${e.message}", Toast.LENGTH_LONG).show()

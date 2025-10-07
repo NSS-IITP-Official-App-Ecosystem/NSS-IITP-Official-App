@@ -15,8 +15,8 @@ android {
         applicationId = "com.phad.chatapp"
         minSdk = 24
         targetSdk = 35
-        versionCode = 17
-        versionName = "1.0.2"
+        versionCode = 19
+        versionName = "1.0.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
@@ -135,7 +135,7 @@ dependencies {
     implementation("com.google.android.exoplayer:exoplayer-ui:2.19.1")
     
     // Firebase with BOM (Bill of Materials)
-    implementation(platform("com.google.firebase:firebase-bom:32.5.0"))
+    implementation(platform("com.google.firebase:firebase-bom:32.8.0"))
     
     // Declare Firebase dependencies without versions (managed by BOM)
     implementation("com.google.firebase:firebase-firestore")
@@ -150,6 +150,9 @@ dependencies {
             strictly("20.2.2")
         }
     }
+    
+    // Explicitly add reCAPTCHA dependency to ensure security (version 18.4.0+)
+    implementation("com.google.android.recaptcha:recaptcha:18.4.0")
     
     // Add Firebase coroutines support
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
