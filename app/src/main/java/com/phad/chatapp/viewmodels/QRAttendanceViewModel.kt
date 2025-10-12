@@ -23,6 +23,7 @@ import com.phad.chatapp.utils.DuplicateType
 import com.phad.chatapp.utils.DeviceDuplicateTestUtils
 import com.phad.chatapp.utils.PDFGenerator
 import com.phad.chatapp.utils.AttendanceStatsUpdater
+import com.phad.chatapp.utils.QRSecurityValidator
 import com.google.firebase.firestore.FirebaseFirestore
 import java.io.File
 import kotlinx.coroutines.delay
@@ -45,6 +46,11 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
     private val repository = AttendanceQRRepository()
     private val qrService = QRAttendanceService()
     private val sessionManager = SessionManager(application)
+    
+    init {
+        // Set SessionManager in repository for token refresh functionality
+        repository.setSessionManager(sessionManager)
+    }
     
     // UI State for Admin (Take Attendance)
     private val _adminUiState = MutableStateFlow(AdminQRUiState())
@@ -102,19 +108,19 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
     /**
      * Load available events for attendance
      */
-    fun loadAvailableEvents() {
+    fun loadAvailableEvents(forceRefresh: Boolean = false) {
         viewModelScope.launch {
             try {
                 _adminUiState.value = _adminUiState.value.copy(isLoading = true)
                 
-                val result = repository.getAvailableEvents()
+                val result = repository.getAvailableEvents(forceRefresh)
                 if (result.isSuccess) {
                     val events = result.getOrNull() ?: emptyList()
                     _adminUiState.value = _adminUiState.value.copy(
                         availableEvents = events,
                         isLoading = false
                     )
-                    Log.d(TAG, "Loaded ${events.size} available events")
+                    Log.d(TAG, "Loaded ${events.size} available events (forceRefresh=$forceRefresh)")
                 } else {
                     val error = result.exceptionOrNull()?.message ?: "Failed to load events"
                     _adminUiState.value = _adminUiState.value.copy(
@@ -132,11 +138,18 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
             }
         }
     }
+    
+    /**
+     * Force refresh available events (bypasses cache)
+     */
+    fun refreshAvailableEvents() {
+        loadAvailableEvents(forceRefresh = true)
+    }
 
     /**
      * Create a new attendance event
      */
-    fun createAttendanceEvent(name: String, description: String, location: String, eventDate: java.util.Date, openingTime: java.util.Date, closingTime: java.util.Date, hours: Int, isMandatory: Boolean = false, negativeHours: Int = 0) {
+    fun createAttendanceEvent(name: String, description: String, location: String, eventDate: java.util.Date, openingTime: java.util.Date, closingTime: java.util.Date, hours: Double, isMandatory: Boolean = false, negativeHours: Double = 0.0) {
         viewModelScope.launch {
             try {
                 Log.d(TAG, "Creating attendance event: $name")
@@ -182,8 +195,8 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                             createEventSuccess = true,
                             errorMessage = null
                         )
-                        // Refresh events list to show the newly created event
-                        loadAvailableEvents()
+                        // Force refresh events list to show the newly created event immediately
+                        loadAvailableEvents(forceRefresh = true)
                     },
                     onFailure = { error ->
                         Log.e(TAG, "Error creating event", error)
@@ -261,7 +274,7 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
     /**
      * Update an existing attendance event
      */
-    fun updateAttendanceEvent(name: String, description: String, location: String, eventDate: java.util.Date, openingTime: java.util.Date, closingTime: java.util.Date, hours: Int, isMandatory: Boolean, negativeHours: Int, eventId: String) {
+    fun updateAttendanceEvent(name: String, description: String, location: String, eventDate: java.util.Date, openingTime: java.util.Date, closingTime: java.util.Date, hours: Double, isMandatory: Boolean, negativeHours: Double, eventId: String) {
         viewModelScope.launch {
             try {
                 Log.d(TAG, "Updating attendance event: $name (ID: $eventId)")
@@ -611,7 +624,36 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
             val deviceId = DeviceIdentificationUtils.getDeviceId(application)
             Log.d(TAG, "Device ID: ${deviceId.take(16)}...")
 
-            // Skip client-side duplicate checks and event reads. Server-side validation will handle duplicates.
+            // Comprehensive duplicate check (user + device)
+            try {
+                // Get the event to check existing attendees
+                val eventResult = repository.getAttendanceEvent(qrData.eventId)
+                if (eventResult.isSuccess) {
+                    val event = eventResult.getOrNull()
+                    if (event != null) {
+                        val existingAttendees = event.attendees
+                        val duplicateCheck = QRSecurityValidator.getInstance().checkComprehensiveDuplicate(
+                            qrData.sessionId,
+                            _studentUiState.value.studentId,
+                            deviceId,
+                            existingAttendees
+                        )
+                        
+                        if (duplicateCheck.isDuplicate) {
+                            Log.w(TAG, "Duplicate attendance attempt blocked: ${duplicateCheck.duplicateType}")
+                            _studentUiState.value = _studentUiState.value.copy(
+                                isProcessing = false,
+                                scanResult = ScanResult.Error(duplicateCheck.message)
+                            )
+                            return
+                        }
+                    }
+                } else {
+                    Log.w(TAG, "Failed to get event for duplicate check: ${eventResult.exceptionOrNull()?.message}")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Unexpected error during comprehensive duplicate check", e)
+            }
 
             // Use admin info from session/UI if available; avoid Firestore read
             val adminName = _adminUiState.value.adminName.ifBlank { "Unknown Admin" }
@@ -797,8 +839,8 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
             try {
                 val result = repository.closeAttendanceEvent(event.id)
                 if (result.isSuccess) {
-                    // Reload available events to reflect the change
-                    loadAvailableEvents()
+                    // Force reload available events to reflect the closed event immediately
+                    loadAvailableEvents(forceRefresh = true)
                     Log.d(TAG, "Event closed successfully: ${event.getEventName()}")
                 } else {
                     val error = result.exceptionOrNull()?.message ?: "Failed to close event"
@@ -1322,6 +1364,81 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                 Log.e(TAG, "Error adding manual attendance", e)
                 _adminUiState.value = _adminUiState.value.copy(
                     errorMessage = "Error adding manual attendance: ${e.message}"
+                )
+            }
+        }
+    }
+
+    /**
+     * Mark students as absent by removing their attendance records
+     */
+    fun markStudentsAbsent(eventId: String, rollNumbersText: String) {
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "Marking students absent for event: $eventId")
+                Log.d(TAG, "Roll numbers text: $rollNumbersText")
+
+                // Parse roll numbers from the input text
+                val rollNumbers = parseRollNumbers(rollNumbersText)
+                if (rollNumbers.isEmpty()) {
+                    _adminUiState.value = _adminUiState.value.copy(
+                        errorMessage = "No valid roll numbers found. Please check your input."
+                    )
+                    return@launch
+                }
+
+                Log.d(TAG, "Parsed roll numbers: $rollNumbers")
+
+                var successCount = 0
+                var errorCount = 0
+                val errors = mutableListOf<String>()
+
+                // Process each roll number
+                for (rollNumber in rollNumbers) {
+                    try {
+                        Log.d(TAG, "Processing roll number for absent marking: $rollNumber")
+                        
+                        // Remove attendee from event
+                        val result = repository.removeAttendeeFromEvent(eventId, rollNumber)
+                        if (result.isSuccess) {
+                            successCount++
+                            Log.d(TAG, "Successfully marked absent for: $rollNumber")
+                        } else {
+                            errorCount++
+                            val error = result.exceptionOrNull()?.message ?: "Unknown error"
+                            errors.add("$rollNumber: $error")
+                            Log.e(TAG, "Failed to mark absent for $rollNumber: $error")
+                        }
+
+                    } catch (e: Exception) {
+                        errorCount++
+                        errors.add("$rollNumber: ${e.message}")
+                        Log.e(TAG, "Error processing roll number $rollNumber for absent marking", e)
+                    }
+                }
+
+                // Update UI state with results
+                val message = if (errorCount == 0) {
+                    "Successfully marked absent for $successCount student(s)"
+                } else if (successCount == 0) {
+                    "Failed to mark absent for all students. Errors: ${errors.joinToString(", ")}"
+                } else {
+                    "Marked absent for $successCount student(s). Failed for $errorCount: ${errors.joinToString(", ")}"
+                }
+
+                _adminUiState.value = _adminUiState.value.copy(
+                    successMessage = message
+                )
+
+                // Refresh the current event data if we're in an active session
+                if (_adminUiState.value.isSessionActive && _adminUiState.value.selectedEvent?.id == eventId) {
+                    startEventListener(eventId)
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Error marking students absent", e)
+                _adminUiState.value = _adminUiState.value.copy(
+                    errorMessage = "Error marking students absent: ${e.message}"
                 )
             }
         }

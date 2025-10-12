@@ -359,14 +359,14 @@ class AttendanceManagerFragment : Fragment() {
                 val eventName = dialogBinding.eventNameInput.text.toString()
                 val description = dialogBinding.descriptionInput.text.toString()
                 val hoursText = dialogBinding.hoursInput.text.toString()
-                val hours = hoursText.toIntOrNull() ?: -1
+                val hours = hoursText.toDoubleOrNull() ?: -1.0
 
                 when {
                     eventName.isBlank() -> {
                         Toast.makeText(requireContext(), "Event name is required", Toast.LENGTH_SHORT).show()
                         return@setPositiveButton
                     }
-                    hoursText.isBlank() || hours < 0 -> {
+                    hoursText.isBlank() || hours < 0.0 -> {
                         Toast.makeText(requireContext(), "Please enter valid hours (0 or greater)", Toast.LENGTH_SHORT).show()
                         return@setPositiveButton
                     }
@@ -385,7 +385,7 @@ class AttendanceManagerFragment : Fragment() {
             .show()
     }
 
-    private fun createAttendanceEvent(name: String, description: String, eventDate: Date, openingTime: Date, closingTime: Date, hours: Int) {
+    private fun createAttendanceEvent(name: String, description: String, eventDate: Date, openingTime: Date, closingTime: Date, hours: Double) {
         lifecycleScope.launch {
             try {
                 // Generate document ID using the new format

@@ -124,8 +124,8 @@ class PDFGenerator(private val context: Context) {
     suspend fun generateAttendanceMatrixReport(
         students: List<User>,
         events: List<AttendanceEvent>,
-        perStudentEventHours: Map<String, Map<String, Int>>, // roll -> (eventId -> hours)
-        totalHoursPerStudent: Map<String, Int>
+        perStudentEventHours: Map<String, Map<String, Double>>, // roll -> (eventId -> hours)
+        totalHoursPerStudent: Map<String, Double>
     ): String? = withContext(Dispatchers.IO) {
         try {
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())

@@ -103,6 +103,10 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
             }
         }
     }
+
+    fun refreshStatistics() {
+        loadStatistics()
+    }
 }
 
 

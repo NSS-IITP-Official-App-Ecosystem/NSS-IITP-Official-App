@@ -29,8 +29,8 @@ class ExcelGenerator(private val context: Context) {
     suspend fun generateAttendanceMatrixReport(
         students: List<User>,
         events: List<AttendanceEvent>,
-        perStudentEventHours: Map<String, Map<String, Int>>, // roll -> (eventId -> hours)
-        totalHoursPerStudent: Map<String, Int>
+        perStudentEventHours: Map<String, Map<String, Double>>, // roll -> (eventId -> hours)
+        totalHoursPerStudent: Map<String, Double>
     ): String? = withContext(Dispatchers.IO) {
         try {
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
@@ -95,7 +95,7 @@ class ExcelGenerator(private val context: Context) {
         studentName: String,
         rollNumber: String,
         semester: Int,
-        rows: List<Triple<String, String, Int>>
+        rows: List<Triple<String, String, Double>>
     ): String? = withContext(Dispatchers.IO) {
         try {
             Log.d(TAG, "Generating student events list CSV for $studentName ($rollNumber), semester $semester")

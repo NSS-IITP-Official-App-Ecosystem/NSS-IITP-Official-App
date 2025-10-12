@@ -139,12 +139,12 @@
             android:id="@+id/hoursInput"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:inputType="number"
+            android:inputType="numberDecimal"
             android:maxLines="1"
             android:textSize="14sp"
             android:textStyle="normal"
             android:textColor="@color/primary_text_color"
-            android:hint="Enter volunteer hours" />
+            android:hint="Enter volunteer hours (e.g., 2.5)" />
 
     </com.google.android.material.textfield.TextInputLayout>
 

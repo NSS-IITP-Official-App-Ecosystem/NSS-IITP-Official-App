@@ -16,8 +16,8 @@ class QRSecurityValidator {
     private val TAG = "QRSecurityValidator"
     
     companion object {
-        // Security constants - 8 second validity window to account for processing delays and network latency
-        private const val MAX_QR_AGE_MS = 8000L // 8 seconds maximum age for security
+        // Security constants - 10 second validity window to account for processing delays and network latency
+        private const val MAX_QR_AGE_MS = 10000L // 10 seconds maximum age for security
         private const val MIN_QR_AGE_MS = -2000L // Allow 2 second tolerance for clock differences
         private const val MAX_SCAN_ATTEMPTS_PER_MINUTE = 10
         private const val RATE_LIMIT_WINDOW_MS = 60000L // 1 minute
@@ -473,7 +473,7 @@ class QRSecurityValidator {
             return DuplicateCheckResult(
                 isDuplicate = true,
                 duplicateType = DuplicateType.USER_DUPLICATE,
-                message = "Student $studentId has already marked attendance for this event"
+                message = "Your attendance has already been marked"
             )
         }
 
@@ -483,7 +483,7 @@ class QRSecurityValidator {
             return DuplicateCheckResult(
                 isDuplicate = true,
                 duplicateType = DuplicateType.DEVICE_DUPLICATE,
-                message = "This device has already been used to mark attendance for this event"
+                message = "This phone has been used to mark attendance for this event"
             )
         }
 
