@@ -163,35 +163,12 @@ fun EventsListScreen(
                                         val rows = events.map { Triple(it.name, it.date, it.hours) }
                                         val path = generator.generateStudentEventsList(studentName, rollNumber, semester, rows)
                                         if (path != null) {
-                                            try {
-                                                val file = java.io.File(path)
-                                                val uri: Uri = FileProvider.getUriForFile(
-                                                    context,
-                                                    context.packageName + ".fileprovider",
-                                                    file
-                                                )
-                                                // Try to open first (like QR attendance flow)
-                                                val viewIntent = Intent(Intent.ACTION_VIEW).apply {
-                                                    setDataAndType(uri, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                                }
-                                                if (viewIntent.resolveActivity(context.packageManager) != null) {
-                                                    context.startActivity(viewIntent)
-                                                } else {
-                                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                                        type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                                                        putExtra(Intent.EXTRA_STREAM, uri)
-                                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                                    }
-                                                    context.startActivity(Intent.createChooser(shareIntent, "Share Excel"))
-                                                }
-                                            } catch (_: Exception) { }
-                                            showFileMessage = "Excel file generated successfully"
+                                            showFileMessage = "File saved to: $path"
                                         } else {
-                                            showFileMessage = "Failed to generate Excel file"
+                                            showFileMessage = "Failed to generate CSV file"
                                         }
                                     } catch (e: Exception) {
-                                        showFileMessage = e.message ?: "Failed to generate Excel file"
+                                        showFileMessage = e.message ?: "Failed to generate CSV file"
                                     } finally {
                                         isGeneratingFile = false
                                     }
