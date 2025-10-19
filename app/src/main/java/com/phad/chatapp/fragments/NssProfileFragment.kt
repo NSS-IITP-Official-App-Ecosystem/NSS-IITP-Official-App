@@ -94,6 +94,10 @@ class NssProfileFragment : Fragment() {
                         intent.putExtra("rollNumber", rollNumber)
                         startActivity(intent)
                     },
+                    onFaqsClick = {
+                        val intent = Intent(requireContext(), com.phad.chatapp.features.home.faqs.ui.FaqActivity::class.java)
+                        startActivity(intent)
+                    },
                     currentInterface = "NSS",
                     teachingWing = teachingWing
                 )

@@ -2035,15 +2035,15 @@ fun CreateEventDialog(
                         onClick = {
                             val trimmedName = eventName.trim()
                             val trimmedHours = eventHours.trim()
-                            val hoursValue = trimmedHours.toIntOrNull() ?: -1
-                            val negHoursValue = negativeHours.trim().toIntOrNull() ?: 0
+                            val hoursValue = trimmedHours.toDoubleOrNull() ?: -1.0
+                            val negHoursValue = negativeHours.trim().toDoubleOrNull() ?: 0.0
 
                             when {
                                 trimmedName.isEmpty() -> {
                                     showError = true
                                     validationErrorMessage = "Event name is required"
                                 }
-                                trimmedHours.isEmpty() || hoursValue < 0 -> {
+                                trimmedHours.isEmpty() || hoursValue < 0.0 -> {
                                     showError = true
                                     validationErrorMessage = "Please enter valid hours (0 or greater)"
                                 }

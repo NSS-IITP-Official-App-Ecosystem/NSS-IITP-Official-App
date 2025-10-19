@@ -663,10 +663,32 @@ fun AdminSectionContentView(
                     }
                     
                     items(filteredQuestions) { question ->
-                        AdminContentCard(
+                        AdminContentCardWithActions(
                             title = question.question,
                             subtitle = "Question",
-                            onClick = { onQuestionClick(question) }
+                            onClick = { onQuestionClick(question) },
+                            onEdit = {
+                                val node = FaqNode(
+                                    id = question.id,
+                                    title = question.question,
+                                    type = FaqNodeType.QUESTION,
+                                    sectionId = question.sectionId,
+                                    subSectionId = question.subSectionId,
+                                    question = question
+                                )
+                                onEditSectionName(node)
+                            },
+                            onDelete = {
+                                val node = FaqNode(
+                                    id = question.id,
+                                    title = question.question,
+                                    type = FaqNodeType.QUESTION,
+                                    sectionId = question.sectionId,
+                                    subSectionId = question.subSectionId,
+                                    question = question
+                                )
+                                onDeleteSection(node)
+                            }
                         )
                     }
                     
