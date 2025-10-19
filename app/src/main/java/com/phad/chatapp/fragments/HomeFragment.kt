@@ -125,7 +125,6 @@ class HomeFragment : Fragment() {
                         val intent = Intent(requireContext(), com.phad.chatapp.features.home.faqs.ui.FaqActivity::class.java)
                         val userType = sessionManager.fetchUserType()
                         val isAdmin = userType.equals("Admin", ignoreCase = true)
-                        intent.putExtra("interface_type", if (isAdmin) "teaching_wing" else "nss")
                         startActivity(intent)
                     },
                     onAddUpdateClick = { 

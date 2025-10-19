@@ -2,15 +2,15 @@ package com.phad.chatapp.features.home.faqs.data
 
 data class FaqSection(
     val id: String,
-    val title: String,
-    val interfaceTypes: List<String>
+    val title: String
 )
 
 data class FaqSubSection(
     val id: String,
     val sectionId: String,
     val title: String,
-    val description: String? = null
+    val description: String? = null,
+    val parentSubSectionId: String? = null // For nested subsections
 )
 
 data class FaqQuestion(
@@ -19,12 +19,11 @@ data class FaqQuestion(
     val subSectionId: String? = null,
     val question: String,
     val answerType: AnswerType,
-    val answer: Any // String for text, List<String> for bullet points
+    val answer: Any // String only (use \\bpt(...) syntax for bullets)
 )
 
 enum class AnswerType {
-    TEXT,
-    BULLET_POINTS
+    TEXT
 }
 
 // Removed Wings format
@@ -45,6 +44,7 @@ data class FaqUiState(
     val sections: Map<String, FaqSection> = emptyMap(),
     val subSections: Map<String, List<FaqSubSection>> = emptyMap(),
     val questions: Map<String, List<FaqQuestion>> = emptyMap(),
+    val loadedSubSectionContent: Map<String, SectionContent> = emptyMap(), // Store loaded subsection content
     val navigationStack: List<FaqNavigationItem> = emptyList(),
     val history: List<FaqQuestion> = emptyList(),
     val searchQuery: String = "",

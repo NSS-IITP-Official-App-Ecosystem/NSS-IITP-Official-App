@@ -298,6 +298,27 @@ def process_teaching_technical_section(section_data, section_id):
     
     return sub_sections, questions
 
+def process_wing_specific_section(section_data, section_id):
+    """Process wing_specific section with teaching_technical as subsection"""
+    
+    # Define the teaching_technical subsection
+    sub_sections = [
+        {
+            'id': 'teaching_technical',
+            'title': 'Teaching & Technical Wing',
+            'description': 'Information about the Teaching & Technical Wing activities and structure'
+        }
+    ]
+    
+    # Get the teaching_technical data from the original structure
+    # This will be populated from the original teaching_technical section data
+    questions = []
+    
+    # Note: The actual teaching_technical content will be moved here
+    # This is a placeholder structure
+    
+    return sub_sections, questions
+
 def process_hierarchy_section(section_data, section_id):
     """Process hierarchy section with sub-sections"""
     
@@ -407,7 +428,11 @@ def process_section(section_data, interface_types):
     questions = []
     
     # Process based on section type
-    if section_data['id'] == 'teaching_technical':
+    if section_data['id'] == 'wing_specific':
+        # Wing-specific section contains teaching_technical as a subsection
+        sub_sections, questions = process_wing_specific_section(section_data, section_data['id'])
+    elif section_data['id'] == 'teaching_technical':
+        # Teaching technical section with proper subsections and questions
         sub_sections, questions = process_teaching_technical_section(section_data, section_data['id'])
     elif section_data['id'] == 'hierarchy':
         sub_sections, questions = process_hierarchy_section(section_data, section_data['id'])
@@ -425,11 +450,12 @@ def upload_faqs_to_firestore():
         with open('faqs_raw.json', 'r') as f:
             data = json.load(f)
         
-        # Interface type mapping - updated to include hierarchy
+        # Interface type mapping - updated to include hierarchy and wing_specific
         section_interfaces = {
             'general': ['nss', 'teaching_wing'],
-            'teaching_technical': ['teaching_wing'],
-            'hierarchy': ['nss', 'teaching_wing']
+            'wing_specific': ['teaching_wing'],
+            'hierarchy': ['nss', 'teaching_wing'],
+            'teaching_technical': ['teaching_wing']  # Add teaching_technical as a separate section
         }
         
         print("\nStarting FAQ upload process...")
@@ -495,4 +521,11 @@ def upload_faqs_to_firestore():
         raise
 
 if __name__ == '__main__':
-    upload_faqs_to_firestore() 
+    print("Starting FAQ upload script...")
+    try:
+        upload_faqs_to_firestore()
+        print("Script completed successfully!")
+    except Exception as e:
+        print(f"Script failed with error: {str(e)}")
+        import traceback
+        traceback.print_exc() 

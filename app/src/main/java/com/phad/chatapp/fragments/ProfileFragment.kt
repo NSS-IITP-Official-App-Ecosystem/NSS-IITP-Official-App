@@ -62,7 +62,6 @@ class ProfileFragment : Fragment() {
                     onLogoutClick = { logout() },
                     onChatbotClick = {
                         val intent = Intent(requireContext(), com.phad.chatapp.features.home.faqs.ui.FaqActivity::class.java)
-                        intent.putExtra("interface_type", "teaching_wing")
                         startActivity(intent)
                     },
                     onLibraryClick = {

@@ -61,7 +61,6 @@ class NssProfileFragment : Fragment() {
                     onLogoutClick = { logout() },
                     onChatbotClick = {
                         val intent = Intent(requireContext(), com.phad.chatapp.features.home.faqs.ui.FaqActivity::class.java)
-                        intent.putExtra("interface_type", "nss")
                         startActivity(intent)
                     },
                     onLibraryClick = {

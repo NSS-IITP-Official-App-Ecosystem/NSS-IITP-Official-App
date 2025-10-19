@@ -17,14 +17,12 @@ class AdminFaqActivity : ComponentActivity() {
         
         // Get user information from intent or session
         val userType = intent.getStringExtra("user_type") ?: sessionManager.fetchUserType()
-        val isTeachingWing = intent.getBooleanExtra("is_teaching_wing", sessionManager.getTeachingWing())
         
         setContent {
             MaterialTheme {
                 AdminFaqScreen(
                     onNavigateBack = { finish() },
-                    userType = userType,
-                    isTeachingWing = isTeachingWing
+                    userType = userType
                 )
             }
         }

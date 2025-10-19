@@ -12,8 +12,7 @@ import kotlinx.coroutines.launch
 
 class AdminFaqViewModel(
     private val repository: FaqRepository,
-    private val userType: String,
-    private val isTeachingWing: Boolean
+    private val userType: String
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AdminFaqUiState())
@@ -31,45 +30,10 @@ class AdminFaqViewModel(
     }
 
     fun refreshCurrent() {
-        val current = _uiState.value.currentSectionContent
         val lastNode = _uiState.value.navigationStack.lastOrNull()
-        if (current != null && lastNode != null) {
-            val sectionId = when (lastNode.type) {
-                FaqNodeType.ROOT_SECTION -> lastNode.id
-                FaqNodeType.SUBSECTION, FaqNodeType.QUESTION -> lastNode.sectionId ?: lastNode.id
-            }
-            viewModelScope.launch {
-                _uiState.update { it.copy(isLoading = true) }
-                try {
-                    val result = repository.getSectionContent(sectionId)
-                    result.fold(
-                        onSuccess = { sectionContent ->
-                            _uiState.update {
-                                it.copy(
-                                    isLoading = false,
-                                    currentSectionContent = sectionContent,
-                                    error = null
-                                )
-                            }
-                        },
-                        onFailure = { error ->
-                            _uiState.update {
-                                it.copy(
-                                    isLoading = false,
-                                    error = error.message ?: "Failed to refresh"
-                                )
-                            }
-                        }
-                    )
-                } catch (e: Exception) {
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            error = e.message ?: "An unexpected error occurred"
-                        )
-                    }
-                }
-            }
+        if (lastNode != null) {
+            // Use the same loading logic as navigateBack for consistency
+            loadSectionContentForNode(lastNode, _uiState.value.navigationStack)
         } else {
             refresh()
         }
@@ -80,39 +44,27 @@ class AdminFaqViewModel(
             _uiState.update { it.copy(isLoading = true, error = null) }
             
             try {
-                val isAdmin = userType.startsWith("Admin")
-                val typesToLoad = when {
-                    isTeachingWing && isAdmin -> listOf("nss", "teaching_wing")
-                    else -> listOf("nss")
-                }
-
-                val aggregatedSections = mutableMapOf<String, FaqSection>()
-                for (type in typesToLoad) {
-                    repository.getFaqData(type).collect { result ->
-                        result.fold(
-                            onSuccess = { (sections, _, _) ->
-                                aggregatedSections.putAll(sections)
-                            },
-                            onFailure = { error ->
-                                _uiState.update { 
-                                    it.copy(
-                                        isLoading = false,
-                                        error = error.message ?: "Failed to load FAQ data"
-                                    )
-                                }
+                repository.getFaqData().collect { result ->
+                    result.fold(
+                        onSuccess = { (sections, _, _) ->
+                            val rootSections = sections.values.toList()
+                            _uiState.update { 
+                                it.copy(
+                                    isLoading = false,
+                                    currentUserType = userType,
+                                    rootSections = rootSections,
+                                    error = null
+                                )
                             }
-                        )
-                    }
-                }
-
-                val rootSections = aggregatedSections.values.toList()
-                _uiState.update { 
-                    it.copy(
-                        isLoading = false,
-                        currentUserType = userType,
-                        isTeachingWing = isTeachingWing,
-                        rootSections = rootSections,
-                        error = null
+                        },
+                        onFailure = { error ->
+                            _uiState.update { 
+                                it.copy(
+                                    isLoading = false,
+                                    error = error.message ?: "Failed to load FAQ data"
+                                )
+                            }
+                        }
                     )
                 }
             } catch (e: Exception) {
@@ -182,13 +134,15 @@ class AdminFaqViewModel(
             }
             AdminOperation.EDIT_QUESTION -> {
                 val question = node.question
+                val prefilledAnswer = when (question?.answerType) {
+                    AnswerType.TEXT, null -> question?.answer as? String ?: ""
+                    else -> ""
+                }
                 AdminFormData(
                     question = question?.question ?: "",
-                    answerType = question?.answerType ?: AnswerType.TEXT,
-                    textAnswer = if (question?.answerType == AnswerType.TEXT) 
-                        question.answer as? String ?: "" else "",
-                    bulletPoints = if (question?.answerType == AnswerType.BULLET_POINTS)
-                        (question.answer as? List<*>)?.mapNotNull { it as? String } ?: emptyList() else emptyList()
+                    answerType = AnswerType.TEXT,
+                    textAnswer = prefilledAnswer,
+                    bulletPoints = emptyList()
                 )
             }
             else -> AdminFormData()
@@ -249,17 +203,28 @@ class AdminFaqViewModel(
             try {
                 val sectionId = when (node.type) {
                     FaqNodeType.ROOT_SECTION -> node.id
-                    FaqNodeType.SUBSECTION -> node.sectionId ?: node.id
+                    FaqNodeType.SUBSECTION -> node.id  // Use the subsection's own ID, not its parent
                     FaqNodeType.QUESTION -> node.sectionId ?: node.id
                 }
+                
+                // Use getSectionContent to get direct children of the current section
                 val result = repository.getSectionContent(sectionId)
                 result.fold(
                     onSuccess = { sectionContent ->
+                        // Auto-select tab based on content
+                        val autoSelectedTab = when {
+                            sectionContent.subSections.isNotEmpty() && sectionContent.questions.isNotEmpty() -> "subsections"
+                            sectionContent.subSections.isNotEmpty() -> "subsections"
+                            sectionContent.questions.isNotEmpty() -> "questions"
+                            else -> "subsections" // default
+                        }
+                        
                         _uiState.update {
                             it.copy(
                                 isLoading = false,
                                 currentSectionContent = sectionContent,
                                 navigationStack = it.navigationStack + node,
+                                currentTab = autoSelectedTab,
                                 error = null
                             )
                         }
@@ -287,12 +252,74 @@ class AdminFaqViewModel(
     fun navigateBack() {
         _uiState.update { state ->
             if (state.navigationStack.isNotEmpty()) {
-                state.copy(
-                    navigationStack = state.navigationStack.dropLast(1),
-                    currentSectionContent = null
-                )
+                val newNavigationStack = state.navigationStack.dropLast(1)
+                if (newNavigationStack.isNotEmpty()) {
+                    // If there are still items in the navigation stack, load the previous section's content
+                    val previousNode = newNavigationStack.last()
+                    loadSectionContentForNode(previousNode, newNavigationStack)
+                    state.copy(navigationStack = newNavigationStack)
+                } else {
+                    // If navigation stack is empty, go back to main FAQ management screen
+                    state.copy(
+                        navigationStack = emptyList(),
+                        currentSectionContent = null
+                    )
+                }
             } else {
                 state
+            }
+        }
+    }
+
+    private fun loadSectionContentForNode(node: FaqNode, navigationStack: List<FaqNode>) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+
+            try {
+                val sectionId = when (node.type) {
+                    FaqNodeType.ROOT_SECTION -> node.id
+                    FaqNodeType.SUBSECTION -> node.id  // Use the subsection's own ID, not its parent
+                    FaqNodeType.QUESTION -> node.sectionId ?: node.id
+                }
+                
+                // Use getSectionContent to get direct children of the current section
+                val result = repository.getSectionContent(sectionId)
+                result.fold(
+                    onSuccess = { sectionContent ->
+                        // Auto-select tab based on content
+                        val autoSelectedTab = when {
+                            sectionContent.subSections.isNotEmpty() && sectionContent.questions.isNotEmpty() -> "subsections"
+                            sectionContent.subSections.isNotEmpty() -> "subsections"
+                            sectionContent.questions.isNotEmpty() -> "questions"
+                            else -> "subsections" // default
+                        }
+                        
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                currentSectionContent = sectionContent,
+                                navigationStack = navigationStack,
+                                currentTab = autoSelectedTab,
+                                error = null
+                            )
+                        }
+                    },
+                    onFailure = { error ->
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                error = error.message ?: "Failed to load section content"
+                            )
+                        }
+                    }
+                )
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        error = e.message ?: "An unexpected error occurred"
+                    )
+                }
             }
         }
     }
@@ -325,7 +352,7 @@ class AdminFaqViewModel(
             subSectionId = subSection.id,
             subSection = subSection
         )
-        showOperationDialog(subSectionNode)
+        openSection(subSectionNode)
     }
 
     fun openQuestion(question: FaqQuestion) {
@@ -337,7 +364,27 @@ class AdminFaqViewModel(
             subSectionId = question.subSectionId,
             question = question
         )
-        showOperationDialog(questionNode)
+        showEditDialog(questionNode, AdminOperation.EDIT_QUESTION)
+    }
+
+    fun switchTab(tab: String) {
+        _uiState.update { it.copy(currentTab = tab) }
+    }
+
+    fun editSectionName(node: FaqNode) {
+        showEditDialog(node, AdminOperation.EDIT_SECTION_NAME)
+    }
+
+    fun deleteSection(node: FaqNode) {
+        showDeleteConfirmation(node)
+    }
+
+    fun addSubSection(node: FaqNode) {
+        showAddDialog(node, AdminOperation.ADD_SUBSECTION)
+    }
+
+    fun addQuestion(node: FaqNode) {
+        showAddDialog(node, AdminOperation.ADD_QUESTION)
     }
 
     fun updateFormData(formData: AdminFormData) {
@@ -365,46 +412,65 @@ class AdminFaqViewModel(
                             repository.updateSection(section)
                         }
                     }
+                    AdminOperation.OPEN_SECTION -> {
+                        // This operation is handled elsewhere, return success
+                        Result.success(Unit)
+                    }
                     AdminOperation.ADD_SUBSECTION -> {
+                        // Determine the root section ID for proper hierarchy
+                        val rootSectionId = when (node.type) {
+                            FaqNodeType.SUBSECTION -> {
+                                // For subsections, we need to find the root section
+                                // This should be the sectionId of the subsection
+                                node.sectionId ?: node.id
+                            }
+                            FaqNodeType.ROOT_SECTION -> node.id
+                            else -> node.id
+                        }
+                        
                         val subSection = FaqSubSection(
                             id = repository.generateId(),
-                            sectionId = node.id,
+                            sectionId = rootSectionId,
                             title = formData.title,
-                            description = null
+                            description = null,
+                            parentSubSectionId = if (node.type == FaqNodeType.SUBSECTION) {
+                                // If we're adding a subsection to a subsection, set the parent
+                                node.id
+                            } else {
+                                // If we're adding a subsection to a root section, no parent
+                                null
+                            }
                         )
                         repository.addSubSection(subSection)
                     }
                     AdminOperation.ADD_QUESTION -> {
-                        val answer: Any = when (formData.answerType) {
-                            AnswerType.TEXT -> formData.textAnswer
-                            AnswerType.BULLET_POINTS -> formData.bulletPoints
-                        }
-                        
                         val question = FaqQuestion(
                             id = repository.generateId(),
                             sectionId = node.sectionId ?: node.id,
                             subSectionId = node.subSectionId,
                             question = formData.question,
-                            answerType = formData.answerType,
-                            answer = answer
+                            answerType = AnswerType.TEXT,
+                            answer = formData.textAnswer
                         )
                         repository.addQuestion(question)
                     }
+                    AdminOperation.DELETE_SECTION -> {
+                        // This operation is handled in executeDelete(), return success
+                        Result.success(Unit)
+                    }
                     AdminOperation.EDIT_QUESTION -> {
                         val existingQuestion = node.question ?: return@launch
-                        val answer: Any = when (formData.answerType) {
-                            AnswerType.TEXT -> formData.textAnswer
-                            AnswerType.BULLET_POINTS -> formData.bulletPoints
-                        }
-                        
                         val updatedQuestion = existingQuestion.copy(
                             question = formData.question,
-                            answerType = formData.answerType,
-                            answer = answer
+                            answerType = AnswerType.TEXT,
+                            answer = formData.textAnswer
                         )
                         repository.updateQuestion(updatedQuestion)
                     }
-                    else -> Result.failure(Exception("Unsupported operation"))
+                    AdminOperation.DELETE_QUESTION -> {
+                        // This operation is handled in executeDelete(), return success
+                        Result.success(Unit)
+                    }
                 }
 
                 result.fold(
@@ -481,13 +547,12 @@ class AdminFaqViewModel(
 
     class Factory(
         private val repository: FaqRepository,
-        private val userType: String,
-        private val isTeachingWing: Boolean
+        private val userType: String
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(AdminFaqViewModel::class.java)) {
-                return AdminFaqViewModel(repository, userType, isTeachingWing) as T
+                return AdminFaqViewModel(repository, userType) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }

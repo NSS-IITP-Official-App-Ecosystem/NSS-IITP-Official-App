@@ -27,7 +27,6 @@ data class AdminFaqUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
     val currentUserType: String = "",
-    val isTeachingWing: Boolean = false,
     val rootSections: List<FaqSection> = emptyList(),
     val showOperationDialog: Boolean = false,
     val selectedNode: FaqNode? = null,
@@ -36,7 +35,8 @@ data class AdminFaqUiState(
     val showEditDialog: Boolean = false,
     val showDeleteConfirmation: Boolean = false,
     val navigationStack: List<FaqNode> = emptyList(),
-    val currentSectionContent: SectionContent? = null
+    val currentSectionContent: SectionContent? = null,
+    val currentTab: String = "subsections" // "subsections" or "questions"
 )
 
 // Represents a node in the FAQ tree for admin operations
@@ -53,8 +53,7 @@ data class FaqNode(
 
 // Request models for admin operations
 data class AddSectionRequest(
-    val title: String,
-    val interfaceTypes: List<String>
+    val title: String
 )
 
 data class AddSubSectionRequest(
@@ -73,8 +72,7 @@ data class AddQuestionRequest(
 
 data class UpdateSectionRequest(
     val id: String,
-    val title: String,
-    val interfaceTypes: List<String>
+    val title: String
 )
 
 data class UpdateSubSectionRequest(
@@ -155,25 +153,3 @@ data class SectionContent(
     val subSections: List<FaqSubSection> = emptyList(),
     val questions: List<FaqQuestion> = emptyList()
 )
-
-// Interface types for different user categories
-object InterfaceTypes {
-    const val NON_TEACHING = "non_teaching"
-    const val TEACHING_WING = "teaching_wing"
-
-    fun getRootSectionsForUserType(isTeachingWing: Boolean): List<String> {
-        return if (isTeachingWing) {
-            listOf("general_questions", "nss_hierarchy")
-        } else {
-            listOf("general_questions", "teaching_technical_wing", "nss_hierarchy")
-        }
-    }
-
-    fun getInterfaceTypesForUserType(isTeachingWing: Boolean): List<String> {
-        return if (isTeachingWing) {
-            listOf(TEACHING_WING)
-        } else {
-            listOf(NON_TEACHING)
-        }
-    }
-}

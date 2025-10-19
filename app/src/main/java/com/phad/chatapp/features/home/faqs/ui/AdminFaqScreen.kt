@@ -1,5 +1,6 @@
 package com.phad.chatapp.features.home.faqs.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -20,17 +21,26 @@ import com.phad.chatapp.features.home.faqs.data.*
 fun AdminFaqScreen(
     onNavigateBack: () -> Unit,
     userType: String,
-    isTeachingWing: Boolean,
     viewModel: AdminFaqViewModel = viewModel(
         factory = AdminFaqViewModel.Factory(
             repository = FaqRepository(),
-            userType = userType,
-            isTeachingWing = isTeachingWing
+            userType = userType
         )
     )
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val dialogState by viewModel.dialogState.collectAsState()
+
+    // Handle phone's back button
+    BackHandler(enabled = true) {
+        if (uiState.navigationStack.isNotEmpty()) {
+            // If we're in a section/subsection, go back to previous level
+            viewModel.navigateBack()
+        } else {
+            // If we're at the main FAQ management screen, exit
+            onNavigateBack()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -42,7 +52,12 @@ fun AdminFaqScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(
+                        onClick = {
+                            // Top-left back button always goes to main FAQ screen
+                            onNavigateBack()
+                        }
+                    ) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                     }
                 }
@@ -72,27 +87,43 @@ fun AdminFaqScreen(
                         AdminSectionContentView(
                             sectionContent = uiState.currentSectionContent!!,
                             currentNode = uiState.navigationStack.lastOrNull(),
+                            currentTab = uiState.currentTab,
                             onSubSectionClick = { subSection: FaqSubSection ->
                                 viewModel.openSubSection(subSection)
                             },
                             onQuestionClick = { question: FaqQuestion ->
                                 viewModel.openQuestion(question)
                             },
-                            onBackClick = {
-                                viewModel.navigateBack()
+                            onTabSwitch = { tab ->
+                                viewModel.switchTab(tab)
+                            },
+                            onEditSectionName = { node ->
+                                viewModel.editSectionName(node)
+                            },
+                            onDeleteSection = { node ->
+                                viewModel.deleteSection(node)
+                            },
+                            onAddSubSection = { node ->
+                                viewModel.addSubSection(node)
+                            },
+                            onAddQuestion = { node ->
+                                viewModel.addQuestion(node)
                             }
                         )
                     } else {
                         AdminFaqContent(
                             uiState = uiState,
                             onSectionClick = { section ->
+                                viewModel.openRootSection(section)
+                            },
+                            onEditSectionName = { section ->
                                 val node = FaqNode(
                                     id = section.id,
                                     title = section.title,
                                     type = FaqNodeType.ROOT_SECTION,
                                     section = section
                                 )
-                                viewModel.showOperationDialog(node)
+                                viewModel.editSectionName(node)
                             }
                         )
                     }
@@ -123,7 +154,16 @@ fun AdminFaqScreen(
                 },
                 onDismiss = {
                     viewModel.hideDialog()
-                }
+                },
+                onDelete = if (dialogState.operation == AdminOperation.EDIT_QUESTION) {
+                    {
+                        val node = dialogState.node
+                        if (node != null) {
+                            viewModel.hideDialog()
+                            viewModel.deleteSection(node)
+                        }
+                    }
+                } else null
             )
 
             // Delete confirmation dialog
@@ -145,7 +185,8 @@ fun AdminFaqScreen(
 @Composable
 fun AdminFaqContent(
     uiState: AdminFaqUiState,
-    onSectionClick: (FaqSection) -> Unit
+    onSectionClick: (FaqSection) -> Unit,
+    onEditSectionName: (FaqSection) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -198,7 +239,8 @@ fun AdminFaqContent(
                 items(uiState.rootSections) { section ->
                     AdminFaqRootSectionCard(
                         section = section,
-                        onClick = { onSectionClick(section) }
+                        onClick = { onSectionClick(section) },
+                        onEditClick = { onEditSectionName(section) }
                     )
                 }
             }
