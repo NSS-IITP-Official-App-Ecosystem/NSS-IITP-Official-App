@@ -17,18 +17,17 @@ class HoursFieldIntegrationTest {
             id = "27_07_test_event",
             eventDate = "27 Jul 2025",
             eventTime = "09:00 AM - 01:00 PM",
-            hours = 5,
+            hours = 5.0,
             description = "Test event with hours",
             createdBy = "admin123",
             creatorName = "Test Admin",
             createdAt = Timestamp.now(),
-            attendees = emptyList(),
-            closedAt = null,
-            _isLive = true
+            attendees = emptyList<com.phad.chatapp.models.AttendeeRecord>(),
+            closedAt = null
         )
 
         // Verify hours field is properly set
-        assertEquals("Hours field should be set correctly", 5, event.hours)
+        assertEquals("Hours field should be set correctly", 5.0, event.hours, 0.0)
         assertEquals("Event should have correct ID", "27_07_test_event", event.id)
         assertEquals("Event should have correct date", "27 Jul 2025", event.eventDate)
         assertEquals("Event should have correct time", "09:00 AM - 01:00 PM", event.eventTime)
@@ -42,18 +41,17 @@ class HoursFieldIntegrationTest {
             id = "27_07_zero_hours_event",
             eventDate = "27 Jul 2025",
             eventTime = "10:00 AM - 12:00 PM",
-            hours = 0,
+            hours = 0.0,
             description = "Event with zero hours",
             createdBy = "admin123",
             creatorName = "Test Admin",
             createdAt = Timestamp.now(),
-            attendees = emptyList(),
-            closedAt = null,
-            _isLive = true
+            attendees = emptyList<com.phad.chatapp.models.AttendeeRecord>(),
+            closedAt = null
         )
 
         // Verify zero hours is valid
-        assertEquals("Zero hours should be valid", 0, event.hours)
+        assertEquals("Zero hours should be valid", 0.0, event.hours, 0.0)
         assertEquals("Event should have correct description", "Event with zero hours", event.description)
     }
 
@@ -62,7 +60,7 @@ class HoursFieldIntegrationTest {
         // Test that default constructor sets hours to 0
         val event = AttendanceEvent()
         
-        assertEquals("Default hours should be 0", 0, event.hours)
+        assertEquals("Default hours should be 0", 0.0, event.hours, 0.0)
         assertEquals("Default ID should be empty", "", event.id)
         assertEquals("Default description should be empty", "", event.description)
         assertTrue("Default event should be live", event.isLive)
@@ -71,7 +69,7 @@ class HoursFieldIntegrationTest {
     @Test
     fun testHoursFieldValidation() {
         // Test various hours values
-        val validHours = listOf(0, 1, 5, 10, 24, 100)
+        val validHours = listOf(0.0, 1.0, 5.0, 10.0, 24.0, 100.0)
         
         for (hours in validHours) {
             val event = AttendanceEvent(
@@ -83,12 +81,11 @@ class HoursFieldIntegrationTest {
                 createdBy = "admin123",
                 creatorName = "Test Admin",
                 createdAt = Timestamp.now(),
-                attendees = emptyList(),
-                closedAt = null,
-                _isLive = true
+                attendees = emptyList<com.phad.chatapp.models.AttendeeRecord>(),
+                closedAt = null
             )
             
-            assertEquals("Hours should be set correctly for value $hours", hours, event.hours)
+            assertEquals("Hours should be set correctly for value $hours", hours, event.hours, 0.0)
             assertTrue("Hours should be non-negative", event.hours >= 0)
         }
     }
@@ -100,14 +97,13 @@ class HoursFieldIntegrationTest {
             id = "27_07_comprehensive_event",
             eventDate = "27 Jul 2025",
             eventTime = "09:00 AM - 05:00 PM",
-            hours = 8,
+            hours = 8.0,
             description = "Comprehensive test event with all fields",
             createdBy = "admin123",
             creatorName = "Test Admin",
             createdAt = Timestamp.now(),
-            attendees = emptyList(),
-            closedAt = null,
-            _isLive = true
+            attendees = emptyList<com.phad.chatapp.models.AttendeeRecord>(),
+            closedAt = null
         )
 
         // Verify all fields are set correctly
@@ -115,7 +111,7 @@ class HoursFieldIntegrationTest {
         assertEquals("ID should be correct", "27_07_comprehensive_event", event.id)
         assertEquals("Date should be correct", "27 Jul 2025", event.eventDate)
         assertEquals("Time should be correct", "09:00 AM - 05:00 PM", event.eventTime)
-        assertEquals("Hours should be correct", 8, event.hours)
+        assertEquals("Hours should be correct", 8.0, event.hours, 0.0)
         assertEquals("Description should be correct", "Comprehensive test event with all fields", event.description)
         assertEquals("Created by should be correct", "admin123", event.createdBy)
         assertEquals("Creator name should be correct", "Test Admin", event.creatorName)

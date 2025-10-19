@@ -18,14 +18,13 @@ class QRAttendanceUIEnhancementTest {
             id = "27_Jul_Test_Event",
             eventDate = "27 Jul 2025",
             eventTime = "09:00 AM - 01:00 PM",
-            hours = 2,
+            hours = 2.0,
             description = "Short description",
             createdBy = "test_admin",
             creatorName = "Test Admin",
             createdAt = Timestamp.now(),
-            attendees = emptyList(),
-            closedAt = null,
-            _isLive = true
+            attendees = emptyList<com.phad.chatapp.models.AttendeeRecord>(),
+            closedAt = null
         )
 
         // Test long description that should be truncated
@@ -33,14 +32,13 @@ class QRAttendanceUIEnhancementTest {
             id = "27_Jul_Long_Event",
             eventDate = "27 Jul 2025",
             eventTime = "09:00 AM - 01:00 PM",
-            hours = 4,
+            hours = 4.0,
             description = "This is a very long description that should be truncated in the UI to improve readability and user experience. It contains more than 100 characters and should trigger the expand/collapse functionality.",
             createdBy = "test_admin",
             creatorName = "Test Admin",
             createdAt = Timestamp.now(),
-            attendees = emptyList(),
-            closedAt = null,
-            _isLive = true
+            attendees = emptyList<com.phad.chatapp.models.AttendeeRecord>(),
+            closedAt = null
         )
 
         // Verify descriptions are available
@@ -60,9 +58,8 @@ class QRAttendanceUIEnhancementTest {
             createdBy = "test_admin",
             creatorName = "Test Admin",
             createdAt = Timestamp.now(),
-            attendees = emptyList(),
-            closedAt = null,
-            _isLive = true
+            attendees = emptyList<com.phad.chatapp.models.AttendeeRecord>(),
+            closedAt = null
         )
 
         // Test date formatting
@@ -86,7 +83,7 @@ class QRAttendanceUIEnhancementTest {
             id = "27_Jul_Attendee_Test",
             eventDate = "27 Jul 2025",
             eventTime = "09:00 AM - 01:00 PM",
-            hours = 3,
+            hours = 3.0,
             description = "Attendee count test",
             createdBy = "test_admin",
             creatorName = "Test Admin",
@@ -94,8 +91,7 @@ class QRAttendanceUIEnhancementTest {
             attendees = listOf(
                 // Mock attendee records would go here
             ),
-            closedAt = null,
-            _isLive = true
+            closedAt = null
         )
 
         // Test attendee count
@@ -113,18 +109,17 @@ class QRAttendanceUIEnhancementTest {
             id = "27_Jul_Hours_Test",
             eventDate = "27 Jul 2025",
             eventTime = "09:00 AM - 01:00 PM",
-            hours = 5,
+            hours = 5.0,
             description = "Hours field test",
             createdBy = "test_admin",
             creatorName = "Test Admin",
             createdAt = Timestamp.now(),
-            attendees = emptyList(),
-            closedAt = null,
-            _isLive = true
+            attendees = emptyList<com.phad.chatapp.models.AttendeeRecord>(),
+            closedAt = null
         )
 
         // Test hours field
-        assertEquals("Hours should be set correctly", 5, eventWithHours.hours)
+        assertEquals("Hours should be set correctly", 5.0, eventWithHours.hours)
         assertTrue("Hours should be non-negative", eventWithHours.hours >= 0)
 
         // Test default hours value
@@ -136,12 +131,11 @@ class QRAttendanceUIEnhancementTest {
             createdBy = "test_admin",
             creatorName = "Test Admin",
             createdAt = Timestamp.now(),
-            attendees = emptyList(),
-            closedAt = null,
-            _isLive = true
+            attendees = emptyList<com.phad.chatapp.models.AttendeeRecord>(),
+            closedAt = null
         )
 
-        assertEquals("Default hours should be 0", 0, eventWithDefaultHours.hours)
+        assertEquals("Default hours should be 0", 0.0, eventWithDefaultHours.hours)
     }
 
     @Test
@@ -155,9 +149,8 @@ class QRAttendanceUIEnhancementTest {
             createdBy = "test_admin",
             creatorName = "Test Admin",
             createdAt = Timestamp.now(),
-            attendees = emptyList(),
-            closedAt = null,
-            _isLive = true
+            attendees = emptyList<com.phad.chatapp.models.AttendeeRecord>(),
+            closedAt = null
         )
 
         // Test closed event
@@ -169,9 +162,9 @@ class QRAttendanceUIEnhancementTest {
             createdBy = "test_admin",
             creatorName = "Test Admin",
             createdAt = Timestamp.now(),
-            attendees = emptyList(),
+            attendees = emptyList<com.phad.chatapp.models.AttendeeRecord>(),
             closedAt = Timestamp.now(),
-            _isLive = false
+            
         )
 
         assertEquals("Live event should have Live status", "Live", liveEvent.getEventStatus())

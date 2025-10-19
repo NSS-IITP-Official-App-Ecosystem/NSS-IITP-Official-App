@@ -32,9 +32,12 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import java.util.Date
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import androidx.compose.material3.*
@@ -130,7 +133,7 @@ class NssQRAttendanceFragment : Fragment() {
                         viewModel.endAttendanceSession()
                     },
                     onLoadEvents = {
-                        viewModel.loadAvailableEvents()
+                        viewModel.refreshAvailableEvents()
                     },
                     onClearError = {
                         viewModel.clearError()
@@ -170,6 +173,9 @@ class NssQRAttendanceFragment : Fragment() {
                     },
                     onAddManualAttendance = { event, rollNumbers ->
                         viewModel.addManualAttendance(event.id, rollNumbers)
+                    },
+                    onMarkAbsent = { event, rollNumbers ->
+                        viewModel.markStudentsAbsent(event.id, rollNumbers)
                     }
                 )
             }
@@ -220,7 +226,7 @@ fun QRAttendanceAdminScreen(
     onEndSession: () -> Unit,
     onLoadEvents: () -> Unit,
     onClearError: () -> Unit,
-    onCreateEvent: (String, String, String, Date, Date, Date, Int, Boolean, Int) -> Unit,
+    onCreateEvent: (String, String, String, Date, Date, Date, Double, Boolean, Double) -> Unit,
     onShowCreateDialog: () -> Unit,
     onHideCreateDialog: () -> Unit,
     onClearCreateSuccess: () -> Unit,
@@ -228,10 +234,11 @@ fun QRAttendanceAdminScreen(
     onNavigateBack: () -> Unit = {},
     onShowEditDialog: (AttendanceEvent) -> Unit, // New parameter
     onHideEditDialog: () -> Unit, // New parameter
-    onUpdateEvent: (String, String, String, Date, Date, Date, Int, Boolean, Int, String) -> Unit, // New parameter (added eventId)
+    onUpdateEvent: (String, String, String, Date, Date, Date, Double, Boolean, Double, String) -> Unit, // New parameter (added eventId)
     onGeneratePDF: (AttendanceEvent) -> Unit, // PDF generation callback
     onClearSuccessMessage: () -> Unit, // Clear success message callback
-    onAddManualAttendance: (AttendanceEvent, String) -> Unit // Manual attendance callback
+    onAddManualAttendance: (AttendanceEvent, String) -> Unit, // Manual attendance callback
+    onMarkAbsent: (AttendanceEvent, String) -> Unit // Mark absent callback
 ) {
     // Handle success message
     val context = LocalContext.current
@@ -353,13 +360,15 @@ fun QRAttendanceAdminScreen(
                         )
                     }
 
-                    // Refresh button on the right
-                    IconButton(onClick = onLoadEvents) { // Use onLoadEvents from QRAttendanceAdminScreen
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "Refresh Events",
-                            tint = Color.White
-                        )
+                    // Refresh button on the right (only on event list screen). Hidden during active QR session.
+                    if (!uiState.isSessionActive) {
+                        IconButton(onClick = onLoadEvents) { // Use onLoadEvents from QRAttendanceAdminScreen
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Refresh Events",
+                                tint = Color.White
+                            )
+                        }
                     }
                 }
             }
@@ -383,7 +392,8 @@ fun QRAttendanceAdminScreen(
                     onCloseEvent = onCloseEvent,
                     onShowEditDialog = onShowEditDialog, // Pass the new lambda here
                     onGeneratePDF = onGeneratePDF, // Pass PDF generation callback
-                    onAddManualAttendance = onAddManualAttendance // Pass manual attendance callback
+                    onAddManualAttendance = onAddManualAttendance, // Pass manual attendance callback
+                    onMarkAbsent = onMarkAbsent // Pass mark absent callback
                 )
             } else {
                 // Active session screen
@@ -425,13 +435,14 @@ fun EventSelectionScreen(
     onCloseEvent: ((AttendanceEvent) -> Unit)? = null,
     onShowEditDialog: (AttendanceEvent) -> Unit, // New parameter
     onGeneratePDF: (AttendanceEvent) -> Unit, // PDF generation callback
-    onAddManualAttendance: (AttendanceEvent, String) -> Unit // Manual attendance callback
+    onAddManualAttendance: (AttendanceEvent, String) -> Unit, // Manual attendance callback
+    onMarkAbsent: (AttendanceEvent, String) -> Unit // Mark absent callback
 ) {
     val sortedEvents = remember(events) {
         events.sortedWith(compareBy<AttendanceEvent> {
-            // Parse eventDate (DD MMM YYYY) - handle both 3-letter and 4-letter month abbreviations
+            // Parse eventDate - handle multiple date formats for robust sorting
             try {
-                // Try with 3-letter month abbreviation first (e.g., "Sep")
+                // Try new format first (DD MMM YYYY) with 3-letter month abbreviation
                 val dateFormatter3 = DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH)
                 LocalDate.parse(it.eventDate, dateFormatter3)
             } catch (e: Exception) {
@@ -441,27 +452,50 @@ fun EventSelectionScreen(
                     LocalDate.parse(it.eventDate, dateFormatter4)
                 } catch (e2: Exception) {
                     try {
-                        // Fallback: try with default locale
-                        val dateFormatterDefault = DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.getDefault())
-                        LocalDate.parse(it.eventDate, dateFormatterDefault)
+                        // Try old format (YYYY-MM-DD) for backward compatibility
+                        val oldDateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.ENGLISH)
+                        LocalDate.parse(it.eventDate, oldDateFormatter)
                     } catch (e3: Exception) {
-                        // If all parsing fails, return a default date to avoid crash
-                        LocalDate.of(1970, 1, 1)
+                        try {
+                            // Fallback: try with default locale for new format
+                            val dateFormatterDefault = DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.getDefault())
+                            LocalDate.parse(it.eventDate, dateFormatterDefault)
+                        } catch (e4: Exception) {
+                            try {
+                                // Last fallback: try with default locale for old format
+                                val oldDateFormatterDefault = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault())
+                                LocalDate.parse(it.eventDate, oldDateFormatterDefault)
+                            } catch (e5: Exception) {
+                                // If all parsing fails, use creation date as fallback
+                                it.createdAt.toDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate()
+                            }
+                        }
                     }
                 }
             }
         }.thenBy {
-            // Parse eventTime (HH:MM AM/PM - HH:MM AM/PM)
+            // Parse eventTime (HH:MM AM/PM - HH:MM AM/PM) - sort by start time
             try {
                 val timeFormatter = DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)
                 val timeParts = it.eventTime.split(" - ")
                 if (timeParts.isNotEmpty()) {
-                    LocalTime.parse(timeParts[0], timeFormatter) // Sort by start time
+                    LocalTime.parse(timeParts[0].trim(), timeFormatter) // Sort by start time
                 } else {
                     LocalTime.of(0, 0) // Default time if parsing fails
                 }
             } catch (e: Exception) {
-                LocalTime.of(0, 0) // Default time if parsing fails
+                try {
+                    // Try with 24-hour format as fallback
+                    val timeFormatter24 = DateTimeFormatter.ofPattern("HH:mm", Locale.ENGLISH)
+                    val timeParts = it.eventTime.split(" - ")
+                    if (timeParts.isNotEmpty()) {
+                        LocalTime.parse(timeParts[0].trim(), timeFormatter24)
+                    } else {
+                        LocalTime.of(0, 0)
+                    }
+                } catch (e2: Exception) {
+                    LocalTime.of(0, 0) // Default time if all parsing fails
+                }
             }
         })
     }
@@ -515,7 +549,8 @@ fun EventSelectionScreen(
                         onCloseEvent = onCloseEvent,
                         onLongPress = onShowEditDialog, // Pass the new lambda here
                         onDownloadPDF = onGeneratePDF, // Pass PDF generation callback
-                        onAddManualAttendance = onAddManualAttendance // Pass manual attendance callback
+                        onAddManualAttendance = onAddManualAttendance, // Pass manual attendance callback
+                        onMarkAbsent = onMarkAbsent // Pass mark absent callback
                     )
                 }
             }
@@ -530,7 +565,7 @@ fun EventSelectionScreen(
 fun EditEventDialog(
     event: AttendanceEvent,
     isUpdating: Boolean,
-    onUpdateEvent: (String, String, String, Date, Date, Date, Int, Boolean, Int, String) -> Unit,
+    onUpdateEvent: (String, String, String, Date, Date, Date, Double, Boolean, Double, String) -> Unit,
     onDismiss: () -> Unit,
     errorMessage: String?
 ) {
@@ -723,8 +758,8 @@ fun EditEventDialog(
                 OutlinedTextField(
                     value = eventHours,
                     onValueChange = { newValue ->
-                        // Only allow digits and ensure non-negative
-                        if (newValue.isEmpty() || (newValue.all { it.isDigit() } && newValue.toIntOrNull()?.let { it >= 0 } == true)) {
+                        // Allow decimal input and ensure non-negative
+                        if (newValue.isEmpty() || isValidDecimalInput(newValue)) {
                             eventHours = newValue
                             showError = false
                         }
@@ -736,7 +771,7 @@ fun EditEventDialog(
                             fontSize = 14.sp
                         )
                     },
-                    placeholder = { Text("Enter volunteer hours") },
+                    placeholder = { Text("Enter volunteer hours (e.g., 2.5)") },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !isUpdating,
                     textStyle = TextStyle(
@@ -744,7 +779,7 @@ fun EditEventDialog(
                         fontSize = 14.sp,
                         color = Color(0xFF333333)
                     ),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     trailingIcon = {
                         Icon(
                             imageVector = Icons.Default.Star,
@@ -827,7 +862,7 @@ fun EditEventDialog(
                             fontSize = 14.sp,
                             color = Color(0xFF333333)
                         ),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         isError = showError && negativeHours.trim().isEmpty(),
                         supportingText = {
                             if (showError && negativeHours.trim().isEmpty()) {
@@ -889,15 +924,15 @@ fun EditEventDialog(
                 onClick = {
                     val trimmedName = eventName.trim()
                     val trimmedHours = eventHours.trim()
-                    val hoursValue = trimmedHours.toIntOrNull() ?: -1
-                    val negHoursValue = negativeHours.trim().toIntOrNull() ?: 0
+                    val hoursValue = trimmedHours.toDoubleOrNull() ?: -1.0
+                    val negHoursValue = negativeHours.trim().toDoubleOrNull() ?: 0.0
 
                     when {
                         trimmedName.isEmpty() -> {
                             showError = true
                             validationErrorMessage = "Event name is required"
                         }
-                        trimmedHours.isEmpty() || hoursValue < 0 -> {
+                        trimmedHours.isEmpty() || hoursValue < 0.0 -> {
                             showError = true
                             validationErrorMessage = "Please enter valid hours (0 or greater)"
                         }
@@ -1026,10 +1061,12 @@ fun EventCard(
     onCloseEvent: ((AttendanceEvent) -> Unit)? = null,
     onLongPress: ((AttendanceEvent) -> Unit)? = null, // New parameter
     onDownloadPDF: ((AttendanceEvent) -> Unit)? = null, // PDF download callback
-    onAddManualAttendance: ((AttendanceEvent, String) -> Unit)? = null // Manual attendance callback
+    onAddManualAttendance: ((AttendanceEvent, String) -> Unit)? = null, // Manual attendance callback
+    onMarkAbsent: ((AttendanceEvent, String) -> Unit)? = null // Mark absent callback
 ) {
     var isDescriptionExpanded by remember { mutableStateOf(false) }
     var showManualRollDialog by remember { mutableStateOf(false) }
+    var isMarkingAbsent by remember { mutableStateOf(false) }
     val maxDescriptionLength = 100
     val haptic = LocalHapticFeedback.current
 
@@ -1270,7 +1307,8 @@ fun EventCard(
                         onClick = onSelect,
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
                         shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.height(48.dp)
+                        modifier = Modifier.height(48.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
                     ) {
                         Text(
                             text = "Start Attendance",
@@ -1285,7 +1323,8 @@ fun EventCard(
                             onClick = { onCloseEvent(event) },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF5722)),
                             shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.height(48.dp)
+                            modifier = Modifier.height(48.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
                         ) {
                             Text(
                                 text = "Close Event",
@@ -1301,21 +1340,35 @@ fun EventCard(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)
                 ) {
-                    // Add Roll No button
+                    // Add/Delete Roll No button
                     if (onAddManualAttendance != null) {
-                        Button(
-                            onClick = { 
-                                // Show manual roll number entry dialog
-                                showManualRollDialog = true
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF9C27B0)),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.height(48.dp)
+                        Box(
+                            modifier = Modifier
+                                .height(48.dp)
+                                .background(
+                                    color = Color(0xFF9C27B0),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                                .combinedClickable(
+                                    onClick = {
+                                        // Handle regular tap for adding attendance
+                                        showManualRollDialog = true
+                                        isMarkingAbsent = false
+                                    },
+                                    onLongClick = {
+                                        // Show manual roll number entry dialog for marking absent
+                                        showManualRollDialog = true
+                                        isMarkingAbsent = true
+                                    }
+                                )
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "Add Roll No",
+                                text = "Add/Delete Roll No",
                                 fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium
+                                fontWeight = FontWeight.Medium,
+                                color = Color.White
                             )
                         }
                     }
@@ -1326,7 +1379,8 @@ fun EventCard(
                             onClick = { onDownloadPDF(event) },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2196F3)),
                             shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.height(48.dp)
+                            modifier = Modifier.height(48.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
                         ) {
                             Text(
                                 text = "Attendance log",
@@ -1343,11 +1397,22 @@ fun EventCard(
     // Manual Roll Number Entry Dialog
     if (showManualRollDialog) {
         ManualRollNumberDialog(
-            onDismiss = { showManualRollDialog = false },
-            onAddAttendance = { rollNumbers ->
-                onAddManualAttendance?.invoke(event, rollNumbers)
+            onDismiss = { 
                 showManualRollDialog = false
-            }
+                isMarkingAbsent = false
+            },
+            onAddAttendance = { rollNumbers ->
+                if (isMarkingAbsent) {
+                    // Call absent marking function
+                    onMarkAbsent?.invoke(event, rollNumbers)
+                } else {
+                    // Call add attendance function
+                    onAddManualAttendance?.invoke(event, rollNumbers)
+                }
+                showManualRollDialog = false
+                isMarkingAbsent = false
+            },
+            isMarkingAbsent = isMarkingAbsent
         )
     }
 }
@@ -1559,11 +1624,25 @@ fun ActiveSessionScreen(
 
 
 
+/**
+ * Helper function to validate decimal input for hours
+ */
+private fun isValidDecimalInput(input: String): Boolean {
+    if (input.isEmpty()) return true
+    
+    // Allow only digits, one decimal point, and ensure non-negative
+    val decimalPattern = Regex("^\\d*\\.?\\d*$")
+    if (!decimalPattern.matches(input)) return false
+    
+    val doubleValue = input.toDoubleOrNull()
+    return doubleValue != null && doubleValue >= 0.0
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreateEventDialog(
     isCreating: Boolean,
-    onCreateEvent: (String, String, String, Date, Date, Date, Int, Boolean, Int) -> Unit,
+    onCreateEvent: (String, String, String, Date, Date, Date, Double, Boolean, Double) -> Unit,
     onDismiss: () -> Unit,
     errorMessage: String?,
     initialDate: Date? = null
@@ -1790,7 +1869,7 @@ fun CreateEventDialog(
                             fontSize = 14.sp,
                             color = Color(0xFF333333)
                         ),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         trailingIcon = {
                             Icon(
                                 imageVector = Icons.Default.Star,
@@ -2081,7 +2160,8 @@ fun CreateEventDialog(
 @Composable
 fun ManualRollNumberDialog(
     onDismiss: () -> Unit,
-    onAddAttendance: (String) -> Unit
+    onAddAttendance: (String) -> Unit,
+    isMarkingAbsent: Boolean = false
 ) {
     var rollNumbersText by remember { mutableStateOf("") }
     var showError by remember { mutableStateOf(false) }
@@ -2091,7 +2171,7 @@ fun ManualRollNumberDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "Add Manual Attendance",
+                text = if (isMarkingAbsent) "Mark Students Absent" else "Add Manual Attendance",
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -2099,7 +2179,10 @@ fun ManualRollNumberDialog(
         text = {
             Column {
                 Text(
-                    text = "Enter roll numbers separated by comma, line, space, or comma-space:",
+                    text = if (isMarkingAbsent) 
+                        "Enter roll numbers to mark as absent (separated by comma, line, space, or comma-space):"
+                    else 
+                        "Enter roll numbers separated by comma, line, space, or comma-space:",
                     fontSize = 14.sp,
                     color = Color.Gray,
                     modifier = Modifier.padding(bottom = 8.dp)
@@ -2139,9 +2222,11 @@ fun ManualRollNumberDialog(
                         onAddAttendance(trimmedText)
                     }
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF9C27B0))
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isMarkingAbsent) Color(0xFFE91E63) else Color(0xFF9C27B0)
+                )
             ) {
-                Text("Add Attendance")
+                Text(if (isMarkingAbsent) "Mark Absent" else "Add Attendance")
             }
         },
         dismissButton = {

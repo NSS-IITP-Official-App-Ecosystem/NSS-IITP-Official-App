@@ -94,12 +94,13 @@ fun ProfileScreen(
     modifier: Modifier = Modifier,
     state: ProfileUiState,
     onLogoutClick: () -> Unit,
-    onChatbotClick: () -> Unit,
+    onRefreshClick: () -> Unit,
     onLibraryClick: () -> Unit,
     onChatClick: () -> Unit,
     onScheduleClick: () -> Unit,
     // New admin-only export button
     onExportAttendanceClick: () -> Unit = {},
+    onEventHistoryClick: () -> Unit = {},
     onSwitchInterfaceClick: () -> Unit,
     onSem1HoursClick: () -> Unit,
     onSem2HoursClick: () -> Unit,
@@ -216,12 +217,12 @@ fun ProfileScreen(
                             Spacer(modifier = Modifier.size(16.dp))
                         }
                         Image(
-                            painter = painterResource(id = R.drawable.ic_faq),
-                            contentDescription = "FAQs Icon",
+                            painter = painterResource(id = R.drawable.ic_refresh),
+                            contentDescription = "Refresh",
                             colorFilter = ColorFilter.tint(onBackgroundColor),
                             modifier = Modifier
                                 .size(30.dp)
-                                .clickable { onChatbotClick() }
+                                .clickable { onRefreshClick() }
                         )
                     }
                 }
@@ -343,7 +344,10 @@ fun ProfileScreen(
                         
                         // Admin-only actions
                         Spacer(modifier = Modifier.height(24.dp))
-                        AdminActions(onExportAttendanceClick = onExportAttendanceClick)
+                        AdminActions(
+                            onExportAttendanceClick = onExportAttendanceClick,
+                            onEventHistoryClick = onEventHistoryClick
+                        )
 
                         // Add bottom spacing to ensure content is not cut off
                         Spacer(modifier = Modifier.height(32.dp))
@@ -447,7 +451,8 @@ fun LabeledInfoItem(label: String, value: String, color: Color) {
 
 @Composable
 private fun AdminActions(
-    onExportAttendanceClick: () -> Unit
+    onExportAttendanceClick: () -> Unit,
+    onEventHistoryClick: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -456,10 +461,25 @@ private fun AdminActions(
         // Removed label text above admin actions per design request
         Button(
             onClick = onExportAttendanceClick,
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2))
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)),
+            modifier = Modifier.fillMaxWidth()
         ) {
             Text(
                 text = "Export Attendance Matrix (Excel)",
+                color = Color.White,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(12.dp))
+        
+        Button(
+            onClick = onEventHistoryClick,
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                text = "Event History",
                 color = Color.White,
                 fontWeight = FontWeight.SemiBold
             )
@@ -622,7 +642,7 @@ private fun ProfilePreview() {
         ProfileScreen(
             state = ProfileUiState(name = "Loading...", location = "N/A"),
             onLogoutClick = {},
-            onChatbotClick = {},
+            onRefreshClick = {},
             onLibraryClick = {},
             onChatClick = {},
             onScheduleClick = {},

@@ -27,7 +27,7 @@ class QRAttendanceService {
     companion object {
         private const val QR_CODE_SIZE = 1000 // Increased from 800 to 1000 for optimal quality at 400dp display size
         private const val QR_REFRESH_INTERVAL_MS = 2000L // 2 seconds
-        private const val QR_VALIDITY_WINDOW_MS = 8000L // 8 seconds validity to account for processing delays
+        private const val QR_VALIDITY_WINDOW_MS = 10000L // 10 seconds validity to account for processing delays
     }
     
     /**

@@ -46,36 +46,72 @@ object AttendanceStatsCalculator {
                 Log.d(TAG, "Available fields in document: $allFields")
                 
                 val eventsAttended = userDoc.getLong("eventsAttended") ?: 0L
-                val sem1Hours = userDoc.getLong("sem1Hours") ?: 0L
-                val sem2Hours = userDoc.getLong("sem2Hours") ?: 0L
+                val sem1HoursDouble = userDoc.getDouble("sem1Hours")
+                val sem2HoursDouble = userDoc.getDouble("sem2Hours")
                 
-                Log.d(TAG, "Raw values - eventsAttended: $eventsAttended, sem1Hours: $sem1Hours, sem2Hours: $sem2Hours")
+                Log.d(TAG, "Raw values - eventsAttended: $eventsAttended, sem1Hours: ${sem1HoursDouble}, sem2Hours: ${sem2HoursDouble}")
                 
                 // Also check for old field names in case they exist
                 val eventsAttendedOld = userDoc.getLong("events_attended") ?: 0L
-                val sem1HoursOld = userDoc.getLong("sem1_hours") ?: 0L
-                val sem2HoursOld = userDoc.getLong("sem2_hours") ?: 0L
+                val sem1HoursOldDouble = userDoc.getDouble("sem1_hours")
+                val sem2HoursOldDouble = userDoc.getDouble("sem2_hours")
                 
-                Log.d(TAG, "Old field values - events_attended: $eventsAttendedOld, sem1_hours: $sem1HoursOld, sem2_hours: $sem2HoursOld")
+                Log.d(TAG, "Old field values - events_attended: $eventsAttendedOld, sem1_hours: ${sem1HoursOldDouble}, sem2_hours: ${sem2HoursOldDouble}")
                 
                 // Use the values that are not zero
                 val finalEventsAttended = if (eventsAttended > 0) eventsAttended else eventsAttendedOld
-                val finalSem1Hours = if (sem1Hours > 0) sem1Hours else sem1HoursOld
-                val finalSem2Hours = if (sem2Hours > 0) sem2Hours else sem2HoursOld
+                val finalSem1Hours = (sem1HoursDouble ?: sem1HoursOldDouble ?: 0.0)
+                val finalSem2Hours = (sem2HoursDouble ?: sem2HoursOldDouble ?: 0.0)
                 
                 Log.d(TAG, "Final values to use - eventsAttended: $finalEventsAttended, sem1Hours: $finalSem1Hours, sem2Hours: $finalSem2Hours")
                 
-                // Read global totals from meta/statistics to avoid scanning all events
+                // Determine totals
+                // Total events should be the count of all docs in NSS_Events_Attendence
+                val totalEventsSnapshot = db.collection("NSS_Events_Attendence").get().await()
+                val totalEvents = totalEventsSnapshot.size().toLong()
+
+                // Keep meta totals for denominators if present, but not required by UI
                 val metaSnap = db.collection("meta").document("statistics").get().await()
-                val totalEvents = metaSnap.getLong("totalEvents") ?: 0L
                 val totalSem1Hours = (metaSnap.getLong("totalSem1Hours") ?: 0L).toInt()
                 val totalSem2Hours = (metaSnap.getLong("totalSem2Hours") ?: 0L).toInt()
-                
-                Log.d(TAG, "Totals (from meta) - events=$totalEvents, SEM1=$totalSem1Hours, SEM2=$totalSem2Hours")
-                
-                val sem1Stats = "$finalSem1Hours/$totalSem1Hours"
-                val sem2Stats = "$finalSem2Hours/$totalSem2Hours"
-                val eventsStats = "$finalEventsAttended/$totalEvents"
+
+                // If any of the values look missing (zero), compute fallbacks by scanning events
+                var computedSem1 = finalSem1Hours
+                var computedSem2 = finalSem2Hours
+                var computedEvents = finalEventsAttended
+                if (computedSem1 == 0.0 || computedSem2 == 0.0 || computedEvents == 0L) {
+                    var s1 = 0.0
+                    var s2 = 0.0
+                    var evCount = 0L
+                    totalEventsSnapshot.documents.forEach { doc ->
+                        val event = doc.toObject(com.phad.chatapp.models.AttendanceEvent::class.java)
+                        if (event != null) {
+                            val attended = event.attendees.any { it.rollNumber == rollNumber }
+                            val semester = getSemesterFromDate(event.eventDate)
+                            if (attended) {
+                                evCount++
+                                when (semester) {
+                                    1 -> s1 += event.hours
+                                    2 -> s2 += event.hours
+                                }
+                            } else if (event.isMandatory && event.negativeHours > 0.0) {
+                                when (semester) {
+                                    1 -> s1 -= event.negativeHours
+                                    2 -> s2 -= event.negativeHours
+                                }
+                            }
+                        }
+                    }
+                    if (computedSem1 == 0.0) computedSem1 = s1
+                    if (computedSem2 == 0.0) computedSem2 = s2
+                    if (computedEvents == 0L) computedEvents = evCount
+                }
+
+                Log.d(TAG, "Totals - events=$totalEvents, SEM1 total (meta)=$totalSem1Hours, SEM2 total (meta)=$totalSem2Hours")
+
+                val sem1Stats = "${computedSem1}/$totalSem1Hours"
+                val sem2Stats = "${computedSem2}/$totalSem2Hours"
+                val eventsStats = "$computedEvents/$totalEvents"
                 
                 Log.d(TAG, "Final stats - SEM1=$sem1Stats, SEM2=$sem2Stats, Events=$eventsStats")
                 Log.d(TAG, "=== ATTENDANCE STATS CALCULATOR DEBUG COMPLETE ===")
@@ -102,8 +138,8 @@ object AttendanceStatsCalculator {
             // Get all events from NSS_Events_Attendence collection
             val eventsSnapshot = db.collection("NSS_Events_Attendence").get().await()
             
-            var sem1Hours = 0
-            var sem2Hours = 0
+            var sem1Hours = 0.0
+            var sem2Hours = 0.0
             var eventsAttended = 0
             var totalEvents = 0
             
@@ -126,6 +162,12 @@ object AttendanceStatsCalculator {
                         when (semester) {
                             1 -> sem1Hours += event.hours
                             2 -> sem2Hours += event.hours
+                        }
+                    } else if (event.isMandatory && event.negativeHours > 0.0) {
+                        val semester = getSemesterFromDate(event.eventDate)
+                        when (semester) {
+                            1 -> sem1Hours -= event.negativeHours
+                            2 -> sem2Hours -= event.negativeHours
                         }
                     }
                 } else {
@@ -192,8 +234,8 @@ object AttendanceStatsCalculator {
     /**
      * Calculate total hours for a specific semester
      */
-    private fun calculateTotalSemesterHours(documents: List<com.google.firebase.firestore.DocumentSnapshot>, semester: Int): Int {
-        var totalHours = 0
+    private fun calculateTotalSemesterHours(documents: List<com.google.firebase.firestore.DocumentSnapshot>, semester: Int): Double {
+        var totalHours = 0.0
         
         documents.forEach { doc ->
             val event = doc.toObject(AttendanceEvent::class.java)
@@ -216,8 +258,8 @@ object AttendanceStatsCalculator {
             val (sem1Stats, sem2Stats, eventsStats) = calculateStudentStats(rollNumber)
             
             // Parse the stats to get individual values
-            val sem1Hours = sem1Stats.split("/")[0].toIntOrNull() ?: 0
-            val sem2Hours = sem2Stats.split("/")[0].toIntOrNull() ?: 0
+            val sem1Hours = sem1Stats.split("/")[0].toDoubleOrNull() ?: 0.0
+            val sem2Hours = sem2Stats.split("/")[0].toDoubleOrNull() ?: 0.0
             val eventsAttended = eventsStats.split("/")[0].toIntOrNull() ?: 0
             
             // Update user document

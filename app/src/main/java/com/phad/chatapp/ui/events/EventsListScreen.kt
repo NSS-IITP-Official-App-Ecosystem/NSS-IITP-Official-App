@@ -33,7 +33,8 @@ data class EventDetail(
     val id: String,
     val name: String,
     val date: String,
-    val hours: Int
+    val hours: Double,
+    val isMandatory: Boolean
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -44,12 +45,14 @@ fun EventsListScreen(
     onBackClick: () -> Unit
 ) {
     var events by remember { mutableStateOf<List<EventDetail>>(emptyList()) }
+    var attendedCount by remember { mutableStateOf(0) }
     var isLoading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var studentName by remember { mutableStateOf("") }
     var nssGroup by remember { mutableStateOf("") }
     var isGeneratingFile by remember { mutableStateOf(false) }
     var showFileMessage by remember { mutableStateOf<String?>(null) }
+    var headerTotal by remember { mutableStateOf<Double?>(null) }
     
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -80,24 +83,36 @@ fun EventsListScreen(
             
             val eventsSnapshot = db.collection("NSS_Events_Attendence").get().await()
             
-            val attendedEvents = mutableListOf<EventDetail>()
+            val eventLog = mutableListOf<EventDetail>()
+            var localAttendedCount = 0
             
             eventsSnapshot.documents.forEach { doc ->
                 val event = doc.toObject(AttendanceEvent::class.java)
                 if (event != null) {
-                    // Check if student attended this event
-                    val attended = event.attendees.any { it.rollNumber == rollNumber }
-                    if (attended) {
-                        // Check if event belongs to the specified semester
-                        val eventSemester = getSemesterFromDate(event.eventDate)
-                        if (eventSemester == semester) {
-                            val eventName = extractEventNameFromId(event.id)
-                            attendedEvents.add(
+                    val eventSemester = getSemesterFromDate(event.eventDate)
+                    if (eventSemester == semester) {
+                        val attended = event.attendees.any { it.rollNumber == rollNumber }
+                        val eventName = extractEventNameFromId(event.id)
+                        if (attended) {
+                            localAttendedCount++
+                            eventLog.add(
                                 EventDetail(
                                     id = event.id,
                                     name = eventName,
                                     date = event.eventDate,
-                                    hours = event.hours
+                                    hours = event.hours,
+                                    isMandatory = event.isMandatory
+                                )
+                            )
+                        } else if (event.isMandatory && event.negativeHours > 0.0) {
+                            // Absent in a mandatory event: log negative hours
+                            eventLog.add(
+                                EventDetail(
+                                    id = event.id,
+                                    name = eventName,
+                                    date = event.eventDate,
+                                    hours = -event.negativeHours,
+                                    isMandatory = true
                                 )
                             )
                         }
@@ -106,7 +121,16 @@ fun EventsListScreen(
             }
             
             // Sort events by date (newest first)
-            events = attendedEvents.sortedByDescending { parseDate(it.date) }
+            events = eventLog.sortedByDescending { parseDate(it.date) }
+            attendedCount = localAttendedCount
+
+            // Header total from users (source of truth)
+            val totalsDoc = db.collection("users").document(rollNumber).get().await()
+            headerTotal = if (totalsDoc.exists()) {
+                val s1 = totalsDoc.getDouble("sem1Hours") ?: 0.0
+                val s2 = totalsDoc.getDouble("sem2Hours") ?: 0.0
+                when (semester) { 1 -> s1; 2 -> s2; else -> null }
+            } else null
             isLoading = false
         } catch (e: Exception) {
             error = e.message
@@ -250,7 +274,7 @@ fun EventsListScreen(
                 }
             } else {
                 // Header with total hours
-                val totalHours = events.sumOf { it.hours }
+                val totalHours = headerTotal ?: events.sumOf { it.hours }
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -269,7 +293,7 @@ fun EventsListScreen(
                             color = Color(0xffffffff)
                         )
                         Text(
-                            text = "${events.size} events attended",
+                            text = "$attendedCount events attended",
                             fontSize = 14.sp,
                             color = Color(0xffffffff).copy(alpha = 0.7f)
                         )
@@ -319,7 +343,7 @@ fun EventsListScreen(
 fun EventCard(event: EventDetail) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = if (event.isMandatory) Color(0xFFFFFDE7) else Color.White),
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
@@ -348,10 +372,11 @@ fun EventCard(event: EventDetail) {
             }
             
             // Hours badge
+            val badgeColor = if (event.hours < 0) Color(0xFFF57C00) else Color(0xFF4CAF50)
             Box(
                 modifier = Modifier
                     .background(
-                        Color(0xFF4CAF50),
+                        badgeColor,
                         RoundedCornerShape(8.dp)
                     )
                     .padding(horizontal = 12.dp, vertical = 6.dp)

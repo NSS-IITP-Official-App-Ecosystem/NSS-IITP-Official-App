@@ -6,6 +6,9 @@ import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.phad.chatapp.ui.profile.ProfileUiState
+import com.phad.chatapp.services.TokenRefreshService
+import kotlinx.coroutines.*
+import kotlinx.coroutines.tasks.await
 
 /**
  * Session management for user login state
@@ -20,6 +23,9 @@ class SessionManager(context: Context) {
     // SharedPreferences and Editor
     private val pref: SharedPreferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
     private val editor: SharedPreferences.Editor = pref.edit()
+    
+    // Context for service management
+    private val context: Context = context.applicationContext
     
     // Public variables
     companion object {
@@ -68,6 +74,8 @@ class SessionManager(context: Context) {
         val firebaseUser = FirebaseAuth.getInstance().currentUser
         if (firebaseUser != null) {
             Log.d(TAG, "Firebase user is authenticated: ${firebaseUser.email}")
+            // Start token refresh service for automatic token renewal
+            startTokenRefreshService()
         } else {
             Log.w(TAG, "Firebase user is NOT authenticated!")
         }
@@ -206,12 +214,93 @@ class SessionManager(context: Context) {
     fun logoutUser() {
         Log.d(TAG, "Logging out user")
         
+        // Stop token refresh service
+        stopTokenRefreshService()
+        
         // Sign out from Firebase Auth
         FirebaseAuth.getInstance().signOut()
         
         // Clear all data from SharedPreferences
         editor.clear()
         editor.apply()
+    }
+    
+    /**
+     * Start token refresh service for automatic Firebase token renewal
+     */
+    fun startTokenRefreshService() {
+        try {
+            Log.d(TAG, "Starting token refresh service")
+            TokenRefreshService.startService(context)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start token refresh service", e)
+        }
+    }
+    
+    /**
+     * Stop token refresh service
+     */
+    fun stopTokenRefreshService() {
+        try {
+            Log.d(TAG, "Stopping token refresh service")
+            TokenRefreshService.stopService(context)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to stop token refresh service", e)
+        }
+    }
+    
+    /**
+     * Manually refresh Firebase token (for immediate refresh if needed)
+     */
+    suspend fun refreshFirebaseToken(): Boolean {
+        return try {
+            val currentUser = FirebaseAuth.getInstance().currentUser
+            if (currentUser == null) {
+                Log.w(TAG, "No Firebase user found for token refresh")
+                return false
+            }
+            
+            Log.d(TAG, "Manually refreshing Firebase token")
+            val tokenResult = currentUser.getIdToken(true).await()
+            val newToken = tokenResult.token
+            
+            if (newToken != null) {
+                Log.d(TAG, "✅ Firebase token refreshed successfully")
+                true
+            } else {
+                Log.w(TAG, "⚠️ Token refresh returned null")
+                false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Failed to manually refresh Firebase token", e)
+            false
+        }
+    }
+    
+    /**
+     * Check if Firebase token is valid and refresh if needed
+     */
+    suspend fun ensureValidFirebaseToken(): Boolean {
+        val currentUser = FirebaseAuth.getInstance().currentUser
+        if (currentUser == null) {
+            Log.w(TAG, "No Firebase user found")
+            return false
+        }
+        
+        return try {
+            // Try to get token without forcing refresh first
+            val tokenResult = currentUser.getIdToken(false).await()
+            if (tokenResult.token != null) {
+                Log.d(TAG, "Firebase token is valid")
+                true
+            } else {
+                Log.w(TAG, "Firebase token is null, attempting refresh")
+                refreshFirebaseToken()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Firebase token check failed, attempting refresh", e)
+            refreshFirebaseToken()
+        }
     }
 
     fun createProfileSession(profile: ProfileUiState) {

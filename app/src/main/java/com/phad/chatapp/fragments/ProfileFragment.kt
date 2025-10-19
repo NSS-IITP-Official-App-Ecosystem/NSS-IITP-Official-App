@@ -60,9 +60,9 @@ class ProfileFragment : Fragment() {
                 ProfileScreen(
                     state = state,
                     onLogoutClick = { logout() },
-                    onChatbotClick = {
-                        val intent = Intent(requireContext(), com.phad.chatapp.features.home.faqs.ui.FaqActivity::class.java)
-                        startActivity(intent)
+                    onRefreshClick = {
+                        viewModel.refreshStatistics()
+                        Toast.makeText(requireContext(), "Refreshing...", Toast.LENGTH_SHORT).show()
                     },
                     onLibraryClick = {
                         findNavController().navigate(R.id.action_profileFragment_to_libraryItemListFragment)
@@ -70,6 +70,7 @@ class ProfileFragment : Fragment() {
                     onChatClick = {},
                     onScheduleClick = {},
                     onExportAttendanceClick = { exportAttendanceMatrix() },
+                    onEventHistoryClick = { openEventHistory() },
                     onSwitchInterfaceClick = {
                         val currentInterface = "Teaching Wing"
                         if (teachingWing) {
@@ -107,6 +108,17 @@ class ProfileFragment : Fragment() {
         }
     }
 
+    private fun openEventHistory() {
+        val userType = sessionManager.fetchUserType()
+        if (!userType.equals("Admin", ignoreCase = true)) {
+            Toast.makeText(requireContext(), "Only admins can access event history", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val intent = Intent(requireContext(), com.phad.chatapp.features.events.EventHistoryActivity::class.java)
+        startActivity(intent)
+    }
+
     private fun exportAttendanceMatrix() {
         val userType = sessionManager.fetchUserType()
         if (!userType.equals("Admin", ignoreCase = true)) {
@@ -137,8 +149,8 @@ class ProfileFragment : Fragment() {
                 }.sortedWith(compareBy({ it.name.lowercase() }, { it.rollNumber }))
 
                 // Build per-student event hours based on users.eventsList and total hours from users.hours
-                val perStudentEventHours: MutableMap<String, MutableMap<String, Int>> = mutableMapOf()
-                val totalHoursPerStudent: MutableMap<String, Int> = mutableMapOf()
+                val perStudentEventHours: MutableMap<String, MutableMap<String, Double>> = mutableMapOf()
+                val totalHoursPerStudent: MutableMap<String, Double> = mutableMapOf()
 
                 val eventHoursById = events.associate { it.id to it.hours }
 
@@ -146,7 +158,7 @@ class ProfileFragment : Fragment() {
                     val roll = doc.id
                     @Suppress("UNCHECKED_CAST")
                     val eventsList = doc.get("eventsList") as? List<String> ?: emptyList()
-                    val totalHours = (doc.getLong("hours") ?: 0L).toInt()
+                    val totalHours = (doc.getDouble("hours") ?: 0.0)
                     totalHoursPerStudent[roll] = totalHours
                     val perEvent = perStudentEventHours.getOrPut(roll) { mutableMapOf() }
                     eventsList.forEach { eventId ->

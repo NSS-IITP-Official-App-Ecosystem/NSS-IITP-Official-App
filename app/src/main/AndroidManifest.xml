@@ -43,6 +43,12 @@
             </intent-filter>
         </service>
         
+        <!-- Token Refresh Service for automatic Firebase token renewal -->
+        <service
+            android:name=".services.TokenRefreshService"
+            android:exported="false"
+            android:enabled="true" />
+        
         <!-- Receiver for boot completed to restore notification listening -->
         <receiver
             android:name=".utils.BootCompletedReceiver"
@@ -146,9 +152,11 @@
             android:theme="@style/Theme.ChatApp"
             android:windowSoftInputMode="adjustResize" />
 
-
-            android:theme="@style/Theme.ChatApp"
-            android:windowSoftInputMode="adjustResize" />
+        <!-- Event History Activity -->
+        <activity
+            android:name=".features.events.EventHistoryActivity"
+            android:exported="false"
+            android:theme="@style/Theme.ChatApp" />
 
         <!-- FAQ Activity -->
         <activity
