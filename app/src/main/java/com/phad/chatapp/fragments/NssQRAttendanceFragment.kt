@@ -168,6 +168,9 @@ class NssQRAttendanceFragment : Fragment() {
                     onClearSuccessMessage = {
                         viewModel.clearSuccessMessage()
                     },
+                    onDismissRollResults = {
+                        viewModel.clearRollResults()
+                    },
                     onAddManualAttendance = { event, rollNumbers ->
                         viewModel.addManualAttendance(event.id, rollNumbers)
                     },
@@ -234,6 +237,7 @@ fun QRAttendanceAdminScreen(
     onUpdateEvent: (String, String, String, Date, Date, Date, Double, Boolean, Double, String) -> Unit, // New parameter (added eventId)
     onGeneratePDF: (AttendanceEvent) -> Unit, // PDF generation callback
     onClearSuccessMessage: () -> Unit, // Clear success message callback
+    onDismissRollResults: () -> Unit, // Dismiss roll results dialog
     onAddManualAttendance: (AttendanceEvent, String) -> Unit, // Manual attendance callback
     onMarkAbsent: (AttendanceEvent, String) -> Unit // Mark absent callback
 ) {
@@ -273,6 +277,15 @@ fun QRAttendanceAdminScreen(
             ).show()
             onClearSuccessMessage()
         }
+    }
+
+    // Roll operation results dialog
+    if (uiState.showRollResults && uiState.rollResults.isNotEmpty()) {
+        RollOperationResultsDialog(
+            title = uiState.rollOperationTitle ?: "Operation Results",
+            results = uiState.rollResults,
+            onDismiss = onDismissRollResults
+        )
     }
 
     Scaffold(
@@ -1412,6 +1425,69 @@ fun EventCard(
             isMarkingAbsent = isMarkingAbsent
         )
     }
+}
+
+@Composable
+fun RollOperationResultsDialog(
+    title: String,
+    results: List<com.phad.chatapp.viewmodels.RollOperationResult>,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = title,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 0.dp, max = 360.dp) // make scrollable window bounded
+            ) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(results) { item ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = item.rollNumber,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            val bg = if (item.success) Color(0x334CAF50) else Color(0x33F44336)
+                            val fg = if (item.success) Color(0xFF2E7D32) else Color(0xFFB71C1C)
+                            Surface(
+                                color = bg,
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text(
+                                    text = if (item.success) "Successful" else (item.errorMessage ?: "Unsuccessful"),
+                                    color = fg,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                        Divider(color = Color(0x11000000))
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss) { Text("Close") }
+        }
+    )
 }
 
 @Composable

@@ -70,6 +70,16 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
         Log.d(TAG, "QRAttendanceViewModel initialized")
         loadUserInfo()
     }
+
+
+    /** Clear roll operation results dialog */
+    fun clearRollResults() {
+        _adminUiState.value = _adminUiState.value.copy(
+            rollResults = emptyList(),
+            showRollResults = false,
+            rollOperationTitle = null
+        )
+    }
     
     /**
      * Load current user information
@@ -1271,6 +1281,7 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                 var successCount = 0
                 var errorCount = 0
                 val errors = mutableListOf<String>()
+                val perRollResults = mutableListOf<RollOperationResult>()
 
                 // Process each roll number
                 for (rollNumber in rollNumbers) {
@@ -1290,6 +1301,7 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                             Log.w(TAG, "User/Student document not found for roll number: $rollNumber")
                             errorCount++
                             errors.add("Student not found: $rollNumber")
+                            perRollResults.add(RollOperationResult(rollNumber, false, "Student not found"))
                             continue
                         }
 
@@ -1328,16 +1340,19 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                         if (result.isSuccess) {
                             successCount++
                             Log.d(TAG, "Successfully added manual attendance for: $rollNumber")
+                            perRollResults.add(RollOperationResult(rollNumber, true, null))
                         } else {
                             errorCount++
                             val error = result.exceptionOrNull()?.message ?: "Unknown error"
                             errors.add("$rollNumber: $error")
                             Log.e(TAG, "Failed to add attendance for $rollNumber: $error")
+                            perRollResults.add(RollOperationResult(rollNumber, false, error))
                         }
 
                     } catch (e: Exception) {
                         errorCount++
                         errors.add("$rollNumber: ${e.message}")
+                        perRollResults.add(RollOperationResult(rollNumber, false, e.message))
                         Log.e(TAG, "Error processing roll number $rollNumber", e)
                     }
                 }
@@ -1352,7 +1367,11 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                 }
 
                 _adminUiState.value = _adminUiState.value.copy(
-                    successMessage = message
+                    successMessage = null, // prefer detailed dialog
+                    rollResults = perRollResults,
+                    showRollResults = true,
+                    rollOperationTitle = "Add Attendance Results",
+                    attendeeCount = _adminUiState.value.attendeeCount // unchanged, but explicit to avoid accidental reset
                 )
 
                 // Refresh the current event data if we're in an active session
@@ -1392,6 +1411,7 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                 var successCount = 0
                 var errorCount = 0
                 val errors = mutableListOf<String>()
+                val perRollResults = mutableListOf<RollOperationResult>()
 
                 // Process each roll number
                 for (rollNumber in rollNumbers) {
@@ -1403,16 +1423,19 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                         if (result.isSuccess) {
                             successCount++
                             Log.d(TAG, "Successfully marked absent for: $rollNumber")
+                            perRollResults.add(RollOperationResult(rollNumber, true, null))
                         } else {
                             errorCount++
                             val error = result.exceptionOrNull()?.message ?: "Unknown error"
                             errors.add("$rollNumber: $error")
                             Log.e(TAG, "Failed to mark absent for $rollNumber: $error")
+                            perRollResults.add(RollOperationResult(rollNumber, false, error))
                         }
 
                     } catch (e: Exception) {
                         errorCount++
                         errors.add("$rollNumber: ${e.message}")
+                        perRollResults.add(RollOperationResult(rollNumber, false, e.message))
                         Log.e(TAG, "Error processing roll number $rollNumber for absent marking", e)
                     }
                 }
@@ -1427,7 +1450,10 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                 }
 
                 _adminUiState.value = _adminUiState.value.copy(
-                    successMessage = message
+                    successMessage = null,
+                    rollResults = perRollResults,
+                    showRollResults = true,
+                    rollOperationTitle = "Delete / Mark Absent Results"
                 )
 
                 // Refresh the current event data if we're in an active session
@@ -1485,7 +1511,11 @@ data class AdminQRUiState(
     val showEditEventDialog: Boolean = false,
     val editingEvent: AttendanceEvent? = null,
     val isUpdatingEvent: Boolean = false,
-    val editEventSuccess: Boolean = false
+    val editEventSuccess: Boolean = false,
+    // Roll operations dialog state
+    val rollResults: List<RollOperationResult> = emptyList(),
+    val showRollResults: Boolean = false,
+    val rollOperationTitle: String? = null
 )
 
 /**
@@ -1516,3 +1546,10 @@ sealed class ScanResult {
     data class Success(val message: String) : ScanResult()
     data class Error(val message: String) : ScanResult()
 }
+
+/** Per-roll result model for add/delete operations */
+data class RollOperationResult(
+    val rollNumber: String,
+    val success: Boolean,
+    val errorMessage: String?
+)
