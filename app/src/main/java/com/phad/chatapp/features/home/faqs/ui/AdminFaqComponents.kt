@@ -41,6 +41,7 @@ fun AdminFaqPencilIcon(
 fun AdminFaqRootSectionCard(
     section: FaqSection,
     onClick: () -> Unit,
+    onEditClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -49,12 +50,15 @@ fun AdminFaqRootSectionCard(
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp)
+                .padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
                 Text(
                     text = section.title,
                     style = MaterialTheme.typography.titleMedium,
@@ -66,6 +70,16 @@ fun AdminFaqRootSectionCard(
                     text = "Tap to manage this section",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            IconButton(
+                onClick = onEditClick,
+                modifier = Modifier.padding(start = 8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Edit,
+                    contentDescription = "Edit section name",
+                    tint = MaterialTheme.colorScheme.primary
                 )
             }
         }
@@ -119,16 +133,20 @@ fun AdminFormDialog(
     dialogState: AdminDialogState,
     onFormDataChange: (AdminFormData) -> Unit,
     onConfirm: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onDelete: (() -> Unit)? = null
 ) {
     if (!dialogState.isVisible) return
+    
+    val isSimpleDialog = dialogState.operation == AdminOperation.EDIT_SECTION_NAME || 
+                        dialogState.operation == AdminOperation.ADD_SUBSECTION
     
     Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.9f)
-                .padding(16.dp),
+                .fillMaxWidth(if (isSimpleDialog) 0.85f else 0.98f)
+                .fillMaxHeight(if (isSimpleDialog) 0.4f else 0.9f)
+                .padding(8.dp),
             shape = RoundedCornerShape(16.dp)
         ) {
             Column(
@@ -136,20 +154,38 @@ fun AdminFormDialog(
                     .fillMaxSize()
                     .padding(24.dp)
             ) {
-                Text(
-                    text = dialogState.title,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
+                // Header with title and delete button
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = dialogState.title,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    
+                    // Delete button (only for edit question)
+                    if (dialogState.operation == AdminOperation.EDIT_QUESTION && onDelete != null) {
+                        IconButton(
+                            onClick = onDelete
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Delete question",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                }
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                // Scrollable form content
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState())
-                ) {
+                // Form content
+                if (isSimpleDialog) {
+                    // Simple form without scrolling
                     when (dialogState.operation) {
                         AdminOperation.EDIT_SECTION_NAME -> {
                             SectionNameForm(
@@ -163,14 +199,27 @@ fun AdminFormDialog(
                                 onFormDataChange = onFormDataChange
                             )
                         }
-                        AdminOperation.ADD_QUESTION, AdminOperation.EDIT_QUESTION -> {
-                            QuestionForm(
-                                formData = dialogState.formData,
-                                onFormDataChange = onFormDataChange
-                            )
-                        }
                         else -> {
                             Text("Unsupported operation")
+                        }
+                    }
+                } else {
+                    // Complex form with scrolling
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        when (dialogState.operation) {
+                            AdminOperation.ADD_QUESTION, AdminOperation.EDIT_QUESTION -> {
+                                QuestionForm(
+                                    formData = dialogState.formData,
+                                    onFormDataChange = onFormDataChange
+                                )
+                            }
+                            else -> {
+                                Text("Unsupported operation")
+                            }
                         }
                     }
                 }
@@ -244,56 +293,23 @@ fun QuestionForm(
         
         Spacer(modifier = Modifier.height(12.dp))
         
+        // Helper text for links and tabs - moved above answer field
         Text(
-            text = "Answer Type",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            text = "💡 Tips: Use \\link(url) for links.\nUse \\\\tN to insert indentation for bullet points.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(bottom = 8.dp)
         )
         
-        Spacer(modifier = Modifier.height(8.dp))
-        
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            listOf(AnswerType.TEXT, AnswerType.BULLET_POINTS).forEach { answerType ->
-                FilterChip(
-                    selected = formData.answerType == answerType,
-                    onClick = { onFormDataChange(formData.copy(answerType = answerType)) },
-                    label = { Text(text = if (answerType == AnswerType.TEXT) "Text" else "Bullet Points") }
-                )
-            }
-        }
-        
-        Spacer(modifier = Modifier.height(12.dp))
-        
-        when (formData.answerType) {
-            AnswerType.TEXT -> {
-                OutlinedTextField(
-                    value = formData.textAnswer,
-                    onValueChange = { onFormDataChange(formData.copy(textAnswer = it)) },
-                    label = { Text("Answer") },
-                    modifier = Modifier.fillMaxWidth(),
-                    maxLines = 5
-                )
-                
-                // Link syntax helper text
-                Text(
-                    text = "💡 Tip: Use \\link(url) for clickable links (e.g., \\link(https://example.com))",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-            }
-            AnswerType.BULLET_POINTS -> {
-                BulletPointsForm(
-                    bulletPoints = formData.bulletPoints,
-                    onBulletPointsChange = { 
-                        onFormDataChange(formData.copy(bulletPoints = it)) 
-                    }
-                )
-            }
-        }
+        OutlinedTextField(
+            value = formData.textAnswer,
+            onValueChange = { onFormDataChange(formData.copy(textAnswer = it)) },
+            label = { Text("Answer") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(300.dp),
+            maxLines = 15
+        )
     }
 }
 
@@ -440,121 +456,400 @@ fun BulletPointsForm(
 fun AdminSectionContentView(
     sectionContent: SectionContent,
     currentNode: FaqNode?,
+    currentTab: String,
     onSubSectionClick: (FaqSubSection) -> Unit,
     onQuestionClick: (FaqQuestion) -> Unit,
-    onBackClick: () -> Unit
+    onTabSwitch: (String) -> Unit,
+    onEditSectionName: (FaqNode) -> Unit,
+    onDeleteSection: (FaqNode) -> Unit,
+    onAddSubSection: (FaqNode) -> Unit,
+    onAddQuestion: (FaqNode) -> Unit
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // Back button
+        // Title with edit and delete buttons
+        val displayTitle = if (currentNode?.type == FaqNodeType.SUBSECTION) {
+            currentNode.title
+        } else {
+            sectionContent.section.title
+        }
+        
+        val currentNodeForActions = currentNode ?: FaqNode(
+            id = sectionContent.section.id,
+            title = sectionContent.section.title,
+            type = FaqNodeType.ROOT_SECTION,
+            section = sectionContent.section
+        )
+
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(
-                onClick = onBackClick,
-                modifier = Modifier.padding(bottom = 8.dp)
+            Text(
+                text = displayTitle,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
+            )
+            
+            // Edit button
+            IconButton(
+                onClick = { onEditSectionName(currentNodeForActions) }
             ) {
-                Text("← Back to Sections")
+                Icon(
+                    imageVector = Icons.Default.Edit,
+                    contentDescription = "Edit section name",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+            
+            // Delete button (only for subsections, not root sections)
+            if (currentNode?.type == FaqNodeType.SUBSECTION) {
+                IconButton(
+                    onClick = { onDeleteSection(currentNodeForActions) }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete section",
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
             }
         }
 
-        // Title (section or subsection)
-        if (currentNode?.type == FaqNodeType.SUBSECTION) {
-            Text(
-                text = currentNode.title,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
-        } else {
-            Text(
-                text = sectionContent.section.title,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
-        }
-
+        // Scrollable content area
         LazyColumn(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Subsections (only at section level)
-            if (currentNode?.type != FaqNodeType.SUBSECTION && sectionContent.subSections.isNotEmpty()) {
-                item {
-                    Text(
-                        text = "Sub-sections",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
+            // Content based on current tab
+            when (currentTab) {
+                "subsections" -> {
+                    if (currentNode?.type != FaqNodeType.SUBSECTION) {
+                        // Show subsections (only top-level ones)
+                        val topLevelSubSections = sectionContent.subSections.filter { 
+                            it.parentSubSectionId == null 
+                        }
+                        
+                        items(topLevelSubSections) { subSection ->
+                            AdminContentCardWithActions(
+                                title = subSection.title,
+                                subtitle = subSection.description ?: "Sub-section",
+                                onClick = { onSubSectionClick(subSection) },
+                                onEdit = { 
+                                    val node = FaqNode(
+                                        id = subSection.id,
+                                        title = subSection.title,
+                                        type = FaqNodeType.SUBSECTION,
+                                        sectionId = subSection.sectionId,
+                                        subSectionId = subSection.id,
+                                        subSection = subSection
+                                    )
+                                    onEditSectionName(node)
+                                },
+                                onDelete = {
+                                    val node = FaqNode(
+                                        id = subSection.id,
+                                        title = subSection.title,
+                                        type = FaqNodeType.SUBSECTION,
+                                        sectionId = subSection.sectionId,
+                                        subSectionId = subSection.id,
+                                        subSection = subSection
+                                    )
+                                    onDeleteSection(node)
+                                }
+                            )
+                        }
+                        
+                        // Empty state if no subsections
+                        if (topLevelSubSections.isEmpty()) {
+                            item {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                    )
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(32.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "No sub-sections yet. Click the button below to add one.",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // Subsection view - show nested subsections
+                        val nestedSubSections = sectionContent.subSections.filter { 
+                            it.parentSubSectionId == currentNode.id 
+                        }
+                        
+                        items(nestedSubSections) { subSection ->
+                            AdminContentCardWithActions(
+                                title = subSection.title,
+                                subtitle = subSection.description ?: "Sub-section",
+                                onClick = { onSubSectionClick(subSection) },
+                                onEdit = { 
+                                    val node = FaqNode(
+                                        id = subSection.id,
+                                        title = subSection.title,
+                                        type = FaqNodeType.SUBSECTION,
+                                        sectionId = subSection.sectionId,
+                                        subSectionId = subSection.id,
+                                        subSection = subSection
+                                    )
+                                    onEditSectionName(node)
+                                },
+                                onDelete = {
+                                    val node = FaqNode(
+                                        id = subSection.id,
+                                        title = subSection.title,
+                                        type = FaqNodeType.SUBSECTION,
+                                        sectionId = subSection.sectionId,
+                                        subSectionId = subSection.id,
+                                        subSection = subSection
+                                    )
+                                    onDeleteSection(node)
+                                }
+                            )
+                        }
+                        
+                        // Empty state if no nested subsections
+                        if (nestedSubSections.isEmpty()) {
+                            item {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                    )
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(32.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "No sub-sections yet. Click the button below to add one.",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
-
-                items(sectionContent.subSections) { subSection ->
-                    AdminContentCard(
-                        title = subSection.title,
-                        subtitle = subSection.description ?: "Sub-section",
-                        onClick = { onSubSectionClick(subSection) }
-                    )
-                }
-
-                item {
-                    Spacer(modifier = Modifier.height(16.dp))
+                "questions" -> {
+                    // Show questions
+                    val filteredQuestions = if (currentNode?.type == FaqNodeType.SUBSECTION) {
+                        sectionContent.questions.filter { it.subSectionId == currentNode.id }
+                    } else {
+                        sectionContent.questions.filter { it.subSectionId == null || it.subSectionId == "None" }
+                    }
+                    
+                    items(filteredQuestions) { question ->
+                        AdminContentCardWithActions(
+                            title = question.question,
+                            subtitle = "Question",
+                            onClick = { onQuestionClick(question) },
+                            onEdit = {
+                                val node = FaqNode(
+                                    id = question.id,
+                                    title = question.question,
+                                    type = FaqNodeType.QUESTION,
+                                    sectionId = question.sectionId,
+                                    subSectionId = question.subSectionId,
+                                    question = question
+                                )
+                                onEditSectionName(node)
+                            },
+                            onDelete = {
+                                val node = FaqNode(
+                                    id = question.id,
+                                    title = question.question,
+                                    type = FaqNodeType.QUESTION,
+                                    sectionId = question.sectionId,
+                                    subSectionId = question.subSectionId,
+                                    question = question
+                                )
+                                onDeleteSection(node)
+                            }
+                        )
+                    }
+                    
+                    // Empty state if no questions
+                    if (filteredQuestions.isEmpty()) {
+                        item {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(32.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "No questions yet. Click the button below to add one.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
-
-            // Questions
-            if (sectionContent.questions.isNotEmpty()) {
-                item {
-                    Text(
-                        text = "Questions",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                }
-
-                val filtered = if (currentNode?.type == FaqNodeType.SUBSECTION) {
-                    sectionContent.questions.filter { it.subSectionId == currentNode.subSectionId }
-                } else {
-                    sectionContent.questions.filter { it.subSectionId == null }
-                }
-
-                items(filtered) { question ->
-                    AdminContentCard(
-                        title = question.question,
-                        subtitle = "Question",
-                        onClick = { onQuestionClick(question) }
-                    )
-                }
-            }
-
-            // Empty state
-            if (sectionContent.subSections.isEmpty() && sectionContent.questions.isEmpty()) {
-                item {
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // Add button - positioned just before toggle buttons
+        when (currentTab) {
+            "subsections" -> {
+                if (currentNode?.type != FaqNodeType.SUBSECTION) {
+                    // Show add subsection button for root sections
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { onAddSubSection(currentNodeForActions) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
                         )
                     ) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(32.dp),
+                                .padding(16.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "This section is empty. Use the admin tools to add content.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                text = "+ Add Sub-section",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                         }
                     }
+                } else {
+                    // Only show add subsection button if it's NOT the teaching_technical subsection
+                    if (currentNode.id != "teaching_technical") {
+                        Card(
+                            onClick = { onAddSubSection(currentNodeForActions) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 12.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer
+                            )
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "+ Add Sub-section",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
+                    }
                 }
+            }
+            "questions" -> {
+                // Show add question button
+                Card(
+                    onClick = { onAddQuestion(currentNodeForActions) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    )
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "+ Add Question",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                }
+            }
+        }
+        
+        // Tab buttons - fixed at bottom with improved UI
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp)
+        ) {
+            // Sub-sections tab with left rounded corners
+            Button(
+                onClick = { onTabSwitch("subsections") },
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 2.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (currentTab == "subsections") 
+                        MaterialTheme.colorScheme.primary 
+                    else MaterialTheme.colorScheme.surfaceVariant
+                ),
+                shape = RoundedCornerShape(
+                    topStart = 8.dp,
+                    bottomStart = 8.dp,
+                    topEnd = 0.dp,
+                    bottomEnd = 0.dp
+                )
+            ) {
+                Text("Sub-sections")
+            }
+            
+            // Questions tab with right rounded corners
+            Button(
+                onClick = { onTabSwitch("questions") },
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 2.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (currentTab == "questions") 
+                        MaterialTheme.colorScheme.primary 
+                    else MaterialTheme.colorScheme.surfaceVariant
+                ),
+                shape = RoundedCornerShape(
+                    topStart = 0.dp,
+                    bottomStart = 0.dp,
+                    topEnd = 8.dp,
+                    bottomEnd = 8.dp
+                )
+            ) {
+                Text("Questions")
             }
         }
     }
@@ -587,6 +882,70 @@ fun AdminContentCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AdminContentCardWithActions(
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 2
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            
+            // Edit button
+            IconButton(
+                onClick = onEdit,
+                modifier = Modifier.padding(start = 8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Edit,
+                    contentDescription = "Edit",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+            
+            // Delete button
+            IconButton(
+                onClick = onDelete,
+                modifier = Modifier.padding(start = 4.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Delete",
+                    tint = MaterialTheme.colorScheme.error
+                )
+            }
         }
     }
 }

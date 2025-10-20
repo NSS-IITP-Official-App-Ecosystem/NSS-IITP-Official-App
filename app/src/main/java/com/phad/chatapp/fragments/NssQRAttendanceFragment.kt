@@ -30,6 +30,8 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import java.util.Date
@@ -39,6 +41,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import androidx.compose.material3.*
+import androidx.compose.ui.window.Dialog
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -1749,250 +1752,192 @@ fun CreateEventDialog(
         showError = !errorMessage.isNullOrEmpty()
     }
 
-    AlertDialog(
-        onDismissRequest = {
-            if (!isCreating) {
-                onDismiss()
-            }
-        },
-        title = {
-            Text(
-                text = "Create New Event",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
-            )
-        },
-        text = {
-            Column {
-                // Event Name Field
-                OutlinedTextField(
-                    value = eventName,
-                    onValueChange = {
-                        eventName = it
-                        showError = false
-                    },
-                    label = { Text("Event Name *") },
-                    placeholder = { Text("Enter event name") },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !isCreating,
-                    isError = showError && eventName.trim().isEmpty(),
-                    supportingText = {
-                        if (showError && eventName.trim().isEmpty()) {
-                            Text(
-                                text = "Event name is required",
-                                color = MaterialTheme.colorScheme.error
-                            )
-                        }
-                    }
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Event Date Field with prominent styling
-                OutlinedTextField(
-                    value = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault()).format(selectedDate),
-                    onValueChange = { },
-                    label = {
-                        Text(
-                            "Event Date",
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 14.sp
-                        )
-                    },
-                    placeholder = { Text("Select event date") },
+    // Custom Dialog with fixed header and footer, scrollable content
+    Dialog(onDismissRequest = { 
+        if (!isCreating) {
+            onDismiss()
+        }
+    }) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = RoundedCornerShape(16.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 600.dp) // Limit max height to prevent overflow
+            ) {
+                // Fixed Header
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { showDatePicker = true },
-                    enabled = false,
-                    readOnly = true,
-                    textStyle = TextStyle(
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 14.sp,
-                        color = Color(0xFF333333)
-                    ),
-                    trailingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.DateRange,
-                            contentDescription = "Select Date",
-                            tint = Color(0xFF4CAF50) // Green color for date
-                        )
-                    }
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Time Pickers Row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        .background(MaterialTheme.colorScheme.surface)
+                        .padding(20.dp, 16.dp)
                 ) {
-                    // Opening Time Field with prominent styling
-                    OutlinedTextField(
-                        value = com.phad.chatapp.utils.AttendanceEventUtils.formatTimeForPicker(openingTime),
-                        onValueChange = { },
-                        label = {
-                            Text(
-                                "Opening Time",
-                                fontWeight = FontWeight.Medium,
-                                fontSize = 14.sp
-                            )
-                        },
-                        placeholder = { Text("Select opening time") },
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable { showOpeningTimePicker = true },
-                        enabled = false,
-                        readOnly = true,
-                        textStyle = TextStyle(
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 14.sp,
-                            color = Color(0xFF333333)
-                        ),
-                        trailingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.AccessTime,
-                                contentDescription = "Select Opening Time",
-                                tint = Color(0xFF2196F3) // Blue color for time
-                            )
-                        }
-                    )
-
-                    // Closing Time Field with prominent styling
-                    OutlinedTextField(
-                        value = com.phad.chatapp.utils.AttendanceEventUtils.formatTimeForPicker(closingTime),
-                        onValueChange = { },
-                        label = {
-                            Text(
-                                "Closing Time",
-                                fontWeight = FontWeight.Medium,
-                                fontSize = 14.sp
-                            )
-                        },
-                        placeholder = { Text("Select closing time") },
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable { showClosingTimePicker = true },
-                        enabled = false,
-                        readOnly = true,
-                        textStyle = TextStyle(
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 14.sp,
-                            color = Color(0xFF333333)
-                        ),
-                        trailingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.AccessTime,
-                                contentDescription = "Select Closing Time",
-                                tint = Color(0xFF2196F3) // Blue color for time
-                            )
-                        }
+                    Text(
+                        text = "Create New Event",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Hours Field with prominent styling
-                OutlinedTextField(
-                    value = eventHours,
-                    onValueChange = { newValue ->
-                        // Allow decimal input and ensure non-negative
-                        if (newValue.isEmpty() || isValidDecimalInput(newValue)) {
-                            eventHours = newValue
+                // Scrollable Content
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp)
+                ) {
+                    // Event Name Field
+                    OutlinedTextField(
+                        value = eventName,
+                        onValueChange = {
+                            eventName = it
                             showError = false
+                        },
+                        label = { Text("Event Name *") },
+                        placeholder = { Text("Enter event name") },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isCreating,
+                        isError = showError && eventName.trim().isEmpty(),
+                        supportingText = {
+                            if (showError && eventName.trim().isEmpty()) {
+                                Text(
+                                    text = "Event name is required",
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
                         }
-                    },
-                    label = {
-                        Text(
-                            "Hours",
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 14.sp
-                        )
-                    },
-                    placeholder = { Text("Enter volunteer hours (e.g., 2.5)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !isCreating,
-                    textStyle = TextStyle(
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 14.sp,
-                        color = Color(0xFF333333)
-                    ),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    trailingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.Star,
-                            contentDescription = "Hours",
-                            tint = Color(0xFFFFC107) // Golden color for hours
-                        )
-                    },
-                    isError = showError && eventHours.trim().isEmpty(),
-                    supportingText = {
-                        if (showError && eventHours.trim().isEmpty()) {
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Event Date Field with prominent styling
+                    OutlinedTextField(
+                        value = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault()).format(selectedDate),
+                        onValueChange = { },
+                        label = {
                             Text(
-                                text = "Hours value is required",
-                                color = MaterialTheme.colorScheme.error
+                                "Event Date",
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 14.sp
+                            )
+                        },
+                        placeholder = { Text("Select event date") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showDatePicker = true },
+                        enabled = false,
+                        readOnly = true,
+                        textStyle = TextStyle(
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 14.sp,
+                            color = Color(0xFF333333)
+                        ),
+                        trailingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.DateRange,
+                                contentDescription = "Select Date",
+                                tint = Color(0xFF4CAF50) // Green color for date
                             )
                         }
-                    }
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Location Field with prominent styling
-                OutlinedTextField(
-                    value = eventLocation,
-                    onValueChange = {
-                        eventLocation = it
-                        showError = false
-                    },
-                    label = {
-                        Text(
-                            "Location (Optional)",
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 14.sp
-                        )
-                    },
-                    placeholder = { Text("Enter event location") },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !isCreating,
-                    textStyle = TextStyle(
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 14.sp,
-                        color = Color(0xFF333333)
-                    ),
-                    trailingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.LocationOn,
-                            contentDescription = "Location",
-                            tint = Color(0xFFE91E63) // Pink color for location
-                        )
-                    }
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Mandatory Event checkbox
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(
-                        checked = isMandatory,
-                        onCheckedChange = { isMandatory = it },
-                        enabled = !isCreating
                     )
-                    Text("Mandatory event", modifier = Modifier.padding(start = 8.dp))
-                }
 
-                // Negative hours input shown only when mandatory
-                if (isMandatory) {
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Time Pickers Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Opening Time Field with prominent styling
+                        OutlinedTextField(
+                            value = com.phad.chatapp.utils.AttendanceEventUtils.formatTimeForPicker(openingTime),
+                            onValueChange = { },
+                            label = {
+                                Text(
+                                    "Opening Time",
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 14.sp
+                                )
+                            },
+                            placeholder = { Text("Select opening time") },
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { showOpeningTimePicker = true },
+                            enabled = false,
+                            readOnly = true,
+                            textStyle = TextStyle(
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 14.sp,
+                                color = Color(0xFF333333)
+                            ),
+                            trailingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.AccessTime,
+                                    contentDescription = "Select Opening Time",
+                                    tint = Color(0xFF2196F3) // Blue color for time
+                                )
+                            }
+                        )
+
+                        // Closing Time Field with prominent styling
+                        OutlinedTextField(
+                            value = com.phad.chatapp.utils.AttendanceEventUtils.formatTimeForPicker(closingTime),
+                            onValueChange = { },
+                            label = {
+                                Text(
+                                    "Closing Time",
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 14.sp
+                                )
+                            },
+                            placeholder = { Text("Select closing time") },
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { showClosingTimePicker = true },
+                            enabled = false,
+                            readOnly = true,
+                            textStyle = TextStyle(
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 14.sp,
+                                color = Color(0xFF333333)
+                            ),
+                            trailingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.AccessTime,
+                                    contentDescription = "Select Closing Time",
+                                    tint = Color(0xFF2196F3) // Blue color for time
+                                )
+                            }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Hours Field with prominent styling
                     OutlinedTextField(
-                        value = negativeHours,
+                        value = eventHours,
                         onValueChange = { newValue ->
-                            if (newValue.isEmpty() || newValue.all { it.isDigit() }) {
-                                negativeHours = newValue
+                            // Only allow digits and ensure non-negative
+                            if (newValue.isEmpty() || (newValue.all { it.isDigit() } && newValue.toIntOrNull()?.let { it >= 0 } == true)) {
+                                eventHours = newValue
                                 showError = false
                             }
                         },
-                        label = { Text("Negative Hours *") },
-                        placeholder = { Text("Hours to deduct for absentees") },
+                        label = {
+                            Text(
+                                "Hours",
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 14.sp
+                            )
+                        },
+                        placeholder = { Text("Enter volunteer hours") },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !isCreating,
                         textStyle = TextStyle(
@@ -2001,110 +1946,208 @@ fun CreateEventDialog(
                             color = Color(0xFF333333)
                         ),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        isError = showError && negativeHours.trim().isEmpty(),
+                        trailingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Star,
+                                contentDescription = "Hours",
+                                tint = Color(0xFFFFC107) // Golden color for hours
+                            )
+                        },
+                        isError = showError && eventHours.trim().isEmpty(),
                         supportingText = {
-                            if (showError && negativeHours.trim().isEmpty()) {
+                            if (showError && eventHours.trim().isEmpty()) {
                                 Text(
-                                    text = "Negative hours are required for mandatory events",
+                                    text = "Hours value is required",
                                     color = MaterialTheme.colorScheme.error
                                 )
                             }
                         }
                     )
-                }
 
-                // Event Description Field
-                OutlinedTextField(
-                    value = eventDescription,
-                    onValueChange = { eventDescription = it },
-                    label = { Text("Description (Optional)") },
-                    placeholder = { Text("Enter event description") },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !isCreating,
-                    minLines = 2,
-                    maxLines = 4
-                )
-
-                // Error message
-                if (showError) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = if (validationErrorMessage.isNotEmpty()) validationErrorMessage else (errorMessage ?: "Unknown error"),
-                        color = MaterialTheme.colorScheme.error,
-                        fontSize = 14.sp
-                    )
-                }
-
-                // Loading indicator
-                if (isCreating) {
                     Spacer(modifier = Modifier.height(16.dp))
-                    Row(
+
+                    // Location Field with prominent styling
+                    OutlinedTextField(
+                        value = eventLocation,
+                        onValueChange = {
+                            eventLocation = it
+                            showError = false
+                        },
+                        label = {
+                            Text(
+                                "Location (Optional)",
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 14.sp
+                            )
+                        },
+                        placeholder = { Text("Enter event location") },
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Creating event...",
+                        enabled = !isCreating,
+                        textStyle = TextStyle(
+                            fontWeight = FontWeight.Medium,
                             fontSize = 14.sp,
-                            color = Color.Gray
+                            color = Color(0xFF333333)
+                        ),
+                        trailingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.LocationOn,
+                                contentDescription = "Location",
+                                tint = Color(0xFFE91E63) // Pink color for location
+                            )
+                        }
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Mandatory Event checkbox
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = isMandatory,
+                            onCheckedChange = { isMandatory = it },
+                            enabled = !isCreating
                         )
+                        Text("Mandatory event", modifier = Modifier.padding(start = 8.dp))
+                    }
+
+                    // Negative hours input shown only when mandatory
+                    if (isMandatory) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = negativeHours,
+                            onValueChange = { newValue ->
+                                if (newValue.isEmpty() || newValue.all { it.isDigit() }) {
+                                    negativeHours = newValue
+                                    showError = false
+                                }
+                            },
+                            label = { Text("Negative Hours *") },
+                            placeholder = { Text("Hours to deduct for absentees") },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !isCreating,
+                            textStyle = TextStyle(
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 14.sp,
+                                color = Color(0xFF333333)
+                            ),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            isError = showError && negativeHours.trim().isEmpty(),
+                            supportingText = {
+                                if (showError && negativeHours.trim().isEmpty()) {
+                                    Text(
+                                        text = "Negative hours are required for mandatory events",
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
+                        )
+                    }
+
+                    // Event Description Field
+                    OutlinedTextField(
+                        value = eventDescription,
+                        onValueChange = { eventDescription = it },
+                        label = { Text("Description (Optional)") },
+                        placeholder = { Text("Enter event description") },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isCreating,
+                        minLines = 2,
+                        maxLines = 4
+                    )
+
+                    // Error message
+                    if (showError) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = if (validationErrorMessage.isNotEmpty()) validationErrorMessage else (errorMessage ?: "Unknown error"),
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 14.sp
+                        )
+                    }
+
+                    // Loading indicator
+                    if (isCreating) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Creating event...",
+                                fontSize = 14.sp,
+                                color = Color.Gray
+                            )
+                        }
+                    }
+
+                    // Add bottom padding to ensure content doesn't get cut off
+                    Spacer(modifier = Modifier.height(20.dp))
+                }
+
+                // Fixed Footer with buttons
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surface)
+                        .padding(20.dp, 16.dp),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(
+                        onClick = onDismiss,
+                        enabled = !isCreating
+                    ) {
+                        Text("Cancel")
+                    }
+                    
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
+                    Button(
+                        onClick = {
+                            val trimmedName = eventName.trim()
+                            val trimmedHours = eventHours.trim()
+                            val hoursValue = trimmedHours.toDoubleOrNull() ?: -1.0
+                            val negHoursValue = negativeHours.trim().toDoubleOrNull() ?: 0.0
+
+                            when {
+                                trimmedName.isEmpty() -> {
+                                    showError = true
+                                    validationErrorMessage = "Event name is required"
+                                }
+                                trimmedHours.isEmpty() || hoursValue < 0.0 -> {
+                                    showError = true
+                                    validationErrorMessage = "Please enter valid hours (0 or greater)"
+                                }
+                                isMandatory && negativeHours.trim().isEmpty() -> {
+                                    showError = true
+                                    validationErrorMessage = "Negative hours are required for mandatory events"
+                                }
+                                !com.phad.chatapp.utils.AttendanceEventUtils.validateEventTimes(openingTime, closingTime) -> {
+                                    showError = true
+                                    validationErrorMessage = "Closing time must be after opening time"
+                                }
+                                // Allow creation even if opening time is in the past (no restriction)
+                                else -> {
+                                    showError = false
+                                    validationErrorMessage = ""
+                                    onCreateEvent(trimmedName, eventDescription.trim(), eventLocation.trim(), selectedDate, openingTime, closingTime, hoursValue, isMandatory, negHoursValue)
+                                }
+                            }
+                        },
+                        enabled = !isCreating,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2196F3))
+                    ) {
+                        Text("Create Event")
                     }
                 }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val trimmedName = eventName.trim()
-                    val trimmedHours = eventHours.trim()
-                    val hoursValue = trimmedHours.toDoubleOrNull() ?: -1.0
-                    val negHoursValue = negativeHours.trim().toDoubleOrNull() ?: 0.0
-
-                    when {
-                        trimmedName.isEmpty() -> {
-                            showError = true
-                            validationErrorMessage = "Event name is required"
-                        }
-                        trimmedHours.isEmpty() || hoursValue < 0.0 -> {
-                            showError = true
-                            validationErrorMessage = "Please enter valid hours (0 or greater)"
-                        }
-                        isMandatory && negativeHours.trim().isEmpty() -> {
-                            showError = true
-                            validationErrorMessage = "Negative hours are required for mandatory events"
-                        }
-                        !com.phad.chatapp.utils.AttendanceEventUtils.validateEventTimes(openingTime, closingTime) -> {
-                            showError = true
-                            validationErrorMessage = "Closing time must be after opening time"
-                        }
-                        // Allow creation even if opening time is in the past (no restriction)
-                        else -> {
-                            showError = false
-                            validationErrorMessage = ""
-                            onCreateEvent(trimmedName, eventDescription.trim(), eventLocation.trim(), selectedDate, openingTime, closingTime, hoursValue, isMandatory, negHoursValue)
-                        }
-                    }
-                },
-                enabled = !isCreating,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2196F3))
-            ) {
-                Text("Create Event")
-            }
-        },
-        dismissButton = {
-            TextButton(
-                onClick = onDismiss,
-                enabled = !isCreating
-            ) {
-                Text("Cancel")
             }
         }
-    )
+    }
 
     // Date Picker Dialog
     if (showDatePicker) {

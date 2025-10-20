@@ -60,10 +60,16 @@ fun EventHistoryScreen(
     viewModel: AttendanceViewModel = viewModel(factory = AttendanceViewModelFactory(LocalContext.current.applicationContext as android.app.Application))
 ) {
     var closedEvents by remember { mutableStateOf<List<AttendanceEvent>>(emptyList()) }
+    var filteredEvents by remember { mutableStateOf<List<AttendanceEvent>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var isRefreshing by remember { mutableStateOf(false) }
     var showMakeLiveDialog by remember { mutableStateOf<AttendanceEvent?>(null) }
     var lastRefreshTime by remember { mutableStateOf(System.currentTimeMillis()) }
+    var searchQuery by remember { mutableStateOf("") }
+    var showFilterDialog by remember { mutableStateOf(false) }
+    var fromDateMillis by remember { mutableStateOf<Long?>(null) }
+    var toDateMillis by remember { mutableStateOf<Long?>(null) }
+    var mandatoryOnly by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
 
     // Load events function with caching optimization
@@ -107,10 +113,32 @@ fun EventHistoryScreen(
         }
     }
 
+    // Apply filters and search
+    fun applyFilters() {
+        val queryLower = searchQuery.trim().lowercase()
+        filteredEvents = closedEvents.filter { event ->
+            val name = event.getEventName().lowercase()
+            val matchesQuery = if (queryLower.isEmpty()) true else name.contains(queryLower)
+
+            val eventDate = event.getEventDateAsDate()
+            val inFrom = fromDateMillis?.let { eventDate.time >= it } ?: true
+            val inTo = toDateMillis?.let { eventDate.time <= it } ?: true
+            val dateOk = inFrom && inTo
+
+            val mandatoryOk = if (mandatoryOnly) event.isMandatory else true
+
+            matchesQuery && dateOk && mandatoryOk
+        }
+    }
+
     // Load events on first launch and auto-refresh on screen open
     LaunchedEffect(Unit) {
         loadEvents(forceRefresh = true) // Force refresh on screen open
     }
+
+    // Re-apply filters when source changes
+    LaunchedEffect(closedEvents) { applyFilters() }
+    LaunchedEffect(searchQuery, fromDateMillis, toDateMillis, mandatoryOnly) { applyFilters() }
 
     Scaffold(
         topBar = {
@@ -195,6 +223,30 @@ fun EventHistoryScreen(
                 .padding(paddingValues)
                 .padding(16.dp)
         ) {
+            // Search and Filter row just below header
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    placeholder = { Text(text = "Search by event name") }
+                )
+                IconButton(onClick = { showFilterDialog = true }) {
+                    Icon(
+                        imageVector = Icons.Default.DateRange,
+                        contentDescription = "Filter",
+                        tint = Color(0xFF2196F3)
+                    )
+                }
+            }
+
             if (isLoading) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -202,7 +254,7 @@ fun EventHistoryScreen(
                 ) {
                     CircularProgressIndicator()
                 }
-            } else if (closedEvents.isEmpty()) {
+            } else if (filteredEvents.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -211,7 +263,7 @@ fun EventHistoryScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "No closed events found",
+                            text = "No events found",
                             fontSize = 18.sp,
                             textAlign = TextAlign.Center,
                             color = Color.Gray
@@ -227,7 +279,7 @@ fun EventHistoryScreen(
                 }
             } else {
                 Text(
-                    text = "Closed Events (${closedEvents.size})",
+                    text = "Closed Events (${filteredEvents.size})",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(bottom = 16.dp)
@@ -236,7 +288,7 @@ fun EventHistoryScreen(
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(closedEvents) { event ->
+                    items(filteredEvents) { event ->
                         ClosedEventCard(
                             event = event,
                             onMakeLiveClick = { showMakeLiveDialog = event }
@@ -280,6 +332,127 @@ fun EventHistoryScreen(
                 }
             }
         )
+    }
+    // Filter dialog
+    FilterDialog(
+        show = showFilterDialog,
+        onDismiss = { showFilterDialog = false },
+        fromDateMillis = fromDateMillis,
+        toDateMillis = toDateMillis,
+        mandatoryOnly = mandatoryOnly,
+        onFromDateChange = { fromDateMillis = it },
+        onToDateChange = { toDateMillis = it },
+        onMandatoryChange = { mandatoryOnly = it },
+        onApply = { /* applyFilters will react via state */ }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FilterDialog(
+    show: Boolean,
+    onDismiss: () -> Unit,
+    fromDateMillis: Long?,
+    toDateMillis: Long?,
+    mandatoryOnly: Boolean,
+    onFromDateChange: (Long?) -> Unit,
+    onToDateChange: (Long?) -> Unit,
+    onMandatoryChange: (Boolean) -> Unit,
+    onApply: () -> Unit
+) {
+    if (!show) return
+
+    // States for date pickers
+    var showFromPicker by remember { mutableStateOf(false) }
+    var showToPicker by remember { mutableStateOf(false) }
+
+    val fromState = rememberDatePickerState(initialSelectedDateMillis = fromDateMillis)
+    val toState = rememberDatePickerState(initialSelectedDateMillis = toDateMillis)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Filter Events") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                // From date selector
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = "From Date: " + (fromDateMillis?.let { java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.ENGLISH).format(java.util.Date(it)) } ?: "Not set"))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { showFromPicker = true }) { Text("Pick") }
+                        if (fromDateMillis != null) {
+                            TextButton(onClick = { onFromDateChange(null) }) { Text("Clear") }
+                        }
+                    }
+                }
+
+                // To date selector
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = "To Date: " + (toDateMillis?.let { java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.ENGLISH).format(java.util.Date(it)) } ?: "Not set"))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { showToPicker = true }) { Text("Pick") }
+                        if (toDateMillis != null) {
+                            TextButton(onClick = { onToDateChange(null) }) { Text("Clear") }
+                        }
+                    }
+                }
+
+                // Mandatory toggle
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Checkbox(checked = mandatoryOnly, onCheckedChange = { onMandatoryChange(it) })
+                    Text(text = "Mandatory only")
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                onApply()
+                onDismiss()
+            }) { Text("Apply") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+
+    if (showFromPicker) {
+        DatePickerDialog(
+            onDismissRequest = { showFromPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    onFromDateChange(fromState.selectedDateMillis)
+                    showFromPicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = { TextButton(onClick = { showFromPicker = false }) { Text("Cancel") } }
+        ) {
+            DatePicker(state = fromState)
+        }
+    }
+
+    if (showToPicker) {
+        DatePickerDialog(
+            onDismissRequest = { showToPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    onToDateChange(toState.selectedDateMillis)
+                    showToPicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = { TextButton(onClick = { showToPicker = false }) { Text("Cancel") } }
+        ) {
+            DatePicker(state = toState)
+        }
     }
 }
 

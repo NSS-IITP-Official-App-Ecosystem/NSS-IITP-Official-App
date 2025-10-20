@@ -8,8 +8,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 class FaqViewModel(
-    private val repository: FaqRepository,
-    private val interfaceType: String
+    private val repository: FaqRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(FaqUiState())
@@ -19,11 +18,52 @@ class FaqViewModel(
         loadFaqData()
     }
 
+    fun refresh() {
+        loadFaqData()
+    }
+
+    private fun loadSubSectionContent(subSection: FaqSubSection) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            
+            try {
+                val result = repository.getSectionContent(subSection.id)
+                result.fold(
+                    onSuccess = { sectionContent ->
+                        _uiState.update { state ->
+                            state.copy(
+                                isLoading = false,
+                                loadedSubSectionContent = state.loadedSubSectionContent + (subSection.id to sectionContent),
+                                error = null
+                            )
+                        }
+                    },
+                    onFailure = { error ->
+                        _uiState.update { state ->
+                            state.copy(
+                                isLoading = false,
+                                error = error.message ?: "Failed to load subsection content"
+                            )
+                        }
+                    }
+                )
+            } catch (e: Exception) {
+                _uiState.update { state ->
+                    state.copy(
+                        isLoading = false,
+                        error = e.message ?: "An unexpected error occurred"
+                    )
+                }
+            }
+        }
+    }
+
     private fun loadFaqData() {
         viewModelScope.launch {
-            repository.getFaqData(interfaceType)
-                .onStart { _uiState.update { it.copy(isLoading = true) } }
-                .collect { result ->
+            _uiState.update { it.copy(isLoading = true) }
+
+            try {
+                repository.getFaqData().collect { result ->
                     result.fold(
                         onSuccess = { (sections, subSections, questions) ->
                             _uiState.update { state ->
@@ -46,6 +86,14 @@ class FaqViewModel(
                         }
                     )
                 }
+            } catch (e: Exception) {
+                _uiState.update { state ->
+                    state.copy(
+                        isLoading = false,
+                        error = e.message
+                    )
+                }
+            }
         }
     }
 
@@ -58,6 +106,8 @@ class FaqViewModel(
                     )
                 }
                 is FaqNavigationItem.SubSection -> {
+                    // Load subsection content when navigating to a subsection
+                    loadSubSectionContent(item.subSection)
                     state.copy(
                         navigationStack = state.navigationStack + item
                     )
@@ -81,8 +131,13 @@ class FaqViewModel(
 
     fun navigateBack() {
         _uiState.update { state ->
+            val newNavigationStack = state.navigationStack.dropLast(1)
+            val lastItem = state.navigationStack.lastOrNull()
+            
+            // If we're going back from a subsection, we can optionally clear its loaded content
+            // to free up memory, but for now we'll keep it for better performance
             state.copy(
-                navigationStack = state.navigationStack.dropLast(1)
+                navigationStack = newNavigationStack
             )
         }
     }
@@ -91,6 +146,7 @@ class FaqViewModel(
         _uiState.update { state ->
             state.copy(
                 navigationStack = emptyList(),
+                loadedSubSectionContent = emptyMap(), // Clear loaded content when going to root
                 isSearchMode = false,
                 searchQuery = "",
                 searchResults = emptyList()
@@ -127,17 +183,8 @@ class FaqViewModel(
                     val questionMatches = question.question.lowercase().contains(lowerQuery)
                     
                     // Search in answer content
-                    val answerMatches = when (question.answerType) {
-                        AnswerType.TEXT -> {
-                            val answerText = question.answer as? String ?: ""
-                            answerText.lowercase().contains(lowerQuery)
-                        }
-                        AnswerType.BULLET_POINTS -> {
-                            @Suppress("UNCHECKED_CAST")
-                            val bulletPoints = question.answer as? List<String> ?: emptyList()
-                            bulletPoints.any { point -> point.lowercase().contains(lowerQuery) }
-                        }
-                    }
+                    val answerText = question.answer as? String ?: ""
+                    val answerMatches = answerText.lowercase().contains(lowerQuery)
                     
                     // If either question or answer contains the search term
                     if (questionMatches || answerMatches) {
@@ -172,18 +219,29 @@ class FaqViewModel(
         
         return when (val currentItem = state.navigationStack.lastOrNull()) {
             is FaqNavigationItem.Section -> {
-                // Show both subsections and root-level questions together
+                // Show subsections first, then direct questions
                 val subSections = state.subSections[currentItem.section.id]?.map { FaqNavigationItem.SubSection(it) } ?: emptyList()
-                val rootQuestions = state.questions[currentItem.section.id]?.filter { it.subSectionId == null }?.map { FaqNavigationItem.Question(it) } ?: emptyList()
-                subSections + rootQuestions
+                val directQuestions = state.questions[currentItem.section.id]?.filter { 
+                    it.subSectionId == null 
+                }?.map { FaqNavigationItem.Question(it) } ?: emptyList()
+                subSections + directQuestions
             }
             is FaqNavigationItem.SubSection -> {
-                // Return questions for this sub-section
-                state.questions[currentItem.subSection.sectionId]?.filter { 
-                    it.subSectionId == currentItem.subSection.id 
-                }?.map { 
-                    FaqNavigationItem.Question(it)
-                } ?: emptyList()
+                // Get the loaded content for this subsection
+                val sectionContent = state.loadedSubSectionContent[currentItem.subSection.id]
+                if (sectionContent != null) {
+                    // Show subsections first, then questions
+                    val subSections = sectionContent.subSections.map { FaqNavigationItem.SubSection(it) }
+                    val questions = sectionContent.questions.map { FaqNavigationItem.Question(it) }
+                    subSections + questions
+                } else {
+                    // Fallback to old logic if content not loaded yet
+                    state.questions[currentItem.subSection.sectionId]?.filter { 
+                        it.subSectionId == currentItem.subSection.id 
+                    }?.map { 
+                        FaqNavigationItem.Question(it)
+                    } ?: emptyList()
+                }
             }
             is FaqNavigationItem.Question, null -> {
                 // At root level or showing a question, show sections
@@ -199,13 +257,12 @@ class FaqViewModel(
     }
 
     class Factory(
-        private val repository: FaqRepository,
-        private val interfaceType: String
+        private val repository: FaqRepository
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(FaqViewModel::class.java)) {
-                return FaqViewModel(repository, interfaceType) as T
+                return FaqViewModel(repository) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }

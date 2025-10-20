@@ -20,6 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.width
 import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -52,6 +53,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.IconButton
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.phad.chatapp.R
@@ -104,9 +108,16 @@ fun ProfileScreen(
     onSwitchInterfaceClick: () -> Unit,
     onSem1HoursClick: () -> Unit,
     onSem2HoursClick: () -> Unit,
+    onFaqsClick: () -> Unit = {},
     currentInterface: String,
     teachingWing: Boolean
 ) {
+    // Menu state
+    var showMenu by remember { mutableStateOf(false) }
+    var showLogoutDialog by remember { mutableStateOf(false) }
+    
+    // Determine user type
+    val isAdmin = !state.isStudent
     // Debug logging for ProfileScreen
     Log.d("ProfileScreen", "=== PROFILE SCREEN DEBUG ===")
     Log.d("ProfileScreen", "Received state: $state")
@@ -178,52 +189,52 @@ fun ProfileScreen(
                 ) {
                     Image(
                         painter = painterResource(
-                            id = if (currentInterface == "NSS") R.drawable.nss_logo_main else R.drawable.app_logo_top_left
+                            id = if (currentInterface == "NSS") R.drawable.nss_logo_main else R.drawable.logo
                         ),
                         contentDescription = if (currentInterface == "NSS") "NSS Logo" else "Teaching Wing Logo",
                         colorFilter = if (currentInterface == "NSS") null else null,
-                        modifier = Modifier.size(width = if (currentInterface == "NSS") 60.dp else 72.dp, height = if (currentInterface == "NSS") 60.dp else 40.dp)
+                        modifier = Modifier.size(48.dp),
+                        contentScale = ContentScale.Fit
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        // Show switch icon for any user with teachingWing == true
+                        // Standalone Switch User icon (to the left of menu)
                         if (teachingWing) {
-                            val switchTargetText = if (currentInterface == "Teaching Wing") "NSS" else "Teaching Wing"
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier
-                                    .clickable { onSwitchInterfaceClick() }
-                                    .padding(horizontal = 4.dp)
+                            IconButton(
+                                onClick = onSwitchInterfaceClick,
+                                modifier = Modifier.size(40.dp)
                             ) {
-                                Image(
-                                    painter = painterResource(id = R.drawable.switch_account),
-                                    contentDescription = "Switch to $switchTargetText",
-                                    colorFilter = ColorFilter.tint(onBackgroundColor),
-                                    modifier = Modifier.size(30.dp)
+                                Icon(
+                                    painter = painterResource(id = R.drawable.ic_group),
+                                    contentDescription = "Switch User",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp)
                                 )
                             }
-                            Spacer(modifier = Modifier.size(12.dp))
+                            Spacer(modifier = Modifier.size(8.dp))
                         }
-
-                        // Show library button only in Teaching Wing interface
-                        if (teachingWing && currentInterface == "Teaching Wing") {
-                            Image(
-                                painter = painterResource(id = R.drawable.ic_library),
-                                contentDescription = "Library Icon",
-                                colorFilter = ColorFilter.tint(onBackgroundColor),
-                                modifier = Modifier
-                                    .size(30.dp)
-                                    .clickable { onLibraryClick() }
+                        // Hamburger menu button (single button for all options)
+                        Box {
+                            ProfileMenuButton(
+                                onMenuClick = { showMenu = true },
+                                modifier = Modifier.size(40.dp)
                             )
-                            Spacer(modifier = Modifier.size(16.dp))
+                            
+                            // Profile menu dropdown
+                            ProfileMenu(
+                                expanded = showMenu,
+                                onDismiss = { showMenu = false },
+                                onSwitchUser = onSwitchInterfaceClick,
+                                onLibrary = onLibraryClick,
+                                onRefresh = onRefreshClick,
+                                onExportAttendance = onExportAttendanceClick,
+                                onEventHistory = onEventHistoryClick,
+                                onFaqs = onFaqsClick,
+                                onLogout = { showLogoutDialog = true },
+                                isTeachingWing = teachingWing,
+                                isAdmin = isAdmin,
+                                currentInterface = currentInterface
+                            )
                         }
-                        Image(
-                            painter = painterResource(id = R.drawable.ic_refresh),
-                            contentDescription = "Refresh",
-                            colorFilter = ColorFilter.tint(onBackgroundColor),
-                            modifier = Modifier
-                                .size(30.dp)
-                                .clickable { onRefreshClick() }
-                        )
                     }
                 }
 
@@ -296,7 +307,7 @@ fun ProfileScreen(
                         .padding(24.dp)
                         .padding(bottom = 80.dp) // Reduced bottom padding since logout button is now inside content
                 ) {
-                    // Name section with logout button
+                    // Name section with refresh button
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -310,9 +321,9 @@ fun ProfileScreen(
                             modifier = Modifier.weight(1f)
                         )
                         
-                        // Logout button
-                        LogoutButton(
-                            onLogoutClick = onLogoutClick,
+                        // Refresh button
+                        RefreshButton(
+                            onRefreshClick = onRefreshClick,
                             modifier = Modifier.padding(start = 16.dp)
                         )
                     }
@@ -342,12 +353,7 @@ fun ProfileScreen(
                         // College Email only
                         LabeledInfoItem(label = "College Email", value = state.collegeEmail, color = onSurfaceColor)
                         
-                        // Admin-only actions
-                        Spacer(modifier = Modifier.height(24.dp))
-                        AdminActions(
-                            onExportAttendanceClick = onExportAttendanceClick,
-                            onEventHistoryClick = onEventHistoryClick
-                        )
+                        // Admin actions are now in the hamburger menu
 
                         // Add bottom spacing to ensure content is not cut off
                         Spacer(modifier = Modifier.height(32.dp))
@@ -367,6 +373,43 @@ fun ProfileScreen(
 //                    .background(Color.White)
 //            )
         }
+    }
+    
+    // Logout confirmation dialog
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            title = { 
+                Text(
+                    text = "Logout",
+                    fontWeight = FontWeight.Bold
+                ) 
+            },
+            text = { 
+                Text("Are you sure you want to logout?") 
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showLogoutDialog = false
+                        onLogoutClick()
+                    }
+                ) {
+                    Text(
+                        text = "Logout",
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showLogoutDialog = false }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
@@ -449,43 +492,6 @@ fun LabeledInfoItem(label: String, value: String, color: Color) {
     }
 }
 
-@Composable
-private fun AdminActions(
-    onExportAttendanceClick: () -> Unit,
-    onEventHistoryClick: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-    ) {
-        // Removed label text above admin actions per design request
-        Button(
-            onClick = onExportAttendanceClick,
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                text = "Export Attendance Matrix (Excel)",
-                color = Color.White,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
-        
-        Spacer(modifier = Modifier.height(12.dp))
-        
-        Button(
-            onClick = onEventHistoryClick,
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                text = "Event History",
-                color = Color.White,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
-    }
-}
 
 @Composable
 fun CircularProfileImage(
@@ -635,7 +641,180 @@ fun LogoutButton(
     }
 }
 
+@Composable
+fun RefreshButton(
+    onRefreshClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(
+                RoundedCornerShape(
+                    topStart = 8.dp,
+                    topEnd = 8.dp,
+                    bottomEnd = 8.dp,
+                    bottomStart = 8.dp
+                )
+            )
+            .background(Color(0xFF2196F3).copy(alpha = 0.1f))
+            .clickable { onRefreshClick() }
+            .padding(8.dp)
+    ) {
+        Icon(
+            painter = painterResource(id = R.drawable.ic_refresh),
+            contentDescription = "Refresh",
+            tint = Color(0xFF2196F3),
+            modifier = Modifier.size(24.dp)
+        )
+    }
+}
+
 @Preview(showBackground = true)
+@Composable
+fun ProfileMenuButton(
+    onMenuClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    IconButton(
+        onClick = onMenuClick,
+        modifier = modifier
+    ) {
+        Icon(
+            painter = painterResource(id = R.drawable.ic_more_vert),
+            contentDescription = "Menu",
+            tint = Color.White,
+            modifier = Modifier.size(24.dp)
+        )
+    }
+}
+
+@Composable
+fun ProfileMenu(
+    expanded: Boolean,
+    onDismiss: () -> Unit,
+    onSwitchUser: () -> Unit,
+    onLibrary: () -> Unit,
+    onRefresh: () -> Unit,
+    onExportAttendance: () -> Unit,
+    onEventHistory: () -> Unit,
+    onFaqs: () -> Unit,
+    onLogout: () -> Unit,
+    isTeachingWing: Boolean,
+    isAdmin: Boolean,
+    currentInterface: String,
+    modifier: Modifier = Modifier
+    ) {
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismiss,
+        modifier = modifier.width(224.dp) // Fixed width like in the reference design
+    ) {
+        // Note: Switch User moved to header as a standalone icon
+
+        // Library - only for teaching wing users in Teaching Wing interface
+        if (isTeachingWing && currentInterface == "Teaching Wing") {
+            DropdownMenuItem(
+                text = { Text("Library", color = Color(0xFF444343)) },
+                onClick = {
+                    onLibrary()
+                    onDismiss()
+                },
+                leadingIcon = {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_book),
+                        contentDescription = null,
+                        tint = Color(0xFF444343)
+                    )
+                }
+            )
+        }
+
+        // Refresh - available for all users
+        DropdownMenuItem(
+            text = { Text("Refresh", color = Color(0xFF444343)) },
+            onClick = {
+                onRefresh()
+                onDismiss()
+            },
+            leadingIcon = {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_refresh),
+                    contentDescription = null,
+                    tint = Color(0xFF444343)
+                )
+            }
+        )
+
+        // Export Attendance Matrix - only for admins
+        if (isAdmin) {
+            DropdownMenuItem(
+                text = { Text("Export Attendance Matrix", color = Color(0xFF444343)) },
+                onClick = {
+                    onExportAttendance()
+                    onDismiss()
+                },
+                leadingIcon = {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_download),
+                        contentDescription = null,
+                        tint = Color(0xFF444343)
+                    )
+                }
+            )
+        }
+
+        // Event History - only for admins
+        if (isAdmin) {
+            DropdownMenuItem(
+                text = { Text("Event History", color = Color(0xFF444343)) },
+                onClick = {
+                    onEventHistory()
+                    onDismiss()
+                },
+                leadingIcon = {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_calendar),
+                        contentDescription = null,
+                        tint = Color(0xFF444343)
+                    )
+                }
+            )
+        }
+
+        // FAQs/Help - available for all users
+        DropdownMenuItem(
+            text = { Text("Help & Support", color = Color(0xFF444343)) },
+            onClick = {
+                onFaqs()
+                onDismiss()
+            },
+            leadingIcon = {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_faq),
+                    contentDescription = null,
+                    tint = Color(0xFF444343)
+                )
+            }
+        )
+
+        // Logout - available for all users
+        DropdownMenuItem(
+            text = { Text("Logout", color = Color(0xFF444343)) },
+            onClick = {
+                onLogout()
+                onDismiss()
+            },
+                leadingIcon = {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_logout),
+                        contentDescription = null,
+                        tint = Color(0xFF444343)
+                    )
+                }
+        )
+    }
+}
+
 @Composable
 private fun ProfilePreview() {
     MaterialTheme {
@@ -649,6 +828,7 @@ private fun ProfilePreview() {
             onSwitchInterfaceClick = {},
             onSem1HoursClick = {},
             onSem2HoursClick = {},
+            onFaqsClick = {},
             currentInterface = "Teaching Wing",
             teachingWing = true
         )

@@ -1,0 +1,52 @@
+SECTIONS
+- hierarchy: NSS IIT Patna Hierarchy
+- wing_specific: Wing Specific Information
+- general: General Questions
+
+SUB_SECTIONS
+[f1a8000d-ad41-4641-98e9-1810ef657f00]
+  - 72edb6c1-b7a5-495e-9838-f39094deac5f: hiii (parent=None)
+[hierarchy]
+  - leadership: Leadership (parent=None)
+  - positions: Positions & Teams (parent=None)
+[wing_specific]
+  - committees: Committees (parent=teaching_technical)
+  - general_info: General Information (parent=teaching_technical)
+  - policies: Policies & Guidelines (parent=teaching_technical)
+  - schools: Teaching Locations (parent=teaching_technical)
+  - teaching_technical: Teaching & Technical Wing (parent=)
+
+QUESTIONS
+[general]
+  - comparison: How does NSS compare to NSO and NCC? (sub_section_id=None)
+  - nss_significance: What is the significance of NSS? (sub_section_id=None)
+  - requirements: What are the NSS Requirements? (sub_section_id=None)
+  - what_is_nss: What is NSS? (sub_section_id=None)
+  - where_conducted: Where is NSS conducted? (sub_section_id=None)
+[hierarchy]
+  - advisory_team: Who is in the Advisory Team (4th year)? (sub_section_id=positions)
+  - leadership_info: Who are the leaders? (sub_section_id=leadership)
+  - wing_mentors_hierarchy: Who are the Wing Mentors (2nd year)? (sub_section_id=positions)
+  - wing_secretaries_hierarchy: Who are the Wing Secretaries (3rd year)? (sub_section_id=positions)
+[wing_specific]
+  - absence_information: If I am unable to attend a class or event due to illness or a personal reason, whom should I inform? Will I have an opportunity to make up for my abse (sub_section_id=teaching_technical)
+  - committee_change: If I am initially allotted to a particular committee after the interview, will I have an opportunity to change it later? (sub_section_id=teaching_technical)
+  - committee_selection: How can I get selected for a particular committee in the Teaching and Technical Wing? (sub_section_id=teaching_technical)
+  - emergency_contact: In case of an emergency or any complaints/questions, whom should I contact? (sub_section_id=teaching_technical)
+  - events_committee: Tell me about the Events Committee (sub_section_id=teaching_technical)
+  - foundation_academy: Tell me about Foundation Academy (sub_section_id=teaching_technical)
+  - government_schools: Which government schools are covered? (sub_section_id=teaching_technical)
+  - hours_monitoring: Will there be a system in place for volunteers to monitor their hours throughout the semester? (sub_section_id=teaching_technical)
+  - hours_requirement: How many hours will I obtain from the Teaching Wing? How many hours am I required to complete in the first and second semesters? (sub_section_id=teaching_technical)
+  - incomplete_hours: What will happen if I am unable to complete the required number of hours? Can I complete my remaining hours from other NSS activities? (sub_section_id=teaching_technical)
+  - info_leave_policy: Leave Policy (sub_section_id=teaching_technical)
+  - leave_semester: Can I choose to leave the Teaching and Technical Wing at the end of the first semester? (sub_section_id=teaching_technical)
+  - social_media_committee: Tell me about the Social Media Committee (sub_section_id=teaching_technical)
+  - sub_divisions: What are the various sub-divisions existing in the Teaching Wing and what are their functions? (sub_section_id=teaching_technical)
+  - teaching_opportunity: If I am part of the Events or Social Media & Photography Committee, will I still have the opportunity to teach students? (sub_section_id=teaching_technical)
+  - teaching_pocs: Who are the POCs for different locations? (sub_section_id=teaching_technical)
+  - transportation: Will there be a transportation facility available for volunteers? Will NSS provide compensation for transportation costs? (sub_section_id=teaching_technical)
+  - tshirt_policy: Is it compulsory to buy the Teaching and Technical Wing T-shirt? Am I required to wear it at all times? (sub_section_id=teaching_technical)
+  - tutorial_block: Tell me about Tutorial Block (sub_section_id=teaching_technical)
+  - wing_mentors: Who are the Wing Mentors? (sub_section_id=teaching_technical)
+  - wing_secretaries: Who are the Wing Secretaries? (sub_section_id=teaching_technical)

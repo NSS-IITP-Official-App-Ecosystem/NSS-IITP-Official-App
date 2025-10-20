@@ -9,13 +9,10 @@ class FaqActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        val interfaceType = intent.getStringExtra("interface_type") ?: "nss"
-        
         setContent {
             MaterialTheme {
                 FaqScreen(
-                    onNavigateBack = { finish() },
-                    interfaceType = interfaceType
+                    onNavigateBack = { finish() }
                 )
             }
         }
