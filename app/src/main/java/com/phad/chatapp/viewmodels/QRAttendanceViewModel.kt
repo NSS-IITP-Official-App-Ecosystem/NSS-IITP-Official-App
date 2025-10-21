@@ -1267,6 +1267,16 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
 
                 Log.d(TAG, "Parsed roll numbers: $rollNumbers")
 
+                // initialize progress for adding
+                _adminUiState.value = _adminUiState.value.copy(
+                    showRollProgress = true,
+                    rollProgressProcessed = 0,
+                    rollProgressTotal = rollNumbers.size,
+                    rollProgressTitle = "Adding Attendance"
+                )
+                // Allow UI a moment to render the progress dialog before heavy work
+                delay(50)
+
                 // Get current admin information
                 val adminId = _adminUiState.value.adminId
                 val adminName = _adminUiState.value.adminName
@@ -1284,13 +1294,32 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                 val perRollResults = mutableListOf<RollOperationResult>()
 
                 // Process each roll number
-                for (rollNumber in rollNumbers) {
+                for ((idx, rollNumber) in rollNumbers.withIndex()) {
                     try {
                         Log.d(TAG, "Processing roll number: $rollNumber")
                         
-                        // Prefer unified users collection; fallback to legacy Student collection
-                        val userResult = repository.getUserByRollNumber(rollNumber)
-                        val legacyStudentResult = if (userResult.getOrNull() == null) repository.getStudentByRollNumber(rollNumber) else Result.success(null)
+                        // Check if roll number is already in the event (case-insensitive) by fetching current event data
+                        val currentEventResult = repository.getAttendanceEvent(eventId)
+                        if (currentEventResult.isSuccess) {
+                            val currentEvent = currentEventResult.getOrNull()
+                            val isAlreadyAttending = currentEvent?.attendees?.any { 
+                                it.rollNumber.equals(rollNumber, ignoreCase = true) 
+                            } ?: false
+                            
+                            if (isAlreadyAttending) {
+                                Log.w(TAG, "Roll number $rollNumber is already marked for attendance")
+                                errorCount++
+                                errors.add("Already marked: $rollNumber")
+                                perRollResults.add(RollOperationResult(rollNumber, false, "Already marked"))
+                                continue
+                            }
+                        } else {
+                            Log.w(TAG, "Could not fetch current event data for duplicate check: ${currentEventResult.exceptionOrNull()?.message}")
+                        }
+                        
+                        // Prefer unified users collection; fallback to legacy Student collection (case-insensitive)
+                        val userResult = repository.getUserByRollNumberCaseInsensitive(rollNumber)
+                        val legacyStudentResult = if (userResult.getOrNull() == null) repository.getStudentByRollNumberCaseInsensitive(rollNumber) else Result.success(null)
 
                         if (userResult.isFailure) {
                             Log.e(TAG, "Failed to get user data for roll number: $rollNumber, error: ${userResult.exceptionOrNull()?.message}")
@@ -1355,6 +1384,11 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                         perRollResults.add(RollOperationResult(rollNumber, false, e.message))
                         Log.e(TAG, "Error processing roll number $rollNumber", e)
                     }
+
+                    // emit progress after each roll
+                    _adminUiState.value = _adminUiState.value.copy(
+                        rollProgressProcessed = idx + 1
+                    )
                 }
 
                 // Update UI state with results
@@ -1366,12 +1400,16 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                     "Added attendance for $successCount student(s). Failed for $errorCount: ${errors.joinToString(", ")}"
                 }
 
+                // Sort results: unsuccessful first, then successful
+                val sortedResults = perRollResults.sortedBy { it.success }
+
                 _adminUiState.value = _adminUiState.value.copy(
                     successMessage = null, // prefer detailed dialog
-                    rollResults = perRollResults,
+                    rollResults = sortedResults,
                     showRollResults = true,
                     rollOperationTitle = "Add Attendance Results",
-                    attendeeCount = _adminUiState.value.attendeeCount // unchanged, but explicit to avoid accidental reset
+                    attendeeCount = _adminUiState.value.attendeeCount, // unchanged, but explicit to avoid accidental reset
+                    showRollProgress = false
                 )
 
                 // Refresh the current event data if we're in an active session
@@ -1408,13 +1446,23 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
 
                 Log.d(TAG, "Parsed roll numbers: $rollNumbers")
 
+                // initialize progress for deletion
+                _adminUiState.value = _adminUiState.value.copy(
+                    showRollProgress = true,
+                    rollProgressProcessed = 0,
+                    rollProgressTotal = rollNumbers.size,
+                    rollProgressTitle = "Deleting / Marking Absent"
+                )
+                // Allow UI a moment to render the progress dialog before heavy work
+                delay(50)
+
                 var successCount = 0
                 var errorCount = 0
                 val errors = mutableListOf<String>()
                 val perRollResults = mutableListOf<RollOperationResult>()
 
                 // Process each roll number
-                for (rollNumber in rollNumbers) {
+                for ((idx, rollNumber) in rollNumbers.withIndex()) {
                     try {
                         Log.d(TAG, "Processing roll number for absent marking: $rollNumber")
                         
@@ -1438,6 +1486,11 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                         perRollResults.add(RollOperationResult(rollNumber, false, e.message))
                         Log.e(TAG, "Error processing roll number $rollNumber for absent marking", e)
                     }
+
+                    // emit progress after each roll
+                    _adminUiState.value = _adminUiState.value.copy(
+                        rollProgressProcessed = idx + 1
+                    )
                 }
 
                 // Update UI state with results
@@ -1449,11 +1502,15 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                     "Marked absent for $successCount student(s). Failed for $errorCount: ${errors.joinToString(", ")}"
                 }
 
+                // Sort results: unsuccessful first, then successful
+                val sortedResults = perRollResults.sortedBy { it.success }
+
                 _adminUiState.value = _adminUiState.value.copy(
                     successMessage = null,
-                    rollResults = perRollResults,
+                    rollResults = sortedResults,
                     showRollResults = true,
-                    rollOperationTitle = "Delete / Mark Absent Results"
+                    rollOperationTitle = "Delete / Mark Absent Results",
+                    showRollProgress = false
                 )
 
                 // Refresh the current event data if we're in an active session
@@ -1515,7 +1572,12 @@ data class AdminQRUiState(
     // Roll operations dialog state
     val rollResults: List<RollOperationResult> = emptyList(),
     val showRollResults: Boolean = false,
-    val rollOperationTitle: String? = null
+    val rollOperationTitle: String? = null,
+    // Roll batch progress
+    val showRollProgress: Boolean = false,
+    val rollProgressProcessed: Int = 0,
+    val rollProgressTotal: Int = 0,
+    val rollProgressTitle: String? = null
 )
 
 /**

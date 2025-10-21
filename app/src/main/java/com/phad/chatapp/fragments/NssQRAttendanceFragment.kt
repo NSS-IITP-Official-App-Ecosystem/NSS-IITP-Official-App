@@ -291,6 +291,15 @@ fun QRAttendanceAdminScreen(
         )
     }
 
+    // Roll batch progress dialog
+    if (uiState.showRollProgress) {
+        RollOperationProgressDialog(
+            title = uiState.rollProgressTitle ?: "Processing Rolls",
+            processed = uiState.rollProgressProcessed,
+            total = uiState.rollProgressTotal
+        )
+    }
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         floatingActionButton = {
@@ -1490,6 +1499,46 @@ fun RollOperationResultsDialog(
         confirmButton = {
             Button(onClick = onDismiss) { Text("Close") }
         }
+    )
+}
+
+@Composable
+fun RollOperationProgressDialog(
+    title: String,
+    processed: Int,
+    total: Int
+) {
+    val progress = if (total > 0) processed.toFloat() / total.toFloat() else 0f
+    AlertDialog(
+        onDismissRequest = { /* non-dismissible while processing */ },
+        title = {
+            Text(
+                text = title,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                LinearProgressIndicator(
+                    progress = progress,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "$processed / $total",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        },
+        confirmButton = {},
+        dismissButton = {}
     )
 }
 

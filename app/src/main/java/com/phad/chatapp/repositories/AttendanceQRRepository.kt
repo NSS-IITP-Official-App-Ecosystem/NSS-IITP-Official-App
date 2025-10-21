@@ -372,8 +372,8 @@ class AttendanceQRRepository {
                 return@withContext Result.failure(Exception("Event not found"))
             }
 
-            // Find the attendee record to remove
-            val attendeeToRemove = event.attendees.find { it.rollNumber == rollNumber }
+            // Find the attendee record to remove (case-insensitive)
+            val attendeeToRemove = event.attendees.find { it.rollNumber.equals(rollNumber, ignoreCase = true) }
             if (attendeeToRemove == null) {
                 Log.e(TAG, "Attendee not found in event: $rollNumber")
                 return@withContext Result.failure(Exception("Attendee not found in event"))
@@ -387,8 +387,8 @@ class AttendanceQRRepository {
 
             Log.d(TAG, "Performing Firestore update with: $updates")
 
-            // Remove from subcollection attendance document
-            val attendanceDocRef = docRef.collection("attendance").document(rollNumber)
+            // Remove from subcollection attendance document (use actual roll number from found attendee)
+            val attendanceDocRef = docRef.collection("attendance").document(attendeeToRemove.rollNumber)
             attendanceDocRef.delete().await()
 
             // Update parent event counters and embedded list
@@ -398,8 +398,8 @@ class AttendanceQRRepository {
 
             // Update student statistics in users collection (reverse the increments)
             try {
-                Log.d(TAG, "Updating student statistics for: $rollNumber")
-                val userRef = firestore.collection("users").document(rollNumber)
+                Log.d(TAG, "Updating student statistics for: ${attendeeToRemove.rollNumber}")
+                val userRef = firestore.collection("users").document(attendeeToRemove.rollNumber)
                 val eventHours = event.hours
                 val semester = getSemesterFromDate(event.eventDate)
                 val sem1Hours = if (semester == 1) eventHours else 0
@@ -825,6 +825,36 @@ class AttendanceQRRepository {
     }
 
     /**
+     * Get user information by roll number (case-insensitive)
+     */
+    suspend fun getUserByRollNumberCaseInsensitive(rollNumber: String): Result<Map<String, Any>?> = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "Getting user by roll number (case-insensitive): $rollNumber")
+            
+            // First try exact match
+            val exactResult = getUserByRollNumber(rollNumber)
+            if (exactResult.isSuccess && exactResult.getOrNull() != null) {
+                return@withContext exactResult
+            }
+            
+            // If not found, try case-insensitive search
+            val allUsers = usersCollection.get().await()
+            for (doc in allUsers.documents) {
+                if (doc.id.equals(rollNumber, ignoreCase = true)) {
+                    Log.d(TAG, "Found case-insensitive match: ${doc.id}")
+                    return@withContext Result.success(doc.data)
+                }
+            }
+            
+            Log.d(TAG, "No case-insensitive match found")
+            return@withContext Result.success(null)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting user by roll number (case-insensitive)", e)
+            return@withContext Result.failure(e)
+        }
+    }
+
+    /**
      * Get student information by roll number from users collection (legacy support)
      */
     suspend fun getStudentByRollNumber(rollNumber: String): Result<Map<String, Any>?> = withContext(Dispatchers.IO) {
@@ -846,6 +876,37 @@ class AttendanceQRRepository {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error getting student by roll number: $rollNumber", e)
+            return@withContext Result.failure(e)
+        }
+    }
+
+    /**
+     * Get student information by roll number (case-insensitive, legacy support)
+     */
+    suspend fun getStudentByRollNumberCaseInsensitive(rollNumber: String): Result<Map<String, Any>?> = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "Getting student by roll number (case-insensitive, legacy): $rollNumber")
+            
+            // First try exact match
+            val exactResult = getStudentByRollNumber(rollNumber)
+            if (exactResult.isSuccess && exactResult.getOrNull() != null) {
+                return@withContext exactResult
+            }
+            
+            // If not found, try case-insensitive search
+            val usersCollection = firestore.collection("users")
+            val allUsers = usersCollection.get().await()
+            for (doc in allUsers.documents) {
+                if (doc.id.equals(rollNumber, ignoreCase = true)) {
+                    Log.d(TAG, "Found case-insensitive match (legacy): ${doc.id}")
+                    return@withContext Result.success(doc.data)
+                }
+            }
+            
+            Log.d(TAG, "No case-insensitive match found (legacy)")
+            return@withContext Result.success(null)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting student by roll number (case-insensitive, legacy)", e)
             return@withContext Result.failure(e)
         }
     }
