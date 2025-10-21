@@ -74,18 +74,15 @@ android {
         // Configure native library alignment for 16KB page size compatibility
         jniLibs {
             useLegacyPackaging = false
+            // Exclude misaligned ML Kit util library until aligned builds are available
+            excludes += setOf("**/libimage_processing_util_jni.so")
         }
     }
     
     // Configure NDK for 16KB page size alignment (use default NDK)
     // NDK version will be automatically detected from Android SDK
     
-    // Force SoLoader version resolution to prevent 64-bit crashes
-    configurations.all {
-        resolutionStrategy {
-            force("com.facebook.soloader:soloader:0.10.4")
-        }
-    }
+    // Remove forced SoLoader to avoid pulling outdated native libs that are not 16KB-aligned
 
     // Configure Compose options
     composeOptions {
@@ -118,8 +115,14 @@ dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 
     // Cloudinary for image uploads - updated configuration
-    implementation("com.cloudinary:cloudinary-android:2.3.1")
-    implementation("com.cloudinary:cloudinary-core:1.34.0")
+    implementation("com.cloudinary:cloudinary-android:2.3.1") {
+        exclude(group = "com.facebook.fresco")
+        exclude(group = "com.facebook.soloader")
+    }
+    implementation("com.cloudinary:cloudinary-core:1.34.0") {
+        exclude(group = "com.facebook.fresco")
+        exclude(group = "com.facebook.soloader")
+    }
 
     // UI Components
     implementation("de.hdodenhof:circleimageview:3.1.0")
@@ -200,7 +203,8 @@ dependencies {
     // QR Code generation and scanning
     implementation("com.google.zxing:core:3.5.2")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
-    implementation("com.google.mlkit:barcode-scanning:17.2.0")
+    // ML Kit - latest available in repos
+    implementation("com.google.mlkit:barcode-scanning:17.3.0")
 
 
     // Testing dependencies
@@ -244,6 +248,5 @@ dependencies {
     implementation("com.itextpdf:itext7-core:7.2.5")
     implementation("com.itextpdf:html2pdf:4.0.5")
     
-    // Force SoLoader version to fix 64-bit device crashes
-    implementation("com.facebook.soloader:soloader:0.10.4")
+    // Remove explicit SoLoader dependency; not needed and may introduce misaligned native libs
 }
