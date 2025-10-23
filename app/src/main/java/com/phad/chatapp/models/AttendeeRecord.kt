@@ -100,4 +100,12 @@ data class AttendeeRecord(
     fun withDeviceId(deviceId: String): AttendeeRecord {
         return this.copy(deviceId = deviceId)
     }
+
+    /**
+     * Create attendee record with uppercase roll number for consistency
+     */
+    @Exclude
+    fun withUppercaseRollNumber(): AttendeeRecord {
+        return this.copy(rollNumber = rollNumber.uppercase())
+    }
 }

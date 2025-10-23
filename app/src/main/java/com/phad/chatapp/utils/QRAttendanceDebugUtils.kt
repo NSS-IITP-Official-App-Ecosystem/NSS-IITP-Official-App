@@ -3,18 +3,18 @@ package com.phad.chatapp.utils
 import android.util.Log
 import com.phad.chatapp.models.QRAttendanceData
 import com.phad.chatapp.services.QRAttendanceService
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import com.phad.chatapp.services.QRValidationResult
+import kotlinx.coroutines.delay
 
 /**
  * Debug utilities for QR attendance system
- * Helps diagnose issues with QR code generation and validation
+ * Provides testing and debugging capabilities
  */
 object QRAttendanceDebugUtils {
-    private const val TAG = "QRAttendanceDebug"
+    private const val TAG = "QRAttendanceDebugUtils"
     
     /**
-     * Test QR code generation and validation flow
+     * Test the complete QR attendance flow
      */
     suspend fun testQRFlow(
         sessionId: String,
@@ -22,236 +22,212 @@ object QRAttendanceDebugUtils {
         adminId: String,
         studentId: String,
         qrService: QRAttendanceService
-    ): TestResult = withContext(Dispatchers.Default) {
-        val results = mutableListOf<String>()
+    ): DebugTestResult {
+        Log.d(TAG, "=== QR ATTENDANCE FLOW TEST START ===")
+        Log.d(TAG, "Test parameters:")
+        Log.d(TAG, "  - SessionId: $sessionId")
+        Log.d(TAG, "  - EventId: $eventId")
+        Log.d(TAG, "  - AdminId: $adminId")
+        Log.d(TAG, "  - StudentId: $studentId")
+        
+        val report = StringBuilder()
         var success = true
         
         try {
-            results.add("=== QR Attendance Flow Test ===")
-            results.add("Session ID: $sessionId")
-            results.add("Event ID: $eventId")
-            results.add("Admin ID: $adminId")
-            results.add("Student ID: $studentId")
-            results.add("")
-            
             // Step 1: Register session
-            results.add("Step 1: Registering session...")
-            qrService.registerSession(sessionId, adminId, eventId)
-            results.add("✓ Session registered successfully")
-            results.add("")
+            Log.d(TAG, "Step 1: Registering session...")
+            report.appendLine("Step 1: Registering session...")
+            QRSecurityValidator.getInstance().registerSession(sessionId, adminId, eventId)
+            report.appendLine("✅ Session registered successfully")
+            Log.d(TAG, "✅ Session registered successfully")
             
             // Step 2: Generate QR code
-            results.add("Step 2: Generating QR code...")
+            Log.d(TAG, "Step 2: Generating QR code...")
+            report.appendLine("Step 2: Generating QR code...")
             val qrData = QRAttendanceData.create(sessionId, eventId, adminId)
-            results.add("✓ QR data created:")
-            results.add("  - QR ID: ${qrData.qrId}")
-            results.add("  - Timestamp: ${qrData.timestamp}")
-            results.add("  - Age: ${qrData.getAgeInSeconds()}s")
-            results.add("  - Valid: ${qrData.isValid()}")
-            results.add("  - Integrity: ${qrData.isIntegrityValid()}")
-            results.add("  - Data Complete: ${qrData.isDataComplete()}")
-            results.add("")
+            report.appendLine("✅ QR code data created successfully")
+            report.appendLine("  - QR ID: ${qrData.qrId}")
+            report.appendLine("  - Timestamp: ${qrData.timestamp}")
+            report.appendLine("  - SessionId: ${qrData.sessionId}")
+            report.appendLine("  - EventId: ${qrData.eventId}")
+            report.appendLine("  - AdminId: ${qrData.adminId}")
+            Log.d(TAG, "✅ QR code data created successfully - ID: ${qrData.qrId}")
             
-            // Step 3: Convert to JSON
-            results.add("Step 3: Converting to JSON...")
-            val qrJson = qrData.toJson()
-            results.add("✓ JSON generated (${qrJson.length} chars)")
-            results.add("JSON preview: ${qrJson.take(100)}...")
-            results.add("")
+            // Step 3: Validate QR code
+            Log.d(TAG, "Step 3: Validating QR code...")
+            report.appendLine("Step 3: Validating QR code...")
             
-            // Step 4: Parse JSON back
-            results.add("Step 4: Parsing JSON back...")
-            val parsedData = QRAttendanceData.fromJson(qrJson)
-            if (parsedData != null) {
-                results.add("✓ JSON parsed successfully")
-                results.add("  - Matches original: ${parsedData == qrData}")
-            } else {
-                results.add("✗ Failed to parse JSON")
-                success = false
-            }
-            results.add("")
+            // Add small delay to simulate real-world timing
+            delay(100)
             
-            // Step 5: Validate QR code
-            results.add("Step 5: Validating QR code...")
-            val validationResult = qrService.validateQRCode(qrJson, studentId)
+            val validationResult = qrService.validateQRCode(qrData.toJson(), studentId)
             if (validationResult.isSuccess) {
                 val result = validationResult.getOrNull()!!
-                results.add("✓ Validation completed")
-                results.add("  - Valid: ${result.isValid}")
-                results.add("  - Reason: ${result.reason}")
-                if (!result.isValid) {
+                if (result.isValid) {
+                    report.appendLine("✅ QR code validation successful")
+                    Log.d(TAG, "✅ QR code validation successful")
+                } else {
+                    report.appendLine("❌ QR code validation failed: ${result.reason}")
+                    Log.e(TAG, "❌ QR code validation failed: ${result.reason}")
                     success = false
                 }
             } else {
-                results.add("✗ Validation failed: ${validationResult.exceptionOrNull()?.message}")
+                val error = validationResult.exceptionOrNull()?.message ?: "Unknown error"
+                report.appendLine("❌ QR code validation error: $error")
+                Log.e(TAG, "❌ QR code validation error: $error")
                 success = false
             }
-            results.add("")
             
-            // Step 6: Generate bitmap
-            results.add("Step 6: Generating QR bitmap...")
-            val bitmapResult = qrService.generateQRCodeBitmap(qrData)
-            if (bitmapResult.isSuccess) {
-                val bitmap = bitmapResult.getOrNull()!!
-                results.add("✓ Bitmap generated successfully")
-                results.add("  - Size: ${bitmap.width}x${bitmap.height} (Expected: 1000x1000)")
-                results.add("  - Config: ${bitmap.config}")
-                results.add("  - Size verification: ${if (bitmap.width == 1000 && bitmap.height == 1000) "✓ CORRECT" else "✗ INCORRECT"}")
-                results.add("  - Display size: 400dp (optimized for projection)")
+            // Step 4: Check session cache
+            Log.d(TAG, "Step 4: Checking session cache...")
+            report.appendLine("Step 4: Checking session cache...")
+            val sessionInfo = QRSecurityValidator.getInstance().getSessionInfo(sessionId)
+            if (sessionInfo != null) {
+                report.appendLine("✅ Session found in cache:")
+                report.appendLine("  - AdminId: ${sessionInfo.adminId}")
+                report.appendLine("  - EventId: ${sessionInfo.eventId}")
+                report.appendLine("  - IsActive: ${sessionInfo.isActive}")
+                Log.d(TAG, "✅ Session found in cache - IsActive: ${sessionInfo.isActive}")
             } else {
-                results.add("✗ Bitmap generation failed: ${bitmapResult.exceptionOrNull()?.message}")
+                report.appendLine("❌ Session not found in cache")
+                Log.e(TAG, "❌ Session not found in cache")
                 success = false
             }
-            results.add("")
-            
-            results.add("=== Test Summary ===")
-            results.add(if (success) "✓ All tests passed!" else "✗ Some tests failed!")
             
         } catch (e: Exception) {
-            results.add("✗ Test failed with exception: ${e.message}")
-            Log.e(TAG, "Test failed", e)
+            report.appendLine("❌ Test failed with exception: ${e.message}")
+            Log.e(TAG, "❌ Test failed with exception", e)
             success = false
         }
         
-        val report = results.joinToString("\n")
-        Log.d(TAG, report)
+        Log.d(TAG, "=== QR ATTENDANCE FLOW TEST END ===")
+        Log.d(TAG, "Test result: ${if (success) "SUCCESS" else "FAILED"}")
         
-        return@withContext TestResult(success, report)
+        return DebugTestResult(
+            success = success,
+            report = report.toString()
+        )
     }
     
     /**
-     * Test session validation specifically
+     * Test session registration and validation
      */
-    suspend fun testSessionValidation(
+    fun testSessionRegistration(
         sessionId: String,
-        eventId: String,
         adminId: String,
-        qrService: QRAttendanceService
-    ): String = withContext(Dispatchers.Default) {
-        val results = mutableListOf<String>()
+        eventId: String
+    ): DebugTestResult {
+        Log.d(TAG, "=== SESSION REGISTRATION TEST START ===")
+        
+        val report = StringBuilder()
+        var success = true
         
         try {
-            results.add("=== Session Validation Test ===")
-            
             // Register session
-            qrService.registerSession(sessionId, adminId, eventId)
-            results.add("✓ Session registered")
+            Log.d(TAG, "Registering session: $sessionId")
+            QRSecurityValidator.getInstance().registerSession(sessionId, adminId, eventId)
+            report.appendLine("✅ Session registered: $sessionId")
             
-            // Create QR data
-            val qrData = QRAttendanceData.create(sessionId, eventId, adminId)
-            results.add("✓ QR data created")
-            
-            // Test validation without expected session
-            val validation1 = qrService.validateQRCode(qrData.toJson(), "test_student")
-            results.add("Validation without expected session:")
-            results.add("  - Success: ${validation1.isSuccess}")
-            if (validation1.isSuccess) {
-                val result = validation1.getOrNull()!!
-                results.add("  - Valid: ${result.isValid}")
-                results.add("  - Reason: ${result.reason}")
-            }
-            
-            // Test validation with expected session
-            val validation2 = qrService.validateQRCode(qrData.toJson(), "test_student", sessionId)
-            results.add("Validation with expected session:")
-            results.add("  - Success: ${validation2.isSuccess}")
-            if (validation2.isSuccess) {
-                val result = validation2.getOrNull()!!
-                results.add("  - Valid: ${result.isValid}")
-                results.add("  - Reason: ${result.reason}")
+            // Verify registration
+            val sessionInfo = QRSecurityValidator.getInstance().getSessionInfo(sessionId)
+            if (sessionInfo != null) {
+                report.appendLine("✅ Session verification successful:")
+                report.appendLine("  - AdminId: ${sessionInfo.adminId}")
+                report.appendLine("  - EventId: ${sessionInfo.eventId}")
+                report.appendLine("  - IsActive: ${sessionInfo.isActive}")
+                Log.d(TAG, "✅ Session verification successful")
+            } else {
+                report.appendLine("❌ Session verification failed")
+                Log.e(TAG, "❌ Session verification failed")
+                success = false
             }
             
         } catch (e: Exception) {
-            results.add("✗ Test failed: ${e.message}")
-            Log.e(TAG, "Session validation test failed", e)
+            report.appendLine("❌ Session registration test failed: ${e.message}")
+            Log.e(TAG, "❌ Session registration test failed", e)
+            success = false
         }
         
-        val report = results.joinToString("\n")
-        Log.d(TAG, report)
-        return@withContext report
+        Log.d(TAG, "=== SESSION REGISTRATION TEST END ===")
+        return DebugTestResult(success, report.toString())
     }
     
     /**
-     * Log current QR data details
+     * Test QR code generation and validation
      */
-    fun logQRDataDetails(qrData: QRAttendanceData, tag: String = TAG) {
-        Log.d(tag, "=== QR Data Details ===")
-        Log.d(tag, "Session ID: ${qrData.sessionId}")
-        Log.d(tag, "Event ID: ${qrData.eventId}")
-        Log.d(tag, "Admin ID: ${qrData.adminId}")
-        Log.d(tag, "QR ID: ${qrData.qrId}")
-        Log.d(tag, "Timestamp: ${qrData.timestamp}")
-        Log.d(tag, "Age: ${qrData.getAgeInSeconds()}s")
-        Log.d(tag, "Remaining validity: ${qrData.getRemainingValiditySeconds()}s")
-        Log.d(tag, "Is valid: ${qrData.isValid()}")
-        Log.d(tag, "Is expired: ${qrData.isExpired()}")
-        Log.d(tag, "Integrity valid: ${qrData.isIntegrityValid()}")
-        Log.d(tag, "Data complete: ${qrData.isDataComplete()}")
-        Log.d(tag, "JSON: ${qrData.toJson()}")
-        Log.d(tag, "========================")
-    }
-
-    /**
-     * Debug timing issues by logging detailed timing information
-     */
-    fun debugQRTiming(qrData: QRAttendanceData, tag: String = TAG) {
-        val currentTime = System.currentTimeMillis()
-        val qrTime = qrData.timestamp
-        val age = currentTime - qrTime
-
-        Log.d(tag, "=== QR Timing Debug ===")
-        Log.d(tag, "Current system time: $currentTime")
-        Log.d(tag, "QR timestamp: $qrTime")
-        Log.d(tag, "Age in milliseconds: $age")
-        Log.d(tag, "Age in seconds: ${age / 1000.0}")
-        Log.d(tag, "Max allowed age (ms): 4000")
-        Log.d(tag, "Max allowed age (s): 4.0")
-        Log.d(tag, "Time until expiry (ms): ${4000 - age}")
-        Log.d(tag, "Time until expiry (s): ${(4000 - age) / 1000.0}")
-        Log.d(tag, "Is within valid window: ${age >= -1000 && age <= 4000}")
-        Log.d(tag, "QR isValid(): ${qrData.isValid()}")
-        Log.d(tag, "QR isExpired(): ${qrData.isExpired()}")
-        Log.d(tag, "========================")
-    }
-
-    /**
-     * Debug session validation issues
-     */
-    fun debugSessionValidation(qrData: QRAttendanceData, tag: String = TAG) {
-        Log.d(tag, "=== Session Validation Debug ===")
-        Log.d(tag, "QR Session ID: ${qrData.sessionId}")
-        Log.d(tag, "QR Event ID: ${qrData.eventId}")
-        Log.d(tag, "QR Admin ID: ${qrData.adminId}")
-        Log.d(tag, "QR ID: ${qrData.qrId}")
-        Log.d(tag, "QR Timestamp: ${qrData.timestamp}")
-        Log.d(tag, "QR Validation Token: ${qrData.validationToken}")
-        Log.d(tag, "QR Version: ${qrData.version}")
-        Log.d(tag, "QR JSON: ${qrData.toJson()}")
-        Log.d(tag, "===================================")
-    }
-
-    /**
-     * Debug admin ID flow and mismatches
-     */
-    fun debugAdminIdFlow(
-        sessionAdminId: String,
-        qrAdminId: String,
-        eventCreatedBy: String,
-        tag: String = TAG
-    ) {
-        Log.d(tag, "=== Admin ID Flow Debug ===")
-        Log.d(tag, "Session Admin ID: '$sessionAdminId'")
-        Log.d(tag, "QR Admin ID: '$qrAdminId'")
-        Log.d(tag, "Event Created By: '$eventCreatedBy'")
-        Log.d(tag, "Session == QR: ${sessionAdminId == qrAdminId}")
-        Log.d(tag, "Session == Event: ${sessionAdminId == eventCreatedBy}")
-        Log.d(tag, "QR == Event: ${qrAdminId == eventCreatedBy}")
-        Log.d(tag, "Admin ID lengths - Session: ${sessionAdminId.length}, QR: ${qrAdminId.length}, Event: ${eventCreatedBy.length}")
-        Log.d(tag, "============================")
+    suspend fun testQRGenerationAndValidation(
+        sessionId: String,
+        eventId: String,
+        adminId: String,
+        studentId: String,
+        qrService: QRAttendanceService
+    ): DebugTestResult {
+        Log.d(TAG, "=== QR GENERATION AND VALIDATION TEST START ===")
+        
+        val report = StringBuilder()
+        var success = true
+        
+        try {
+            // Generate QR code
+            Log.d(TAG, "Generating QR code...")
+            val qrData = QRAttendanceData.create(sessionId, eventId, adminId)
+            report.appendLine("✅ QR code data created:")
+            report.appendLine("  - QR ID: ${qrData.qrId}")
+            report.appendLine("  - SessionId: ${qrData.sessionId}")
+            report.appendLine("  - EventId: ${qrData.eventId}")
+            report.appendLine("  - AdminId: ${qrData.adminId}")
+            report.appendLine("  - Timestamp: ${qrData.timestamp}")
+            Log.d(TAG, "✅ QR code data created - ID: ${qrData.qrId}")
+            
+            // Validate QR code
+            Log.d(TAG, "Validating QR code...")
+            val validationResult = qrService.validateQRCode(qrData.toJson(), studentId)
+            if (validationResult.isSuccess) {
+                val result = validationResult.getOrNull()!!
+                if (result.isValid) {
+                    report.appendLine("✅ QR code validation successful")
+                    Log.d(TAG, "✅ QR code validation successful")
+                } else {
+                    report.appendLine("❌ QR code validation failed: ${result.reason}")
+                    Log.e(TAG, "❌ QR code validation failed: ${result.reason}")
+                    success = false
+                }
+            } else {
+                val error = validationResult.exceptionOrNull()?.message ?: "Unknown error"
+                report.appendLine("❌ QR code validation error: $error")
+                Log.e(TAG, "❌ QR code validation error: $error")
+                success = false
+            }
+            
+        } catch (e: Exception) {
+            report.appendLine("❌ QR generation and validation test failed: ${e.message}")
+            Log.e(TAG, "❌ QR generation and validation test failed", e)
+            success = false
+        }
+        
+        Log.d(TAG, "=== QR GENERATION AND VALIDATION TEST END ===")
+        return DebugTestResult(success, report.toString())
     }
     
-    data class TestResult(
-        val success: Boolean,
-        val report: String
-    )
+    /**
+     * Get security statistics
+     */
+    fun getSecurityStats(): String {
+        val stats = QRSecurityValidator.getInstance().getSecurityStats()
+        return """
+            Security Statistics:
+            - Total used QR codes: ${stats.totalUsedQRCodes}
+            - Active sessions: ${stats.activeSessions}
+            - Total sessions: ${stats.totalSessions}
+            - Students with attempts: ${stats.studentsWithAttempts}
+        """.trimIndent()
+    }
 }
+
+/**
+ * Result of debug test
+ */
+data class DebugTestResult(
+    val success: Boolean,
+    val report: String
+)

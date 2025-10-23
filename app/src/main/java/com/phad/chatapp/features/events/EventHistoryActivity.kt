@@ -586,7 +586,13 @@ fun ClosedEventCard(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = if (event.hours > 0) "${event.hours}" else "Not Specified",
+                            text = if (event.hours > 0) {
+                                if (event.isMandatory && event.negativeHours > 0) {
+                                    "Hours: ${event.hours} / -${event.negativeHours}"
+                                } else {
+                                    "Hours: ${event.hours}"
+                                }
+                            } else "Not Specified",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
                             color = if (event.hours > 0) Color(0xFF333333) else Color.Gray

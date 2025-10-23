@@ -140,6 +140,10 @@ class AttendanceQRRepository {
             if (cacheDoc.exists()) {
                 val event = cacheDoc.toObject(AttendanceEvent::class.java)
                 Log.d(TAG, "Attendance event served from CACHE: ${event?.getEventName()}")
+                if (event != null) {
+                    Log.d(TAG, "CACHE - Event attendees count: ${event.attendees.size}")
+                    Log.d(TAG, "CACHE - Event attendees: ${event.attendees.map { "${it.rollNumber} (${it.name})" }}")
+                }
                 return@withContext Result.success(event)
             }
 
@@ -151,6 +155,10 @@ class AttendanceQRRepository {
             return@withContext if (document.exists()) {
                 val event = document.toObject(AttendanceEvent::class.java)
                 Log.d(TAG, "Attendance event found: ${event?.getEventName()}")
+                if (event != null) {
+                    Log.d(TAG, "SERVER - Event attendees count: ${event.attendees.size}")
+                    Log.d(TAG, "SERVER - Event attendees: ${event.attendees.map { "${it.rollNumber} (${it.name})" }}")
+                }
                 Result.success(event)
             } else {
                 Log.d(TAG, "Attendance event not found")
@@ -158,6 +166,102 @@ class AttendanceQRRepository {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error getting attendance event", e)
+            return@withContext Result.failure(e)
+        }
+    }
+
+    /**
+     * Store session in Firestore for persistence across app instances
+     */
+    suspend fun storeSession(sessionInfo: com.phad.chatapp.utils.SessionValidationInfo): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "Storing session in Firestore: ${sessionInfo.sessionId}")
+            
+            val sessionData = mapOf(
+                "sessionId" to sessionInfo.sessionId,
+                "adminId" to sessionInfo.adminId,
+                "eventId" to sessionInfo.eventId,
+                "startTime" to sessionInfo.startTime,
+                "endTime" to sessionInfo.endTime,
+                "isActive" to sessionInfo.isActive,
+                "createdAt" to System.currentTimeMillis()
+            )
+            
+            // Store in a dedicated sessions collection
+            firestore.collection("NSS_Sessions")
+                .document(sessionInfo.sessionId)
+                .set(sessionData)
+                .await()
+            
+            Log.d(TAG, "Session stored successfully in Firestore: ${sessionInfo.sessionId}")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error storing session in Firestore", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Get session from Firestore
+     */
+    suspend fun getSession(sessionId: String): Result<com.phad.chatapp.utils.SessionValidationInfo?> = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "Getting session from Firestore: $sessionId")
+            
+            val doc = firestore.collection("NSS_Sessions")
+                .document(sessionId)
+                .get()
+                .await()
+            
+            if (doc.exists()) {
+                val data = doc.data
+                val sessionInfo = com.phad.chatapp.utils.SessionValidationInfo(
+                    sessionId = data?.get("sessionId") as? String ?: sessionId,
+                    adminId = data?.get("adminId") as? String ?: "",
+                    eventId = data?.get("eventId") as? String ?: "",
+                    startTime = (data?.get("startTime") as? Long) ?: 0L,
+                    endTime = data?.get("endTime") as? Long,
+                    isActive = (data?.get("isActive") as? Boolean) ?: false
+                )
+                
+                Log.d(TAG, "Session retrieved from Firestore: ${sessionInfo.sessionId}")
+                Result.success(sessionInfo)
+            } else {
+                Log.d(TAG, "Session not found in Firestore: $sessionId")
+                Result.success(null)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting session from Firestore", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Get attendance event with forced server read (for duplicate checks)
+     */
+    suspend fun getAttendanceEventForDuplicateCheck(eventId: String): Result<AttendanceEvent?> = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "Getting attendance event for duplicate check (FORCED SERVER READ): $eventId")
+
+            // Force server read to get fresh data for duplicate checks
+            val document = eventsAttendanceCollection.document(eventId)
+                .get(com.google.firebase.firestore.Source.DEFAULT)
+                .await()
+
+            return@withContext if (document.exists()) {
+                val event = document.toObject(AttendanceEvent::class.java)
+                Log.d(TAG, "DUPLICATE CHECK - Event found: ${event?.getEventName()}")
+                if (event != null) {
+                    Log.d(TAG, "DUPLICATE CHECK - Event attendees count: ${event.attendees.size}")
+                    Log.d(TAG, "DUPLICATE CHECK - Event attendees: ${event.attendees.map { "${it.rollNumber} (${it.name})" }}")
+                }
+                Result.success(event)
+            } else {
+                Log.d(TAG, "DUPLICATE CHECK - Event not found")
+                Result.success(null)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting attendance event for duplicate check", e)
             return@withContext Result.failure(e)
         }
     }
@@ -269,10 +373,15 @@ class AttendanceQRRepository {
      */
     suspend fun addAttendeeToEvent(eventId: String, attendee: AttendeeRecord): Result<Unit> = withContext(Dispatchers.IO) {
         try {
+            // Ensure roll number is uppercase for consistency
+            val normalizedAttendee = attendee.withUppercaseRollNumber()
+            
             Log.d(TAG, "=== REPOSITORY: ADDING ATTENDEE TO EVENT (CONSOLIDATED) ===")
             Log.d(TAG, "Event ID: $eventId")
-            Log.d(TAG, "Attendee: rollNumber=${attendee.rollNumber}, name=${attendee.name}")
-            Log.d(TAG, "Scanned from admin: ${attendee.scannedFrom.adminRollNumber}")
+            Log.d(TAG, "Attendee: rollNumber=${normalizedAttendee.rollNumber}, name=${normalizedAttendee.name}")
+            Log.d(TAG, "Scanned from admin: ${normalizedAttendee.scannedFrom.adminRollNumber}")
+            Log.d(TAG, "Device ID: ${normalizedAttendee.deviceId.take(16)}...")
+            Log.d(TAG, "Timestamp: ${normalizedAttendee.scanTimestamp}")
 
             // Ensure Firebase Auth is valid (with token refresh if needed)
             val authValid = ensureValidFirebaseAuth()
@@ -291,7 +400,7 @@ class AttendanceQRRepository {
             // Attempt idempotent update without pre-reads.
             // We rely on UI/device checks to minimize duplicates; server uses atomic increments.
             val updates = mapOf(
-                "attendees" to FieldValue.arrayUnion(attendee),
+                "attendees" to FieldValue.arrayUnion(normalizedAttendee),
                 "total_marked" to FieldValue.increment(1)
             )
 
@@ -299,8 +408,8 @@ class AttendanceQRRepository {
 
             val docRef = eventsAttendanceCollection.document(eventId)
             // Write subcollection attendance document (idempotent: onCreate triggers only on first time)
-            val attendanceDocRef = docRef.collection("attendance").document(attendee.rollNumber)
-            attendanceDocRef.set(attendee).await()
+            val attendanceDocRef = docRef.collection("attendance").document(normalizedAttendee.rollNumber)
+            attendanceDocRef.set(normalizedAttendee).await()
 
             // Update parent event counters and embedded list for backward compatibility
             docRef.update(updates).await()
@@ -309,25 +418,40 @@ class AttendanceQRRepository {
 
             // Update student statistics in users collection without prior reads using atomic increments
             try {
-                Log.d(TAG, "Updating student statistics for: ${attendee.rollNumber}")
-                val userRef = firestore.collection("users").document(attendee.rollNumber)
+                Log.d(TAG, "Updating student statistics for: ${normalizedAttendee.rollNumber}")
+                val userRef = firestore.collection("users").document(normalizedAttendee.rollNumber)
                 // Compute increments from event data without fetching the user
                 val eventSnapshot = docRef.get().await()
                 val event = eventSnapshot.toObject(AttendanceEvent::class.java)
                 if (event != null) {
                     val eventHours = event.hours
                     val semester = getSemesterFromDate(event.eventDate)
-                    val sem1Hours = if (semester == 1) eventHours else 0
-                    val sem2Hours = if (semester == 2) eventHours else 0
+                    val liveCount = (eventSnapshot.get("liveCount") as? Number)?.toInt() ?: 1
+                    val isMandatory = event.isMandatory
+                    val negativeHours = event.negativeHours
+                    
+                    // Calculate hours to add
+                    var hoursToAdd = eventHours
+                    var sem1HoursToAdd = if (semester == 1) eventHours else 0.0
+                    var sem2HoursToAdd = if (semester == 2) eventHours else 0.0
+                    
+                    // For mandatory events with liveCount > 1, also refund negative hours
+                    if (isMandatory && liveCount > 1 && negativeHours > 0.0) {
+                        Log.d(TAG, "Mandatory event with liveCount > 1: adding refund of negative hours")
+                        hoursToAdd += negativeHours
+                        if (semester == 1) sem1HoursToAdd += negativeHours
+                        if (semester == 2) sem2HoursToAdd += negativeHours
+                    }
+                    
                     val userUpdates = mapOf(
                         "eventsAttended" to FieldValue.increment(1),
-                        "hours" to FieldValue.increment(eventHours.toLong()),
-                        "sem1Hours" to FieldValue.increment(sem1Hours.toLong()),
-                        "sem2Hours" to FieldValue.increment(sem2Hours.toLong()),
+                        "hours" to FieldValue.increment(hoursToAdd),
+                        "sem1Hours" to FieldValue.increment(sem1HoursToAdd),
+                        "sem2Hours" to FieldValue.increment(sem2HoursToAdd),
                         "eventsList" to FieldValue.arrayUnion(eventId)
                     )
                     userRef.set(userUpdates, com.google.firebase.firestore.SetOptions.merge()).await()
-                    Log.d(TAG, "✅ User statistics updated atomically")
+                    Log.d(TAG, "✅ User statistics updated atomically (hours: $hoursToAdd, sem1: $sem1HoursToAdd, sem2: $sem2HoursToAdd)")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Error updating user statistics: ${e.message}", e)
@@ -349,9 +473,12 @@ class AttendanceQRRepository {
      */
     suspend fun removeAttendeeFromEvent(eventId: String, rollNumber: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
+            // Ensure roll number is uppercase for consistency
+            val normalizedRollNumber = rollNumber.uppercase()
+            
             Log.d(TAG, "=== REPOSITORY: REMOVING ATTENDEE FROM EVENT (CONSOLIDATED) ===")
             Log.d(TAG, "Event ID: $eventId")
-            Log.d(TAG, "Roll Number: $rollNumber")
+            Log.d(TAG, "Roll Number: $normalizedRollNumber")
 
             // Check Firebase Auth state
             val currentUser = FirebaseAuth.getInstance().currentUser
@@ -373,9 +500,9 @@ class AttendanceQRRepository {
             }
 
             // Find the attendee record to remove (case-insensitive)
-            val attendeeToRemove = event.attendees.find { it.rollNumber.equals(rollNumber, ignoreCase = true) }
+            val attendeeToRemove = event.attendees.find { it.rollNumber.equals(normalizedRollNumber, ignoreCase = true) }
             if (attendeeToRemove == null) {
-                Log.e(TAG, "Attendee not found in event: $rollNumber")
+                Log.e(TAG, "Attendee not found in event: $normalizedRollNumber")
                 return@withContext Result.failure(Exception("Attendee not found in event"))
             }
 
@@ -402,17 +529,32 @@ class AttendanceQRRepository {
                 val userRef = firestore.collection("users").document(attendeeToRemove.rollNumber)
                 val eventHours = event.hours
                 val semester = getSemesterFromDate(event.eventDate)
-                val sem1Hours = if (semester == 1) eventHours else 0
-                val sem2Hours = if (semester == 2) eventHours else 0
+                val liveCount = (eventSnapshot.get("liveCount") as? Number)?.toInt() ?: 1
+                val isMandatory = event.isMandatory
+                val negativeHours = event.negativeHours
+                
+                // Calculate hours to remove
+                var hoursToRemove = eventHours
+                var sem1HoursToRemove = if (semester == 1) eventHours else 0.0
+                var sem2HoursToRemove = if (semester == 2) eventHours else 0.0
+                
+                // For mandatory events with liveCount > 1, also re-apply negative hours penalty
+                if (isMandatory && liveCount > 1 && negativeHours > 0.0) {
+                    Log.d(TAG, "Mandatory event with liveCount > 1: re-applying negative hours penalty")
+                    hoursToRemove += negativeHours
+                    if (semester == 1) sem1HoursToRemove += negativeHours
+                    if (semester == 2) sem2HoursToRemove += negativeHours
+                }
+                
                 val userUpdates = mapOf(
                     "eventsAttended" to FieldValue.increment(-1),
-                    "hours" to FieldValue.increment(-eventHours.toLong()),
-                    "sem1Hours" to FieldValue.increment(-sem1Hours.toLong()),
-                    "sem2Hours" to FieldValue.increment(-sem2Hours.toLong()),
+                    "hours" to FieldValue.increment(-hoursToRemove),
+                    "sem1Hours" to FieldValue.increment(-sem1HoursToRemove),
+                    "sem2Hours" to FieldValue.increment(-sem2HoursToRemove),
                     "eventsList" to FieldValue.arrayRemove(eventId)
                 )
                 userRef.set(userUpdates, com.google.firebase.firestore.SetOptions.merge()).await()
-                Log.d(TAG, "✅ User statistics updated atomically")
+                Log.d(TAG, "✅ User statistics updated atomically (hours removed: $hoursToRemove, sem1: $sem1HoursToRemove, sem2: $sem2HoursToRemove)")
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Error updating user statistics: ${e.message}", e)
                 // Don't fail the attendance removal if user stats update fails
@@ -701,6 +843,192 @@ class AttendanceQRRepository {
     }
 
     /**
+     * Recreate an attendance event with new name/date and copy all associated documents
+     * This is used when the event name or date needs to be changed, which requires creating a new event
+     * with a new document ID and copying all attendance records
+     */
+    suspend fun recreateAttendanceEvent(
+        oldEventId: String,
+        newEvent: AttendanceEvent
+    ): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "Recreating attendance event: $oldEventId -> ${newEvent.id}")
+
+            // 1) Fetch the existing event and all its subcollections
+            val oldEventDocRef = eventsAttendanceCollection.document(oldEventId)
+            val oldEventSnapshot = oldEventDocRef.get().await()
+            val oldEvent = oldEventSnapshot.toObject(AttendanceEvent::class.java)
+
+            if (oldEvent == null) {
+                Log.w(TAG, "Old event not found: $oldEventId")
+                return@withContext Result.failure(IllegalStateException("Old event not found: $oldEventId"))
+            }
+
+            // 2) Check if new event already exists
+            val newEventDocRef = eventsAttendanceCollection.document(newEvent.id)
+            val newEventExists = newEventDocRef.get().await().exists()
+            if (newEventExists) {
+                Log.w(TAG, "New event already exists: ${newEvent.id}")
+                return@withContext Result.failure(IllegalStateException("Event with this name and date already exists"))
+            }
+
+            // 3) Create new event document with updated details
+            val batch = firestore.batch()
+            
+            // Create the new event with preserved total_marked field
+            val newEventData = mapOf(
+                "description" to newEvent.description,
+                "createdBy" to newEvent.createdBy,
+                "creatorName" to newEvent.creatorName,
+                "eventDate" to newEvent.eventDate,
+                "eventTime" to newEvent.eventTime,
+                "hours" to newEvent.hours,
+                "mandatory" to newEvent.isMandatory,
+                "negativeHours" to newEvent.negativeHours,
+                "location" to newEvent.location,
+                "created_at" to newEvent.createdAt,
+                "attendees" to newEvent.attendees,
+                "closedAt" to newEvent.closedAt,
+                "is_live" to newEvent.isLive,
+                "total_marked" to oldEvent.attendees.size // Preserve the total count
+            )
+            
+            batch.set(newEventDocRef, newEventData)
+
+            // 4) Copy all attendance subcollection documents
+            val attendanceSubcollection = oldEventDocRef.collection("attendance")
+            val attendanceSnapshot = attendanceSubcollection.get().await()
+            
+            Log.d(TAG, "Copying ${attendanceSnapshot.documents.size} attendance records")
+            
+            attendanceSnapshot.documents.forEach { doc ->
+                val newAttendanceDocRef = newEventDocRef.collection("attendance").document(doc.id)
+                doc.data?.let { data ->
+                    batch.set(newAttendanceDocRef, data)
+                }
+            }
+
+            // 5) Update user statistics to reflect the event recreation
+            if (oldEvent.attendees.isNotEmpty()) {
+                val oldSemester = getSemesterFromDate(oldEvent.eventDate)
+                val newSemester = getSemesterFromDate(newEvent.eventDate)
+                val hoursDelta = newEvent.hours - oldEvent.hours
+
+                Log.d(TAG, "Updating user stats: oldSemester=$oldSemester, newSemester=$newSemester, hoursDelta=$hoursDelta")
+
+                oldEvent.attendees.forEach { attendee ->
+                    val userRef = usersCollection.document(attendee.rollNumber)
+                    val userUpdates = mutableMapOf<String, Any>()
+
+                    // Update eventsList to replace old event ID with new event ID
+                    userUpdates["eventsList"] = FieldValue.arrayRemove(oldEventId)
+                    userUpdates["eventsList"] = FieldValue.arrayUnion(newEvent.id)
+
+                    // Handle hours changes
+                    if (hoursDelta != 0.0) {
+                        userUpdates["hours"] = FieldValue.increment(hoursDelta)
+                    }
+
+                    // Handle semester changes
+                    if (oldSemester == newSemester) {
+                        // Same semester: just increment by delta
+                        when (newSemester) {
+                            1 -> userUpdates["sem1Hours"] = FieldValue.increment(hoursDelta)
+                            2 -> userUpdates["sem2Hours"] = FieldValue.increment(hoursDelta)
+                        }
+                    } else {
+                        // Different semester: subtract old hours from old semester, add new hours to new semester
+                        when (oldSemester) {
+                            1 -> userUpdates["sem1Hours"] = FieldValue.increment(-oldEvent.hours)
+                            2 -> userUpdates["sem2Hours"] = FieldValue.increment(-oldEvent.hours)
+                        }
+                        when (newSemester) {
+                            1 -> userUpdates.merge("sem1Hours", FieldValue.increment(newEvent.hours)) { _, new -> new }
+                            2 -> userUpdates.merge("sem2Hours", FieldValue.increment(newEvent.hours)) { _, new -> new }
+                        }
+                    }
+
+                    if (userUpdates.isNotEmpty()) {
+                        batch.update(userRef, userUpdates)
+                    }
+                }
+            }
+
+            // 6) Handle mandatory penalties for absentees
+            val oldPenalty = if (oldEvent.isMandatory && oldEvent.negativeHours > 0.0) oldEvent.negativeHours else 0.0
+            val newPenalty = if (newEvent.isMandatory && newEvent.negativeHours > 0.0) newEvent.negativeHours else 0.0
+
+            if (oldPenalty != newPenalty) {
+                val oldSemester = getSemesterFromDate(oldEvent.eventDate)
+                val newSemester = getSemesterFromDate(newEvent.eventDate)
+                val attendeeRolls = oldEvent.attendees.map { it.rollNumber }.toSet()
+                val allUsersDocs = usersCollection.get().await().documents
+                val absentees = allUsersDocs.map { it.id }.filter { it.isNotBlank() && !attendeeRolls.contains(it) }
+
+                Log.d(TAG, "Handling mandatory penalties: oldPenalty=$oldPenalty, newPenalty=$newPenalty, absentees=${absentees.size}")
+
+                // Apply penalty changes to absentees
+                if (absentees.isNotEmpty()) {
+                    val penaltyDelta = newPenalty - oldPenalty
+                    val chunkSize = 400
+                    absentees.chunked(chunkSize).forEach { chunk ->
+                        val penaltyBatch = firestore.batch()
+                        chunk.forEach { roll ->
+                            val ref = usersCollection.document(roll)
+                            val updates = mutableMapOf<String, Any>(
+                                "hours" to FieldValue.increment(-penaltyDelta)
+                            )
+                            
+                            // Handle semester-specific penalty changes
+                            if (oldSemester == newSemester) {
+                                when (newSemester) {
+                                    1 -> updates["sem1Hours"] = FieldValue.increment(-penaltyDelta)
+                                    2 -> updates["sem2Hours"] = FieldValue.increment(-penaltyDelta)
+                                }
+                            } else {
+                                // Semester changed: remove penalty from old semester, add to new semester
+                                when (oldSemester) {
+                                    1 -> updates["sem1Hours"] = FieldValue.increment(oldPenalty)
+                                    2 -> updates["sem2Hours"] = FieldValue.increment(oldPenalty)
+                                }
+                                when (newSemester) {
+                                    1 -> updates.merge("sem1Hours", FieldValue.increment(-newPenalty)) { _, new -> new }
+                                    2 -> updates.merge("sem2Hours", FieldValue.increment(-newPenalty)) { _, new -> new }
+                                }
+                            }
+                            
+                            penaltyBatch.update(ref, updates)
+                        }
+                        penaltyBatch.commit().await()
+                    }
+                }
+            }
+
+            // 7) Commit the main batch
+            batch.commit().await()
+
+            // 8) Delete the old event document and its subcollections
+            val deleteBatch = firestore.batch()
+            
+            // Delete attendance subcollection documents
+            attendanceSnapshot.documents.forEach { doc ->
+                deleteBatch.delete(doc.reference)
+            }
+            
+            // Delete the main event document
+            deleteBatch.delete(oldEventDocRef)
+            
+            deleteBatch.commit().await()
+
+            Log.d(TAG, "Successfully recreated event: $oldEventId -> ${newEvent.id}")
+            return@withContext Result.success(newEvent.id)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error recreating attendance event", e)
+            return@withContext Result.failure(e)
+        }
+    }
+
+    /**
      * Get available events for attendance from the consolidated collection
      */
     suspend fun getAvailableEvents(forceRefresh: Boolean = false): Result<List<AttendanceEvent>> = withContext(Dispatchers.IO) {
@@ -962,18 +1290,19 @@ class AttendanceQRRepository {
 
             // Read penalty metadata
             val penaltyApplied = (eventSnap.get("absentPenaltyApplied") as? Boolean) == true
-            val previouslyUsedPenalty = (eventSnap.get("penaltyHoursUsed") as? Number)?.toDouble() ?: 0.0
             @Suppress("UNCHECKED_CAST")
             val storedAbsentees: List<String> = (eventSnap.get("absentee_roll_numbers") as? List<String>) ?: emptyList()
 
             if (event != null) {
                 val isMandatory = try { eventSnap.getBoolean("mandatory") ?: event.isMandatory } catch (e: Exception) { event.isMandatory }
                 val negativeHours = try { (eventSnap.get("negativeHours") as? Number)?.toDouble() ?: event.negativeHours } catch (e: Exception) { event.negativeHours }
+                // Get previously used penalty from negativeHours field (no longer using penaltyHoursUsed)
+                val previouslyUsedPenalty = negativeHours
 
                 Log.d(TAG, "Close event penalty check: isMandatory=$isMandatory, negativeHours=$negativeHours, alreadyApplied=$penaltyApplied")
 
                 if (isMandatory && negativeHours > 0.0 && !penaltyApplied) {
-                    // First-time application
+                    // First-time penalty application for absentees
                     val attendeeRolls = event.attendees.map { it.rollNumber }.toSet()
                     val semester = getSemesterFromDate(event.eventDate)
 
@@ -1013,7 +1342,6 @@ class AttendanceQRRepository {
                         .update(
                             mapOf(
                                 "absentPenaltyApplied" to true,
-                                "penaltyHoursUsed" to negativeHours,
                                 "absenteeRollNumbers" to absentees,
                                 "absentPenaltyCount" to absentees.size
                             )
@@ -1055,11 +1383,8 @@ class AttendanceQRRepository {
                             Log.d(TAG, "Delta batch ${idx + 1} committed with ${chunk.size} users")
                         }
 
-                        // Update metadata to reflect the new penalty hours
-                        eventsAttendanceCollection.document(eventId)
-                            .update(mapOf("penaltyHoursUsed" to negativeHours))
-                            .await()
-                        Log.d(TAG, "Penalty metadata updated to $negativeHours for event: $eventId")
+                        // No need to update penaltyHoursUsed field since we use negativeHours directly
+                        Log.d(TAG, "Penalty delta applied successfully for event: $eventId")
                     }
                 }
             }
@@ -1070,6 +1395,54 @@ class AttendanceQRRepository {
             return@withContext Result.failure(e)
         }
     }
+
+    /**
+     * Invalidate in-memory caches for events so subsequent reads fetch fresh data.
+     */
+    fun invalidateEventCaches() {
+        cachedAvailableEvents = null
+        availableCacheTimestampMs = 0L
+        cachedAllEvents = null
+        cacheTimestampMs = 0L
+        Log.d(TAG, "Event caches invalidated")
+    }
+
+    /**
+     * Make an attendance event live again by setting isLive to true and removing closedAt timestamp
+     */
+    suspend fun makeEventLive(eventId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "Making attendance event live: $eventId")
+
+            // First, get the current event to check if it's mandatory and get current liveCount
+            val eventSnap = eventsAttendanceCollection.document(eventId).get().await()
+            val event = eventSnap.toObject(AttendanceEvent::class.java)
+            val currentLiveCount = (eventSnap.get("liveCount") as? Number)?.toInt() ?: 1
+            val newLiveCount = currentLiveCount + 1
+
+            // Update isLive field to true, increment liveCount, and remove closedAt timestamp
+            val updates = mapOf(
+                "is_live" to true,
+                "liveCount" to newLiveCount,
+                "closedAt" to FieldValue.delete(), // Remove closedAt timestamp
+                "live" to FieldValue.delete() // Remove duplicate field if it exists
+            )
+
+            eventsAttendanceCollection.document(eventId)
+                .update(updates)
+                .await()
+
+            Log.d(TAG, "Attendance event made live successfully: $eventId, liveCount: $newLiveCount")
+
+            // Note: Mandatory event re-opening logic is now handled in addAttendeeToEvent/removeAttendeeFromEvent
+
+            return@withContext Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error making attendance event live", e)
+            return@withContext Result.failure(e)
+        }
+    }
+
 
     /**
      * Legacy method for backward compatibility

@@ -293,14 +293,29 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                     errorMessage = null
                 )
 
-                // Generate document ID using the new format (even for update, to ensure consistency)
-                val documentId = com.phad.chatapp.utils.AttendanceEventUtils.generateDocumentId(eventDate, name)
+                // Get the current event to check if name or date changed
+                val currentEvent = _adminUiState.value.editingEvent
+                if (currentEvent == null) {
+                    _adminUiState.value = _adminUiState.value.copy(
+                        isUpdatingEvent = false,
+                        errorMessage = "No event selected for update"
+                    )
+                    return@launch
+                }
+
+                // Generate new document ID using the updated name and date
+                val newDocumentId = com.phad.chatapp.utils.AttendanceEventUtils.generateDocumentId(eventDate, name)
+                
+                // Check if name or date changed (which requires recreation)
+                val nameChanged = currentEvent.getEventName() != name.trim()
+                val dateChanged = currentEvent.getEventDateAsDate() != eventDate
+                val needsRecreation = nameChanged || dateChanged
 
                 // Create new date/time format data
                 val (dateString, timeRangeString) = com.phad.chatapp.utils.AttendanceEventUtils.createNewFormatEventTimeData(eventDate, openingTime, closingTime)
 
-                val updatedEvent = _adminUiState.value.editingEvent?.copy(
-                    id = documentId, // Update ID if name/date changed
+                val updatedEvent = currentEvent.copy(
+                    id = newDocumentId,
                     eventDate = dateString,
                     eventTime = timeRangeString,
                     hours = hours,
@@ -308,12 +323,19 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                     negativeHours = negativeHours,
                     location = location.trim(),
                     description = description.trim()
-                ) ?: throw IllegalStateException("No event selected for update")
+                )
 
-                val result = repository.updateAttendanceEvent(updatedEvent)
+                val result = if (needsRecreation) {
+                    Log.d(TAG, "Name or date changed, recreating event: $eventId -> $newDocumentId")
+                    repository.recreateAttendanceEvent(eventId, updatedEvent)
+                } else {
+                    Log.d(TAG, "Only other fields changed, updating in place")
+                    repository.updateAttendanceEvent(updatedEvent)
+                }
+
                 result.fold(
-                    onSuccess = {
-                        Log.d(TAG, "Event updated successfully: $eventId")
+                    onSuccess = { newEventId ->
+                        Log.d(TAG, "Event ${if (needsRecreation) "recreated" else "updated"} successfully: $eventId -> $newEventId")
                         _adminUiState.value = _adminUiState.value.copy(
                             isUpdatingEvent = false,
                             showEditEventDialog = false,
@@ -321,14 +343,15 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                             editEventSuccess = true,
                             errorMessage = null
                         )
-                        // Refresh events list to show the updated event
-                        loadAvailableEvents()
+                        // Invalidate caches and force refresh to reflect edits immediately
+                        repository.invalidateEventCaches()
+                        loadAvailableEvents(forceRefresh = true)
                     },
                     onFailure = { error ->
-                        Log.e(TAG, "Error updating event", error)
+                        Log.e(TAG, "Error ${if (needsRecreation) "recreating" else "updating"} event", error)
                         _adminUiState.value = _adminUiState.value.copy(
                             isUpdatingEvent = false,
-                            errorMessage = "Failed to update event: ${error.message}"
+                            errorMessage = "Failed to ${if (needsRecreation) "recreate" else "update"} event: ${error.message}"
                         )
                     }
                 )
@@ -383,6 +406,40 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                 Log.d(TAG, "Registering session - SessionId: $sessionId, AdminId: ${_adminUiState.value.adminId}, EventId: ${event.id}")
                 qrService.registerSession(sessionId, _adminUiState.value.adminId, event.id)
                 Log.d(TAG, "Session registration completed")
+                
+                // Verify session registration immediately
+                val sessionInfo = QRSecurityValidator.getInstance().getSessionInfo(sessionId)
+                if (sessionInfo != null) {
+                    Log.d(TAG, "✅ Session registration verified immediately:")
+                    Log.d(TAG, "  - SessionId: ${sessionInfo.sessionId}")
+                    Log.d(TAG, "  - AdminId: '${sessionInfo.adminId}'")
+                    Log.d(TAG, "  - EventId: '${sessionInfo.eventId}'")
+                    Log.d(TAG, "  - IsActive: ${sessionInfo.isActive}")
+                } else {
+                    Log.e(TAG, "❌ Session registration verification failed - session not found in cache")
+                    Log.d(TAG, "This indicates a session registration issue")
+                }
+                
+                // Add a small delay to ensure session registration is complete before QR generation
+                delay(500) // 500ms delay to allow for session registration to complete
+                Log.d(TAG, "Delay completed, proceeding with QR generation")
+                
+                // Force re-register session to ensure it persists
+                Log.d(TAG, "Force re-registering session to ensure persistence")
+                qrService.registerSession(sessionId, _adminUiState.value.adminId, event.id)
+                Log.d(TAG, "Session re-registration completed")
+                
+                // Verify session registration again after delay
+                val sessionInfoAfterDelay = QRSecurityValidator.getInstance().getSessionInfo(sessionId)
+                if (sessionInfoAfterDelay != null) {
+                    Log.d(TAG, "✅ Session still exists after delay:")
+                    Log.d(TAG, "  - SessionId: ${sessionInfoAfterDelay.sessionId}")
+                    Log.d(TAG, "  - AdminId: '${sessionInfoAfterDelay.adminId}'")
+                    Log.d(TAG, "  - EventId: '${sessionInfoAfterDelay.eventId}'")
+                    Log.d(TAG, "  - IsActive: ${sessionInfoAfterDelay.isActive}")
+                } else {
+                    Log.e(TAG, "❌ Session disappeared after delay - this is the problem!")
+                }
 
                 // Start QR code generation
                 Log.d(TAG, "Starting QR generation with SessionId: $sessionId, EventId: ${event.id}")
@@ -453,6 +510,8 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                             attendeeCount = it.totalMarked
                         )
                         Log.d(TAG, "Event updated - Attendees: ${it.totalMarked}")
+                        Log.d(TAG, "Event attendees list: ${it.attendees.map { "${it.rollNumber} (${it.name})" }}")
+                        Log.d(TAG, "Event attendees count: ${it.attendees.size}")
                     }
                 }
             } catch (e: Exception) {
@@ -501,6 +560,10 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                         )
 
                         Log.d(TAG, "Attendance session ended successfully")
+
+                        // Invalidate caches and force-refresh events so the list reflects latest counts/state
+                        repository.invalidateEventCaches()
+                        loadAvailableEvents(forceRefresh = true)
                     } else {
                         val error = result.exceptionOrNull()?.message ?: "Failed to end session"
                         _adminUiState.value = _adminUiState.value.copy(errorMessage = error)
@@ -540,6 +603,11 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                 Log.d(TAG, "QR Text length: ${qrText.length}")
                 Log.d(TAG, "QR Text (first 200 chars): ${qrText.take(200)}")
                 Log.d(TAG, "Processing started at: $processingStartTime")
+                
+                // Debug: Check session cache status before validation
+                Log.d(TAG, "=== DEBUG: SESSION CACHE STATUS BEFORE VALIDATION ===")
+                QRSecurityValidator.getInstance().debugSessionCache()
+                Log.d(TAG, "=== DEBUG: SESSION CACHE STATUS BEFORE VALIDATION END ===")
 
                 // Reset state for new processing
                 _studentUiState.value = _studentUiState.value.copy(
@@ -552,6 +620,32 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                 val validationStartTime = System.currentTimeMillis()
                 Log.d(TAG, "Starting QR validation at: $validationStartTime")
                 Log.d(TAG, "Time from processing start to validation: ${validationStartTime - processingStartTime}ms")
+                
+                // Debug: Parse QR data to get session ID and check cache
+                try {
+                    val qrData = QRAttendanceData.fromJson(qrText)
+                    if (qrData != null) {
+                        Log.d(TAG, "=== DEBUG: CHECKING SPECIFIC SESSION IN CACHE ===")
+                        Log.d(TAG, "QR Data parsed - SessionId: '${qrData.sessionId}', EventId: '${qrData.eventId}', AdminId: '${qrData.adminId}'")
+                        
+                        val sessionInfo = QRSecurityValidator.getInstance().getSessionInfo(qrData.sessionId)
+                        if (sessionInfo != null) {
+                            Log.d(TAG, "✅ Session found in cache before validation:")
+                            Log.d(TAG, "  - SessionId: '${sessionInfo.sessionId}'")
+                            Log.d(TAG, "  - AdminId: '${sessionInfo.adminId}'")
+                            Log.d(TAG, "  - EventId: '${sessionInfo.eventId}'")
+                            Log.d(TAG, "  - IsActive: ${sessionInfo.isActive}")
+                        } else {
+                            Log.w(TAG, "❌ Session NOT found in cache before validation: '${qrData.sessionId}'")
+                            Log.d(TAG, "This is why validation will fail!")
+                        }
+                        Log.d(TAG, "=== DEBUG: CHECKING SPECIFIC SESSION IN CACHE END ===")
+                    } else {
+                        Log.e(TAG, "❌ Failed to parse QR data for debug")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing QR data for debug: ${e.message}")
+                }
 
                 val result = qrService.validateQRCode(qrText, _studentUiState.value.studentId)
 
@@ -636,12 +730,21 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
 
             // Comprehensive duplicate check (user + device)
             try {
-                // Get the event to check existing attendees
-                val eventResult = repository.getAttendanceEvent(qrData.eventId)
+                Log.d(TAG, "=== FETCHING EVENT FOR DUPLICATE CHECK ===")
+                Log.d(TAG, "Event ID: ${qrData.eventId}")
+                Log.d(TAG, "Session ID: ${qrData.sessionId}")
+                Log.d(TAG, "Student ID: ${_studentUiState.value.studentId}")
+                
+                // Get the event to check existing attendees (force server read for fresh data)
+                val eventResult = repository.getAttendanceEventForDuplicateCheck(qrData.eventId)
                 if (eventResult.isSuccess) {
                     val event = eventResult.getOrNull()
                     if (event != null) {
                         val existingAttendees = event.attendees
+                        Log.d(TAG, "Event fetched successfully")
+                        Log.d(TAG, "Event attendees count: ${existingAttendees.size}")
+                        Log.d(TAG, "Event attendees: ${existingAttendees.map { "${it.rollNumber} (${it.name})" }}")
+                        
                         val duplicateCheck = QRSecurityValidator.getInstance().checkComprehensiveDuplicate(
                             qrData.sessionId,
                             _studentUiState.value.studentId,
@@ -651,12 +754,17 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                         
                         if (duplicateCheck.isDuplicate) {
                             Log.w(TAG, "Duplicate attendance attempt blocked: ${duplicateCheck.duplicateType}")
+                            Log.w(TAG, "Blocking message: ${duplicateCheck.message}")
                             _studentUiState.value = _studentUiState.value.copy(
                                 isProcessing = false,
                                 scanResult = ScanResult.Error(duplicateCheck.message)
                             )
                             return
+                        } else {
+                            Log.d(TAG, "No duplicates found, proceeding with attendance marking")
                         }
+                    } else {
+                        Log.w(TAG, "Event is null after successful fetch")
                     }
                 } else {
                     Log.w(TAG, "Failed to get event for duplicate check: ${eventResult.exceptionOrNull()?.message}")
@@ -665,10 +773,53 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                 Log.w(TAG, "Unexpected error during comprehensive duplicate check", e)
             }
 
-            // Use admin info from session/UI if available; avoid Firestore read
-            val adminName = _adminUiState.value.adminName.ifBlank { "Unknown Admin" }
+            // Get admin name from database using the admin ID from QR data
+            val adminName = try {
+                Log.d(TAG, "Fetching admin data for ID: ${qrData.adminId}")
+                Log.d(TAG, "QR Data - SessionId: ${qrData.sessionId}, EventId: ${qrData.eventId}, AdminId: ${qrData.adminId}")
+                
+                // Try case-insensitive lookup first
+                val adminResult = repository.getUserByRollNumberCaseInsensitive(qrData.adminId)
+                if (adminResult.isSuccess) {
+                    val adminData = adminResult.getOrNull()
+                    Log.d(TAG, "Admin data retrieved: $adminData")
+                    Log.d(TAG, "Admin data keys: ${adminData?.keys}")
+                    
+                    val name = adminData?.get("name") as? String
+                    Log.d(TAG, "Extracted admin name: '$name'")
+                    
+                    if (name.isNullOrBlank()) {
+                        Log.w(TAG, "Admin name is blank, trying alternative field names")
+                        // Try alternative field names
+                        val altName = adminData?.get("Name") as? String
+                            ?: adminData?.get("student_name") as? String
+                            ?: adminData?.get("full_name") as? String
+                            ?: adminData?.get("studentName") as? String
+                            ?: adminData?.get("fullName") as? String
+                            ?: "Unknown Admin"
+                        Log.d(TAG, "Alternative name found: '$altName'")
+                        altName
+                    } else {
+                        name
+                    }
+                } else {
+                    Log.w(TAG, "Failed to fetch admin data for ID: ${qrData.adminId}, error: ${adminResult.exceptionOrNull()?.message}")
+                    "Unknown Admin"
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error fetching admin name for ID: ${qrData.adminId}", e)
+                "Unknown Admin"
+            }
 
             Log.d(TAG, "Admin lookup: adminId='${qrData.adminId}', adminName='$adminName'")
+            
+            // Additional validation: if the admin name matches the student name, something is wrong
+            if (adminName == _studentUiState.value.studentName) {
+                Log.w(TAG, "WARNING: Admin name matches student name! This suggests a data issue.")
+                Log.w(TAG, "Student name: ${_studentUiState.value.studentName}")
+                Log.w(TAG, "Admin name: $adminName")
+                Log.w(TAG, "Admin ID: ${qrData.adminId}")
+            }
 
             val attendee = AttendeeRecord(
                 rollNumber = _studentUiState.value.studentId,
@@ -840,6 +991,236 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
             }
         }
     }
+    
+    /**
+     * Debug method to check session cache status
+     */
+    fun debugSessionCache() {
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "=== SESSION CACHE DEBUG START ===")
+                
+                val selectedEvent = _adminUiState.value.selectedEvent
+                if (selectedEvent != null) {
+                    val sessionId = selectedEvent.id
+                    Log.d(TAG, "Current selected event: ${selectedEvent.getEventName()}")
+                    Log.d(TAG, "Session ID: $sessionId")
+                    
+                    // Check session in cache
+                    val sessionInfo = QRSecurityValidator.getInstance().getSessionInfo(sessionId)
+                    if (sessionInfo != null) {
+                        Log.d(TAG, "✅ Session found in cache:")
+                        Log.d(TAG, "  - SessionId: ${sessionInfo.sessionId}")
+                        Log.d(TAG, "  - AdminId: '${sessionInfo.adminId}'")
+                        Log.d(TAG, "  - EventId: '${sessionInfo.eventId}'")
+                        Log.d(TAG, "  - IsActive: ${sessionInfo.isActive}")
+                        Log.d(TAG, "  - StartTime: ${sessionInfo.startTime}")
+                        Log.d(TAG, "  - EndTime: ${sessionInfo.endTime}")
+                    } else {
+                        Log.w(TAG, "❌ Session not found in cache: $sessionId")
+                        
+                        // Try to force refresh
+                        Log.d(TAG, "Attempting to force refresh session cache...")
+                        val refreshSuccess = QRSecurityValidator.getInstance().forceRefreshSessionCache(sessionId)
+                        Log.d(TAG, "Force refresh result: $refreshSuccess")
+                        
+                        if (refreshSuccess) {
+                            val refreshedSessionInfo = QRSecurityValidator.getInstance().getSessionInfo(sessionId)
+                            Log.d(TAG, "✅ Session refreshed successfully:")
+                            Log.d(TAG, "  - SessionId: ${refreshedSessionInfo?.sessionId}")
+                            Log.d(TAG, "  - AdminId: '${refreshedSessionInfo?.adminId}'")
+                            Log.d(TAG, "  - EventId: '${refreshedSessionInfo?.eventId}'")
+                            Log.d(TAG, "  - IsActive: ${refreshedSessionInfo?.isActive}")
+                        }
+                    }
+                } else {
+                    Log.w(TAG, "No selected event - cannot check session cache")
+                }
+                
+                Log.d(TAG, "=== SESSION CACHE DEBUG END ===")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in session cache debug", e)
+            }
+        }
+    }
+    
+    /**
+     * Debug method to clear session cache (for testing)
+     */
+    fun debugClearSessionCache() {
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "=== CLEARING SESSION CACHE ===")
+                QRSecurityValidator.getInstance().clearAllSessions()
+                Log.d(TAG, "Session cache cleared")
+                Log.d(TAG, "=== SESSION CACHE CLEARED ===")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error clearing session cache", e)
+            }
+        }
+    }
+    
+    /**
+     * Debug method to re-register current session
+     */
+    fun debugReregisterSession() {
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "=== RE-REGISTERING SESSION ===")
+                
+                val selectedEvent = _adminUiState.value.selectedEvent
+                if (selectedEvent != null) {
+                    val sessionId = selectedEvent.id
+                    val adminId = _adminUiState.value.adminId
+                    val eventId = selectedEvent.id
+                    
+                    Log.d(TAG, "Re-registering session - SessionId: $sessionId, AdminId: $adminId, EventId: $eventId")
+                    qrService.registerSession(sessionId, adminId, eventId)
+                    Log.d(TAG, "Session re-registration completed")
+                    
+                    // Verify registration
+                    delay(100)
+                    val sessionInfo = QRSecurityValidator.getInstance().getSessionInfo(sessionId)
+                    if (sessionInfo != null) {
+                        Log.d(TAG, "✅ Session re-registration verified:")
+                        Log.d(TAG, "  - SessionId: ${sessionInfo.sessionId}")
+                        Log.d(TAG, "  - AdminId: '${sessionInfo.adminId}'")
+                        Log.d(TAG, "  - EventId: '${sessionInfo.eventId}'")
+                        Log.d(TAG, "  - IsActive: ${sessionInfo.isActive}")
+                    } else {
+                        Log.e(TAG, "❌ Session re-registration verification failed")
+                    }
+                } else {
+                    Log.w(TAG, "No selected event - cannot re-register session")
+                }
+                
+                Log.d(TAG, "=== SESSION RE-REGISTRATION END ===")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error re-registering session", e)
+            }
+        }
+    }
+    
+    /**
+     * Debug method to list all events in the database
+     */
+    fun debugListAllEvents() {
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "=== DEBUG: LISTING ALL EVENTS ===")
+                QRSecurityValidator.getInstance().debugListAllEvents()
+                Log.d(TAG, "=== DEBUG: LISTING ALL EVENTS COMPLETED ===")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error listing all events", e)
+            }
+        }
+    }
+    
+    /**
+     * Debug method to check if a specific event exists
+     */
+    fun debugCheckEventExists(eventId: String) {
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "=== DEBUG: CHECKING EVENT EXISTS ===")
+                Log.d(TAG, "Checking if event exists: '$eventId'")
+                
+                val result = repository.getAttendanceEvent(eventId)
+                if (result.isSuccess) {
+                    val event = result.getOrNull()
+                    if (event != null) {
+                        Log.d(TAG, "✅ Event found:")
+                        Log.d(TAG, "  - ID: '${event.id}'")
+                        Log.d(TAG, "  - Name: '${event.getEventName()}'")
+                        Log.d(TAG, "  - CreatedBy: '${event.createdBy}'")
+                        Log.d(TAG, "  - IsLive: ${event.isLive}")
+                        Log.d(TAG, "  - ClosedAt: ${event.closedAt}")
+                    } else {
+                        Log.w(TAG, "❌ Event not found: '$eventId'")
+                    }
+                } else {
+                    Log.e(TAG, "❌ Error checking event: ${result.exceptionOrNull()?.message}")
+                }
+                
+                Log.d(TAG, "=== DEBUG: CHECKING EVENT EXISTS COMPLETED ===")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error checking event exists", e)
+            }
+        }
+    }
+    
+    /**
+     * Debug method to check available events for admin
+     */
+    fun debugCheckAvailableEvents() {
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "=== DEBUG: CHECKING AVAILABLE EVENTS ===")
+                Log.d(TAG, "Current admin UI state:")
+                Log.d(TAG, "  - AdminId: '${_adminUiState.value.adminId}'")
+                Log.d(TAG, "  - AdminName: '${_adminUiState.value.adminName}'")
+                Log.d(TAG, "  - IsAdmin: ${_adminUiState.value.isAdmin}")
+                Log.d(TAG, "  - Available events count: ${_adminUiState.value.availableEvents.size}")
+                
+                _adminUiState.value.availableEvents.forEachIndexed { index, event ->
+                    Log.d(TAG, "Available event $index:")
+                    Log.d(TAG, "  - ID: '${event.id}'")
+                    Log.d(TAG, "  - Name: '${event.getEventName()}'")
+                    Log.d(TAG, "  - CreatedBy: '${event.createdBy}'")
+                    Log.d(TAG, "  - IsLive: ${event.isLive}")
+                    Log.d(TAG, "  - ClosedAt: ${event.closedAt}")
+                }
+                
+                Log.d(TAG, "=== DEBUG: CHECKING AVAILABLE EVENTS COMPLETED ===")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error checking available events", e)
+            }
+        }
+    }
+    
+    /**
+     * Debug method to check session cache status
+     */
+    fun debugSessionCacheStatus() {
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "=== DEBUG: SESSION CACHE STATUS ===")
+                QRSecurityValidator.getInstance().debugSessionCache()
+                Log.d(TAG, "=== DEBUG: SESSION CACHE STATUS COMPLETED ===")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error checking session cache status", e)
+            }
+        }
+    }
+    
+    /**
+     * Debug method to check if a specific session exists in cache
+     */
+    fun debugCheckSessionInCache(sessionId: String) {
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "=== DEBUG: CHECKING SESSION IN CACHE ===")
+                Log.d(TAG, "Checking if session exists in cache: '$sessionId'")
+                
+                val sessionInfo = QRSecurityValidator.getInstance().getSessionInfo(sessionId)
+                if (sessionInfo != null) {
+                    Log.d(TAG, "✅ Session found in cache:")
+                    Log.d(TAG, "  - SessionId: '${sessionInfo.sessionId}'")
+                    Log.d(TAG, "  - AdminId: '${sessionInfo.adminId}'")
+                    Log.d(TAG, "  - EventId: '${sessionInfo.eventId}'")
+                    Log.d(TAG, "  - IsActive: ${sessionInfo.isActive}")
+                    Log.d(TAG, "  - StartTime: ${sessionInfo.startTime}")
+                } else {
+                    Log.w(TAG, "❌ Session not found in cache: '$sessionId'")
+                    Log.d(TAG, "This means the session was never registered or was cleared")
+                }
+                
+                Log.d(TAG, "=== DEBUG: CHECKING SESSION IN CACHE COMPLETED ===")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error checking session in cache", e)
+            }
+        }
+    }
 
     /**
      * Close an attendance event manually
@@ -849,7 +1230,8 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
             try {
                 val result = repository.closeAttendanceEvent(event.id)
                 if (result.isSuccess) {
-                    // Force reload available events to reflect the closed event immediately
+                    // Invalidate caches and force reload to reflect the closed event immediately
+                    repository.invalidateEventCaches()
                     loadAvailableEvents(forceRefresh = true)
                     Log.d(TAG, "Event closed successfully: ${event.getEventName()}")
                 } else {
@@ -1299,19 +1681,39 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                         Log.d(TAG, "Processing roll number: $rollNumber")
                         
                         // Check if roll number is already in the event (case-insensitive) by fetching current event data
+                        Log.d(TAG, "=== CHECKING DUPLICATE FOR ROLL NUMBER: $rollNumber ===")
+                        Log.d(TAG, "Event ID: $eventId")
+                        
                         val currentEventResult = repository.getAttendanceEvent(eventId)
                         if (currentEventResult.isSuccess) {
                             val currentEvent = currentEventResult.getOrNull()
-                            val isAlreadyAttending = currentEvent?.attendees?.any { 
-                                it.rollNumber.equals(rollNumber, ignoreCase = true) 
-                            } ?: false
-                            
-                            if (isAlreadyAttending) {
-                                Log.w(TAG, "Roll number $rollNumber is already marked for attendance")
-                                errorCount++
-                                errors.add("Already marked: $rollNumber")
-                                perRollResults.add(RollOperationResult(rollNumber, false, "Already marked"))
-                                continue
+                            if (currentEvent != null) {
+                                val existingAttendees = currentEvent.attendees
+                                Log.d(TAG, "Event fetched successfully for duplicate check")
+                                Log.d(TAG, "Current attendees count: ${existingAttendees.size}")
+                                Log.d(TAG, "Current attendees: ${existingAttendees.map { "${it.rollNumber} (${it.name})" }}")
+                                
+                                val isAlreadyAttending = existingAttendees.any { 
+                                    it.rollNumber.equals(rollNumber, ignoreCase = true) 
+                                }
+                                
+                                Log.d(TAG, "Checking if $rollNumber is already attending: $isAlreadyAttending")
+                                
+                                if (isAlreadyAttending) {
+                                    val duplicateAttendee = existingAttendees.find { 
+                                        it.rollNumber.equals(rollNumber, ignoreCase = true) 
+                                    }
+                                    Log.w(TAG, "DUPLICATE FOUND: Roll number $rollNumber is already marked for attendance")
+                                    Log.w(TAG, "Duplicate attendee details: $duplicateAttendee")
+                                    errorCount++
+                                    errors.add("Already marked: $rollNumber")
+                                    perRollResults.add(RollOperationResult(rollNumber, false, "Already marked"))
+                                    continue
+                                } else {
+                                    Log.d(TAG, "No duplicate found for $rollNumber, proceeding with attendance marking")
+                                }
+                            } else {
+                                Log.w(TAG, "Event is null after successful fetch")
                             }
                         } else {
                             Log.w(TAG, "Could not fetch current event data for duplicate check: ${currentEventResult.exceptionOrNull()?.message}")
@@ -1416,6 +1818,10 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                 if (_adminUiState.value.isSessionActive && _adminUiState.value.selectedEvent?.id == eventId) {
                     startEventListener(eventId)
                 }
+                
+                // Always refresh the events list to show updated attendee counts
+                repository.invalidateEventCaches()
+                loadAvailableEvents(forceRefresh = true)
 
             } catch (e: Exception) {
                 Log.e(TAG, "Error adding manual attendance", e)
@@ -1517,6 +1923,10 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                 if (_adminUiState.value.isSessionActive && _adminUiState.value.selectedEvent?.id == eventId) {
                     startEventListener(eventId)
                 }
+                
+                // Always refresh the events list to show updated attendee counts
+                repository.invalidateEventCaches()
+                loadAvailableEvents(forceRefresh = true)
 
             } catch (e: Exception) {
                 Log.e(TAG, "Error marking students absent", e)
@@ -1530,13 +1940,14 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
     /**
      * Parse roll numbers from input text
      * Supports comma, line, space, and comma-space separators
+     * Automatically converts roll numbers to uppercase for consistency
      */
     private fun parseRollNumbers(input: String): List<String> {
         if (input.isBlank()) return emptyList()
 
         return input
             .split(Regex("[,;\\n\\r\\s]+")) // Split by comma, semicolon, newline, carriage return, or whitespace
-            .map { it.trim() }
+            .map { it.trim().uppercase() } // Convert to uppercase for consistency
             .filter { it.isNotBlank() }
             .distinct()
     }

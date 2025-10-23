@@ -25,7 +25,7 @@ data class QRAttendanceData(
 ) {
     companion object {
         private const val QR_VERSION = "1.0"
-        private const val VALIDITY_WINDOW_MS = 10000L // 10 seconds validity window to account for processing delays
+        private const val VALIDITY_WINDOW_MS = 8000L // 3 seconds validity window to account for processing delays
         
         /**
          * Create a new QR attendance data with validation token

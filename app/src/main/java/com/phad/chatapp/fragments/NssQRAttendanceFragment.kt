@@ -207,6 +207,12 @@ class NssQRAttendanceFragment : Fragment() {
         }
     }
     
+    override fun onResume() {
+        super.onResume()
+        // Automatically refresh events when returning to the screen
+        viewModel.refreshAvailableEvents()
+    }
+    
     override fun onDestroyView() {
         super.onDestroyView()
         // End any active session when leaving the fragment
@@ -674,35 +680,41 @@ fun EditEventDialog(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // Event Date Field with prominent styling
-                OutlinedTextField(
-                    value = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault()).format(selectedDate),
-                    onValueChange = { },
-                    label = {
-                        Text(
-                            "Event Date",
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 14.sp
-                        )
-                    },
-                    placeholder = { Text("Select event date") },
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { showDatePicker = true },
-                    enabled = false,
-                    readOnly = true,
-                    textStyle = TextStyle(
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 14.sp,
-                        color = Color(0xFF333333)
-                    ),
-                    trailingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.DateRange,
-                            contentDescription = "Select Date",
-                            tint = Color(0xFF4CAF50) // Green color for date
-                        )
-                    }
-                )
+                        .clickable { 
+                            Log.d("DatePicker", "Date field clicked, opening date picker")
+                            showDatePicker = true 
+                        }
+                ) {
+                    OutlinedTextField(
+                        value = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault()).format(selectedDate),
+                        onValueChange = { },
+                        label = {
+                            Text(
+                                "Event Date",
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 14.sp
+                            )
+                        },
+                        placeholder = { Text("Select event date") },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = false, // Disable the text field itself
+                        textStyle = TextStyle(
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 14.sp,
+                            color = Color(0xFF333333)
+                        ),
+                        trailingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.DateRange,
+                                contentDescription = "Select Date",
+                                tint = Color(0xFF4CAF50) // Green color for date
+                            )
+                        }
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
@@ -870,7 +882,7 @@ fun EditEventDialog(
                     OutlinedTextField(
                         value = negativeHours,
                         onValueChange = { newValue ->
-                            if (newValue.isEmpty() || newValue.all { it.isDigit() }) {
+                            if (newValue.isEmpty() || newValue.matches(Regex("^\\d*\\.?\\d*$"))) {
                                 negativeHours = newValue
                                 showError = false
                             }
@@ -1812,7 +1824,8 @@ fun CreateEventDialog(
                 .fillMaxWidth()
                 .padding(16.dp),
             shape = RoundedCornerShape(16.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White)
         ) {
             Column(
                 modifier = Modifier
@@ -1823,7 +1836,7 @@ fun CreateEventDialog(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surface)
+                        .background(Color.White)
                         .padding(20.dp, 16.dp)
                 ) {
                     Text(
@@ -1839,6 +1852,7 @@ fun CreateEventDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
+                        .background(Color.White)
                         .verticalScroll(rememberScrollState())
                         .padding(horizontal = 20.dp)
                 ) {
@@ -1912,7 +1926,8 @@ fun CreateEventDialog(
                                 Text(
                                     "Opening Time",
                                     fontWeight = FontWeight.Medium,
-                                    fontSize = 14.sp
+                                    fontSize = 12.sp,
+                                    maxLines = 1
                                 )
                             },
                             placeholder = { Text("Select opening time") },
@@ -1921,6 +1936,7 @@ fun CreateEventDialog(
                                 .clickable { showOpeningTimePicker = true },
                             enabled = false,
                             readOnly = true,
+                            singleLine = true,
                             textStyle = TextStyle(
                                 fontWeight = FontWeight.Medium,
                                 fontSize = 14.sp,
@@ -1943,7 +1959,8 @@ fun CreateEventDialog(
                                 Text(
                                     "Closing Time",
                                     fontWeight = FontWeight.Medium,
-                                    fontSize = 14.sp
+                                    fontSize = 12.sp,
+                                    maxLines = 1
                                 )
                             },
                             placeholder = { Text("Select closing time") },
@@ -1952,6 +1969,7 @@ fun CreateEventDialog(
                                 .clickable { showClosingTimePicker = true },
                             enabled = false,
                             readOnly = true,
+                            singleLine = true,
                             textStyle = TextStyle(
                                 fontWeight = FontWeight.Medium,
                                 fontSize = 14.sp,
@@ -1973,8 +1991,8 @@ fun CreateEventDialog(
                     OutlinedTextField(
                         value = eventHours,
                         onValueChange = { newValue ->
-                            // Only allow digits and ensure non-negative
-                            if (newValue.isEmpty() || (newValue.all { it.isDigit() } && newValue.toIntOrNull()?.let { it >= 0 } == true)) {
+                            // Allow decimal input and ensure non-negative
+                            if (newValue.isEmpty() || isValidDecimalInput(newValue)) {
                                 eventHours = newValue
                                 showError = false
                             }
@@ -1986,7 +2004,7 @@ fun CreateEventDialog(
                                 fontSize = 14.sp
                             )
                         },
-                        placeholder = { Text("Enter volunteer hours") },
+                        placeholder = { Text("Enter volunteer hours (e.g., 2.5)") },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !isCreating,
                         textStyle = TextStyle(
@@ -2064,7 +2082,7 @@ fun CreateEventDialog(
                         OutlinedTextField(
                             value = negativeHours,
                             onValueChange = { newValue ->
-                                if (newValue.isEmpty() || newValue.all { it.isDigit() }) {
+                                if (newValue.isEmpty() || newValue.matches(Regex("^\\d*\\.?\\d*$"))) {
                                     negativeHours = newValue
                                     showError = false
                                 }
@@ -2078,7 +2096,7 @@ fun CreateEventDialog(
                                 fontSize = 14.sp,
                                 color = Color(0xFF333333)
                             ),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             isError = showError && negativeHours.trim().isEmpty(),
                             supportingText = {
                                 if (showError && negativeHours.trim().isEmpty()) {
@@ -2142,7 +2160,7 @@ fun CreateEventDialog(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surface)
+                        .background(Color.White)
                         .padding(20.dp, 16.dp),
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically

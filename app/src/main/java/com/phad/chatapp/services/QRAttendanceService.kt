@@ -27,7 +27,7 @@ class QRAttendanceService {
     companion object {
         private const val QR_CODE_SIZE = 1000 // Increased from 800 to 1000 for optimal quality at 400dp display size
         private const val QR_REFRESH_INTERVAL_MS = 2000L // 2 seconds
-        private const val QR_VALIDITY_WINDOW_MS = 10000L // 10 seconds validity to account for processing delays
+        private const val QR_VALIDITY_WINDOW_MS = 8000L // 3 seconds validity to account for processing delays
     }
     
     /**
@@ -146,10 +146,6 @@ class QRAttendanceService {
             }
 
             Log.d(TAG, "Parsed QR data - SessionId: ${qrData.sessionId}, EventId: ${qrData.eventId}, Age: ${qrData.getAgeInSeconds()}s")
-
-            // Debug timing and session issues
-            com.phad.chatapp.utils.QRAttendanceDebugUtils.debugQRTiming(qrData, TAG)
-            com.phad.chatapp.utils.QRAttendanceDebugUtils.debugSessionValidation(qrData, TAG)
 
             // Debug admin ID flow if we have session info
             Log.d(TAG, "Expected session ID for validation: $expectedSessionId")

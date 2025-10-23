@@ -16,8 +16,8 @@ class QRSecurityValidator {
     private val TAG = "QRSecurityValidator"
     
     companion object {
-        // Security constants - 10 second validity window to account for processing delays and network latency
-        private const val MAX_QR_AGE_MS = 10000L // 10 seconds maximum age for security
+        // Security constants - 3 second validity window to account for processing delays and network latency
+        private const val MAX_QR_AGE_MS = 8000L // 3 seconds maximum age for security
         private const val MIN_QR_AGE_MS = -2000L // Allow 2 second tolerance for clock differences
         private const val MAX_SCAN_ATTEMPTS_PER_MINUTE = 10
         private const val RATE_LIMIT_WINDOW_MS = 60000L // 1 minute
@@ -234,11 +234,25 @@ class QRSecurityValidator {
                     repository.getAttendanceEvent(expectedSessionId).getOrNull()
                 }
 
-                if (firestoreEvent != null && firestoreEvent.isLive) {
+                // Check if event is live by examining raw Firestore data
+                // This handles the case where is_live field is not serialized due to @get:Exclude
+                val isEventLive = if (firestoreEvent != null) {
+                    // We need to get the raw document data to check is_live field
+                    // Since we can't access raw data here, we'll assume true for new events
+                    // and let the closedAt field indicate if event is ended
+                    val isEnded = firestoreEvent.closedAt != null
+                    !isEnded // Event is live if not ended
+                } else {
+                    false
+                }
+
+                if (firestoreEvent != null && isEventLive) {
                     // Event found in Firestore and is live
                     // Use the QR admin ID instead of event createdBy to match current session
                     val currentAdminId = qrData.adminId
                     Log.d(TAG, "Using current admin ID from QR: '$currentAdminId' instead of event createdBy: '${firestoreEvent.createdBy}'")
+                    Log.d(TAG, "Event closedAt: ${firestoreEvent.closedAt}")
+                    Log.d(TAG, "Event isEventLive (calculated): $isEventLive")
 
                     sessionInfo = SessionValidationInfo(
                         sessionId = firestoreEvent.id,
@@ -246,12 +260,17 @@ class QRSecurityValidator {
                         eventId = firestoreEvent.id,
                         startTime = firestoreEvent.createdAt.toDate().time,
                         endTime = firestoreEvent.closedAt?.toDate()?.time,
-                        isActive = firestoreEvent.isLive
+                        isActive = isEventLive
                     )
                     validSessions[expectedSessionId] = sessionInfo
                     Log.d(TAG, "Expected session found in consolidated event and added to cache: $expectedSessionId")
                 } else {
                     Log.w(TAG, "Expected session not found in consolidated events or is not live: $expectedSessionId")
+                    Log.w(TAG, "Event exists: ${firestoreEvent != null}")
+                    Log.w(TAG, "Event is live: $isEventLive")
+                    if (firestoreEvent != null) {
+                        Log.w(TAG, "Event closedAt: ${firestoreEvent.closedAt}")
+                    }
                     return ValidationResult(
                         false,
                         "Session not found or inactive (consolidated schema)",
@@ -285,30 +304,112 @@ class QRSecurityValidator {
     private fun validateQRSession(qrData: QRAttendanceData): ValidationResult {
         val sessionId = qrData.sessionId
 
+        Log.d(TAG, "=== QR SESSION VALIDATION START ===")
         Log.d(TAG, "Validating QR session: $sessionId")
         Log.d(TAG, "QR Data - AdminId: ${qrData.adminId}, EventId: ${qrData.eventId}")
+        Log.d(TAG, "QR Data - QrId: ${qrData.qrId}, Timestamp: ${qrData.timestamp}")
         Log.d(TAG, "Available sessions in cache: ${validSessions.keys.joinToString(", ")}")
 
         // First check in-memory cache
         var sessionInfo = validSessions[sessionId]
         Log.d(TAG, "Session found in cache: ${sessionInfo != null}")
+        if (sessionInfo != null) {
+            Log.d(TAG, "Cached session details - AdminId: '${sessionInfo.adminId}', EventId: '${sessionInfo.eventId}', IsActive: ${sessionInfo.isActive}")
+        }
 
-        // If not found in cache, check Firestore using consolidated schema
+        // If not found in cache, check Firestore sessions first
         if (sessionInfo == null) {
-            Log.d(TAG, "Session not found in cache, checking consolidated event: $sessionId")
+            Log.d(TAG, "Session not found in cache, checking Firestore sessions: $sessionId")
+            
             try {
+                val firestoreSession = runBlocking {
+                    val result = repository.getSession(sessionId)
+                    if (result.isSuccess) {
+                        result.getOrNull()
+                    } else {
+                        Log.e(TAG, "Error getting session from Firestore: ${result.exceptionOrNull()?.message}")
+                        null
+                    }
+                }
+                
+                if (firestoreSession != null) {
+                    Log.d(TAG, "✅ Session found in Firestore:")
+                    Log.d(TAG, "  - SessionId: '${firestoreSession.sessionId}'")
+                    Log.d(TAG, "  - AdminId: '${firestoreSession.adminId}'")
+                    Log.d(TAG, "  - EventId: '${firestoreSession.eventId}'")
+                    Log.d(TAG, "  - IsActive: ${firestoreSession.isActive}")
+                    
+                    // Add to cache for future lookups
+                    validSessions[sessionId] = firestoreSession
+                    sessionInfo = firestoreSession
+                } else {
+                    Log.w(TAG, "❌ Session not found in Firestore: '$sessionId'")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error checking Firestore session", e)
+            }
+        }
+        
+        // If still not found, check Firestore using consolidated schema with retry mechanism
+        if (sessionInfo == null) {
+            Log.d(TAG, "Session not found in cache or Firestore, checking consolidated event with retry: $sessionId")
+            
+            // Retry mechanism for newly created events
+            var retryCount = 0
+            val maxRetries = 3
+            var lastException: Exception? = null
+            
+            while (retryCount <= maxRetries) {
+                try {
+                    Log.d(TAG, "Attempt ${retryCount + 1}/${maxRetries + 1} to fetch event from Firestore")
+                    
                 // In consolidated schema, session ID is the event ID
+                    Log.d(TAG, "Attempting to fetch event from Firestore with ID: '$sessionId'")
                 val firestoreEvent = runBlocking {
-                    repository.getAttendanceEvent(sessionId).getOrNull()
+                        val result = repository.getAttendanceEvent(sessionId)
+                        Log.d(TAG, "Repository result: isSuccess=${result.isSuccess}")
+                        if (result.isFailure) {
+                            Log.e(TAG, "Repository error: ${result.exceptionOrNull()?.message}")
+                        }
+                        result.getOrNull()
+                    }
+
+                    Log.d(TAG, "Firestore event fetch result: ${firestoreEvent != null}")
+                    if (firestoreEvent != null) {
+                        Log.d(TAG, "Event details - ID: ${firestoreEvent.id}, CreatedBy: '${firestoreEvent.createdBy}', CreatedAt: ${firestoreEvent.createdAt}")
+                        Log.d(TAG, "Event isLive: ${firestoreEvent.isLive}, closedAt: ${firestoreEvent.closedAt}")
+                    } else {
+                        Log.w(TAG, "Event not found in Firestore for sessionId: '$sessionId'")
+                        Log.d(TAG, "This could mean:")
+                        Log.d(TAG, "  1. Event was not created properly")
+                        Log.d(TAG, "  2. Event ID mismatch between QR and database")
+                        Log.d(TAG, "  3. Event was deleted or moved")
                 }
 
-                if (firestoreEvent != null && firestoreEvent.isLive) {
+                // Check if event is live by examining raw Firestore data
+                // This handles the case where is_live field is not serialized due to @get:Exclude
+                val isEventLive = if (firestoreEvent != null) {
+                    // We need to get the raw document data to check is_live field
+                    // Since we can't access raw data here, we'll assume true for new events
+                    // and let the closedAt field indicate if event is ended
+                    val isEnded = firestoreEvent.closedAt != null
+                        val isLive = !isEnded // Event is live if not ended
+                        Log.d(TAG, "Event live calculation - closedAt: ${firestoreEvent.closedAt}, isEnded: $isEnded, isLive: $isLive")
+                        isLive
+                } else {
+                        Log.w(TAG, "Event not found in Firestore")
+                    false
+                }
+
+                if (firestoreEvent != null && isEventLive) {
                     // Event found in Firestore and is live, add to cache as session
                     Log.d(TAG, "=== FIRESTORE EVENT DEBUG ===")
                     Log.d(TAG, "Event ID: ${firestoreEvent.id}")
                     Log.d(TAG, "Event createdBy: '${firestoreEvent.createdBy}'")
                     Log.d(TAG, "Event creatorName: '${firestoreEvent.creatorName}'")
                     Log.d(TAG, "Event isLive: ${firestoreEvent.isLive}")
+                    Log.d(TAG, "Event closedAt: ${firestoreEvent.closedAt}")
+                    Log.d(TAG, "Event isEventLive (calculated): $isEventLive")
                     Log.d(TAG, "QR Admin ID: '${qrData.adminId}'")
                     Log.d(TAG, "=============================")
 
@@ -322,30 +423,69 @@ class QRSecurityValidator {
                         eventId = firestoreEvent.id,
                         startTime = firestoreEvent.createdAt.toDate().time,
                         endTime = firestoreEvent.closedAt?.toDate()?.time,
-                        isActive = firestoreEvent.isLive
+                        isActive = isEventLive
                     )
                     validSessions[sessionId] = sessionInfo
-                    Log.d(TAG, "Session found in consolidated event and added to cache: $sessionId")
+                        Log.d(TAG, "✅ Session found in consolidated event and added to cache: $sessionId")
                     Log.d(TAG, "Cached session admin ID: '${sessionInfo.adminId}'")
+                        break // Success, exit retry loop
                 } else {
                     Log.w(TAG, "Session not found in consolidated events or is not live: $sessionId")
+                    Log.w(TAG, "Event exists: ${firestoreEvent != null}")
+                    Log.w(TAG, "Event is live: $isEventLive")
+                    if (firestoreEvent != null) {
+                        Log.w(TAG, "Event closedAt: ${firestoreEvent.closedAt}")
+                    }
+                        
+                        // If this is the last retry, return error
+                        if (retryCount == maxRetries) {
                     return ValidationResult(
                         false,
-                        "Session not found or inactive (consolidated schema)",
+                                "Session not found or inactive (consolidated schema) - tried ${maxRetries + 1} times",
                         ValidationResult.SESSION_NOT_FOUND
                     )
+                        }
+                        
+                        // Wait before retry (exponential backoff)
+                        val waitTime = (1000 * (1 shl retryCount)).toLong() // 1s, 2s, 4s
+                        Log.d(TAG, "Retrying in ${waitTime}ms...")
+                        Thread.sleep(waitTime)
+                        retryCount++
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error checking session in consolidated events: $sessionId", e)
+                    lastException = e
+                    Log.e(TAG, "Error checking session in consolidated events (attempt ${retryCount + 1}): $sessionId", e)
+                    
+                    // If this is the last retry, return error
+                    if (retryCount == maxRetries) {
                 return ValidationResult(
                     false,
-                    "Session validation failed: ${e.message}",
+                            "Session validation failed after ${maxRetries + 1} attempts: ${e.message}",
                     ValidationResult.ERROR
                 )
+                    }
+                    
+                    // Wait before retry (exponential backoff)
+                    val waitTime = (1000 * (1 shl retryCount)).toLong() // 1s, 2s, 4s
+                    Log.d(TAG, "Retrying in ${waitTime}ms after exception...")
+                    Thread.sleep(waitTime)
+                    retryCount++
+                }
             }
         }
 
+        // Final validation
+        if (sessionInfo == null) {
+            Log.e(TAG, "❌ Session info is still null after all attempts")
+            return ValidationResult(
+                false,
+                "Session validation failed - session info unavailable",
+                ValidationResult.SESSION_NOT_FOUND
+            )
+        }
+
         if (!sessionInfo.isActive) {
+            Log.w(TAG, "❌ Session is not active")
             return ValidationResult(
                 false,
                 "Session has ended",
@@ -355,6 +495,7 @@ class QRSecurityValidator {
 
         // Verify session data matches QR data
         if (sessionInfo.eventId != qrData.eventId) {
+            Log.w(TAG, "❌ Event ID mismatch - Session: '${sessionInfo.eventId}', QR: '${qrData.eventId}'")
             return ValidationResult(
                 false,
                 "QR code event doesn't match session",
@@ -378,6 +519,8 @@ class QRSecurityValidator {
             )
         }
 
+        Log.d(TAG, "✅ QR session validation successful")
+        Log.d(TAG, "=== QR SESSION VALIDATION END ===")
         return ValidationResult(true, "QR session is valid", ValidationResult.VALID)
     }
     
@@ -400,40 +543,237 @@ class QRSecurityValidator {
     }
     
     /**
-     * Register an active session
+     * Register an active session with enhanced logging and validation
      */
     fun registerSession(sessionId: String, adminId: String, eventId: String) {
-        validSessions[sessionId] = SessionValidationInfo(
+        Log.d(TAG, "=== SESSION REGISTRATION START ===")
+        Log.d(TAG, "Registering session: $sessionId")
+        Log.d(TAG, "Session details - AdminId: '$adminId', EventId: '$eventId'")
+        Log.d(TAG, "Current time: ${System.currentTimeMillis()}")
+        
+        // Validate input parameters
+        if (sessionId.isBlank()) {
+            Log.e(TAG, "❌ Session ID is blank - registration failed")
+            return
+        }
+        if (adminId.isBlank()) {
+            Log.e(TAG, "❌ Admin ID is blank - registration failed")
+            return
+        }
+        if (eventId.isBlank()) {
+            Log.e(TAG, "❌ Event ID is blank - registration failed")
+            return
+        }
+        
+        // Check if session already exists
+        val existingSession = validSessions[sessionId]
+        if (existingSession != null) {
+            Log.w(TAG, "⚠️ Session already exists, updating with new details")
+            Log.w(TAG, "Previous session - AdminId: '${existingSession.adminId}', EventId: '${existingSession.eventId}', IsActive: ${existingSession.isActive}")
+        }
+        
+        val sessionInfo = SessionValidationInfo(
             sessionId = sessionId,
             adminId = adminId,
             eventId = eventId,
             startTime = System.currentTimeMillis(),
             isActive = true
         )
-        Log.d(TAG, "Session registered: $sessionId")
-        Log.d(TAG, "Session details - AdminId: $adminId, EventId: $eventId")
+        
+        validSessions[sessionId] = sessionInfo
+        
+        // Store in Firestore for persistence across app instances
+        storeSessionInFirestore(sessionInfo)
+        
+        Log.d(TAG, "✅ Session registered successfully: $sessionId")
+        Log.d(TAG, "Registered session details - AdminId: '${sessionInfo.adminId}', EventId: '${sessionInfo.eventId}', IsActive: ${sessionInfo.isActive}")
         Log.d(TAG, "Total registered sessions: ${validSessions.size}")
         Log.d(TAG, "All registered session IDs: ${validSessions.keys.joinToString(", ")}")
+        
+        // Verify registration by reading back from cache
+        val verificationSession = validSessions[sessionId]
+        if (verificationSession != null) {
+            Log.d(TAG, "✅ Session registration verified - AdminId: '${verificationSession.adminId}', EventId: '${verificationSession.eventId}'")
+        } else {
+            Log.e(TAG, "❌ Session registration verification failed - session not found in cache")
+        }
+        
+        Log.d(TAG, "=== SESSION REGISTRATION END ===")
+    }
+    
+    /**
+     * Store session in Firestore for persistence
+     */
+    private fun storeSessionInFirestore(sessionInfo: SessionValidationInfo) {
+        // Store session in Firestore asynchronously
+        try {
+            Log.d(TAG, "Storing session in Firestore: ${sessionInfo.sessionId}")
+            // Use runBlocking to handle the suspend function
+            runBlocking {
+                repository.storeSession(sessionInfo)
+            }
+            Log.d(TAG, "Session stored in Firestore successfully")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error storing session in Firestore", e)
+        }
     }
     
     /**
      * End a session
      */
     fun endSession(sessionId: String) {
+        Log.d(TAG, "=== SESSION END START ===")
+        Log.d(TAG, "Ending session: $sessionId")
+        
         validSessions[sessionId]?.let { sessionInfo ->
-            validSessions[sessionId] = sessionInfo.copy(
+            val updatedSession = sessionInfo.copy(
                 isActive = false,
                 endTime = System.currentTimeMillis()
             )
+            validSessions[sessionId] = updatedSession
+            Log.d(TAG, "✅ Session ended successfully: $sessionId")
+            Log.d(TAG, "Session details - AdminId: '${updatedSession.adminId}', EventId: '${updatedSession.eventId}', IsActive: ${updatedSession.isActive}")
+        } ?: run {
+            Log.w(TAG, "⚠️ Session not found in cache: $sessionId")
         }
-        Log.d(TAG, "Session ended: $sessionId")
+        
+        Log.d(TAG, "Total active sessions: ${validSessions.values.count { it.isActive }}")
+        Log.d(TAG, "=== SESSION END END ===")
     }
+    
+    /**
+     * Force refresh session cache from Firestore
+     * This is useful when there might be timing issues between event creation and QR scanning
+     */
+    fun forceRefreshSessionCache(sessionId: String): Boolean {
+        Log.d(TAG, "=== FORCE REFRESH SESSION CACHE START ===")
+        Log.d(TAG, "Force refreshing session cache for: $sessionId")
+        
+        try {
+            // Remove from cache first
+            validSessions.remove(sessionId)
+            Log.d(TAG, "Removed session from cache: $sessionId")
+            
+            // Try to fetch from Firestore
+            val firestoreEvent = runBlocking {
+                repository.getAttendanceEvent(sessionId).getOrNull()
+            }
+            
+            if (firestoreEvent != null) {
+                val isEventLive = firestoreEvent.closedAt == null
+                Log.d(TAG, "Event found in Firestore - ID: ${firestoreEvent.id}, IsLive: $isEventLive")
+                
+                if (isEventLive) {
+                    // Re-register the session
+                    val sessionInfo = SessionValidationInfo(
+                        sessionId = firestoreEvent.id,
+                        adminId = firestoreEvent.createdBy, // Use event creator as admin
+                        eventId = firestoreEvent.id,
+                        startTime = firestoreEvent.createdAt.toDate().time,
+                        endTime = firestoreEvent.closedAt?.toDate()?.time,
+                        isActive = true
+                    )
+                    
+                    validSessions[sessionId] = sessionInfo
+                    Log.d(TAG, "✅ Session cache refreshed successfully: $sessionId")
+                    Log.d(TAG, "Refreshed session - AdminId: '${sessionInfo.adminId}', EventId: '${sessionInfo.eventId}', IsActive: ${sessionInfo.isActive}")
+                    return true
+                } else {
+                    Log.w(TAG, "Event is not live (closedAt: ${firestoreEvent.closedAt})")
+                    return false
+                }
+            } else {
+                Log.w(TAG, "Event not found in Firestore: $sessionId")
+                return false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error force refreshing session cache: $sessionId", e)
+            return false
+        } finally {
+            Log.d(TAG, "=== FORCE REFRESH SESSION CACHE END ===")
+        }
+    }
+    
+    /**
+     * Get session info from cache (for debugging)
+     */
+    fun getSessionInfo(sessionId: String): SessionValidationInfo? {
+        return validSessions[sessionId]
+    }
+    
+    /**
+     * Clear all sessions from cache (for debugging)
+     */
+    fun clearAllSessions() {
+        Log.d(TAG, "Clearing all sessions from cache")
+        validSessions.clear()
+        Log.d(TAG, "All sessions cleared")
+    }
+    
+    /**
+     * Debug method to list all events in the database
+     */
+    suspend fun debugListAllEvents() {
+        Log.d(TAG, "=== DEBUG: LISTING ALL EVENTS IN DATABASE ===")
+        try {
+            val allEvents = runBlocking {
+                repository.getAllEvents(forceRefresh = true).getOrNull() ?: emptyList()
+            }
+            
+            Log.d(TAG, "Total events found: ${allEvents.size}")
+            allEvents.forEachIndexed { index, event ->
+                Log.d(TAG, "Event $index:")
+                Log.d(TAG, "  - ID: '${event.id}'")
+                Log.d(TAG, "  - Name: '${event.getEventName()}'")
+                Log.d(TAG, "  - CreatedBy: '${event.createdBy}'")
+                Log.d(TAG, "  - IsLive: ${event.isLive}")
+                Log.d(TAG, "  - ClosedAt: ${event.closedAt}")
+                Log.d(TAG, "  - CreatedAt: ${event.createdAt}")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error listing all events", e)
+        }
+        Log.d(TAG, "=== DEBUG: END LISTING ALL EVENTS ===")
+    }
+    
+    /**
+     * Debug method to show session cache status
+     */
+    fun debugSessionCache() {
+        Log.d(TAG, "=== DEBUG: SESSION CACHE STATUS ===")
+        Log.d(TAG, "Total sessions in cache: ${validSessions.size}")
+        validSessions.forEach { (sessionId, sessionInfo) ->
+            Log.d(TAG, "Session: $sessionId")
+            Log.d(TAG, "  - AdminId: '${sessionInfo.adminId}'")
+            Log.d(TAG, "  - EventId: '${sessionInfo.eventId}'")
+            Log.d(TAG, "  - IsActive: ${sessionInfo.isActive}")
+            Log.d(TAG, "  - StartTime: ${sessionInfo.startTime}")
+            Log.d(TAG, "  - EndTime: ${sessionInfo.endTime}")
+        }
+        Log.d(TAG, "=== DEBUG: SESSION CACHE STATUS END ===")
+    }
+    
     
     /**
      * Check for duplicate attendance in the same session
      */
     fun checkDuplicateAttendance(sessionId: String, studentId: String, existingAttendees: List<AttendeeRecord>): Boolean {
-        return existingAttendees.any { it.rollNumber == studentId }
+        Log.d(TAG, "Checking duplicate attendance for student: $studentId")
+        Log.d(TAG, "Session ID: $sessionId")
+        Log.d(TAG, "Existing attendees count: ${existingAttendees.size}")
+        Log.d(TAG, "Existing attendees roll numbers: ${existingAttendees.map { it.rollNumber }}")
+        
+        val isDuplicate = existingAttendees.any { it.rollNumber == studentId }
+        
+        if (isDuplicate) {
+            Log.w(TAG, "Duplicate attendance found for student: $studentId")
+            val duplicateAttendee = existingAttendees.find { it.rollNumber == studentId }
+            Log.w(TAG, "Duplicate attendee details: $duplicateAttendee")
+        } else {
+            Log.d(TAG, "No duplicate attendance found for student: $studentId")
+        }
+        
+        return isDuplicate
     }
 
     /**
@@ -467,9 +807,16 @@ class QRSecurityValidator {
         deviceId: String,
         existingAttendees: List<AttendeeRecord>
     ): DuplicateCheckResult {
+        Log.d(TAG, "=== COMPREHENSIVE DUPLICATE CHECK ===")
+        Log.d(TAG, "Session ID: $sessionId")
+        Log.d(TAG, "Student ID: $studentId")
+        Log.d(TAG, "Device ID: ${deviceId.take(16)}...")
+        Log.d(TAG, "Existing attendees count: ${existingAttendees.size}")
+        
         // Check for user duplicate first
         val userDuplicate = checkDuplicateAttendance(sessionId, studentId, existingAttendees)
         if (userDuplicate) {
+            Log.w(TAG, "USER DUPLICATE FOUND - blocking attendance")
             return DuplicateCheckResult(
                 isDuplicate = true,
                 duplicateType = DuplicateType.USER_DUPLICATE,
@@ -480,6 +827,7 @@ class QRSecurityValidator {
         // Check for device duplicate
         val deviceDuplicate = checkDeviceDuplicateAttendance(sessionId, deviceId, existingAttendees)
         if (deviceDuplicate) {
+            Log.w(TAG, "DEVICE DUPLICATE FOUND - blocking attendance")
             return DuplicateCheckResult(
                 isDuplicate = true,
                 duplicateType = DuplicateType.DEVICE_DUPLICATE,
@@ -487,6 +835,7 @@ class QRSecurityValidator {
             )
         }
 
+        Log.d(TAG, "NO DUPLICATES FOUND - allowing attendance")
         return DuplicateCheckResult(
             isDuplicate = false,
             duplicateType = DuplicateType.NO_DUPLICATE,

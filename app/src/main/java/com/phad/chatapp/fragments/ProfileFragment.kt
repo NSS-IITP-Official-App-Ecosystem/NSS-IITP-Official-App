@@ -157,6 +157,8 @@ class ProfileFragment : Fragment() {
                 val totalHoursPerStudent: MutableMap<String, Double> = mutableMapOf()
 
                 val eventHoursById = events.associate { it.id to it.hours }
+                val eventNegativeHoursById = events.associate { it.id to it.negativeHours }
+                val mandatoryEventsById = events.associate { it.id to it.isMandatory }
 
                 usersSnapshot.documents.forEach { doc ->
                     val roll = doc.id
@@ -165,8 +167,17 @@ class ProfileFragment : Fragment() {
                     val totalHours = (doc.getDouble("hours") ?: 0.0)
                     totalHoursPerStudent[roll] = totalHours
                     val perEvent = perStudentEventHours.getOrPut(roll) { mutableMapOf() }
+                    
+                    // Add hours for attended events
                     eventsList.forEach { eventId ->
                         eventHoursById[eventId]?.let { hours -> perEvent[eventId] = hours }
+                    }
+                    
+                    // Add negative hours for mandatory events where student is absent
+                    events.forEach { event ->
+                        if (event.isMandatory && event.id !in eventsList) {
+                            perEvent[event.id] = -event.negativeHours
+                        }
                     }
                 }
 

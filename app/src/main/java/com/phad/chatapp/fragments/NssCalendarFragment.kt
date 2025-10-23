@@ -370,6 +370,16 @@ private fun DayEventsDialog(
     val sessionManager = remember { SessionManager(context) }
     val currentUserRollNumber = remember { sessionManager.fetchUserId() }
 
+    // Sort events by starting time
+    val sortedEvents = remember(events) {
+        events.sortedBy { event ->
+            // Parse the start time from the event time string
+            val timeRange = event.getTimeRangeString()
+            val timePair = com.phad.chatapp.utils.AttendanceEventUtils.parseTimeRange(timeRange)
+            timePair?.first?.time ?: Long.MAX_VALUE // Put events with invalid time at the end
+        }
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -381,7 +391,7 @@ private fun DayEventsDialog(
             )
         },
         text = {
-            if (events.isEmpty()) {
+            if (sortedEvents.isEmpty()) {
                 Text(
                     text = "No events on this day",
                     color = Color(0xFF666666),
@@ -394,7 +404,7 @@ private fun DayEventsDialog(
                         .heightIn(max = 400.dp)
                         .widthIn(min = 320.dp, max = 480.dp) // Expand dialog width for better content spacing
                 ) {
-                    items(events) { event ->
+                    items(sortedEvents) { event ->
                         EventDetailsCard(
                             event = event,
                             isAdmin = isAdmin,
@@ -405,7 +415,7 @@ private fun DayEventsDialog(
             }
         },
         confirmButton = {
-            if (isAdmin && events.isEmpty()) {
+            if (isAdmin && sortedEvents.isEmpty()) {
                 TextButton(
                     onClick = onCreateEvent,
                     colors = ButtonDefaults.textButtonColors(
@@ -1106,7 +1116,18 @@ private fun findNextUpcomingEvent(events: List<AttendanceEvent>, month: YearMont
     }
 
     Log.d("NssCalendarFragment", "Found ${upcomingEvents.size} upcoming events in ${month}.")
-    val nextEvent = upcomingEvents.minByOrNull { it.getEventDateAsDate() }
+    
+    // Sort events by date first, then by start time for events on the same date
+    val nextEvent = upcomingEvents.minByOrNull { event ->
+        val eventDate = event.getEventDateAsDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate()
+        val timeRange = event.getTimeRangeString()
+        val timePair = com.phad.chatapp.utils.AttendanceEventUtils.parseTimeRange(timeRange)
+        val startTime = timePair?.first?.time ?: Long.MAX_VALUE
+        
+        // Create a comparable value: date as epoch day + start time in milliseconds
+        eventDate.toEpochDay() * 86400000L + (startTime % 86400000L)
+    }
+    
     if (nextEvent != null) {
         Log.d("NssCalendarFragment", "Next upcoming event in ${month}: ${nextEvent.getEventName()}")
     } else {

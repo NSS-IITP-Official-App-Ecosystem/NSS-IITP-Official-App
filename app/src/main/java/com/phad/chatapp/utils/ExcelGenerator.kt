@@ -78,7 +78,11 @@ class ExcelGenerator(private val context: Context) {
                 val perEvent = perStudentEventHours[roll] ?: perStudentEventHours[student.rollNumber] ?: emptyMap()
                 events.forEach { event ->
                     val hours = perEvent[event.id]
-                    row.add(hours?.toString() ?: "")
+                    if (hours != null) {
+                        row.add(hours.toString())
+                    } else {
+                        row.add("") // Show empty for events where student is absent
+                    }
                 }
 
                 writer.write(row.joinToString(","))

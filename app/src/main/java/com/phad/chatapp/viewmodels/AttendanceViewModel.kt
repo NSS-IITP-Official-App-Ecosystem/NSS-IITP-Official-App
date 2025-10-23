@@ -513,7 +513,7 @@ class AttendanceViewModel(private val application: Application) : ViewModel() {
             // Also remove any duplicate "live" field that might exist
             val updates = mapOf(
                 "is_live" to false,
-                "closed_at" to com.google.firebase.Timestamp.now(),
+                "closedAt" to com.google.firebase.Timestamp.now(),
                 "live" to FieldValue.delete() // Remove duplicate field if it exists
             )
 
@@ -529,10 +529,19 @@ class AttendanceViewModel(private val application: Application) : ViewModel() {
 
     suspend fun makeEventLive(event: AttendanceEvent) {
         try {
-            // Update isLive field to true and remove closedAt timestamp
+            // First, get the current liveCount
+            val eventSnap = db.collection("NSS_Events_Attendence")
+                .document(event.id)
+                .get()
+                .await()
+            val currentLiveCount = (eventSnap.get("liveCount") as? Number)?.toInt() ?: 1
+            val newLiveCount = currentLiveCount + 1
+
+            // Update isLive field to true, increment liveCount, and remove closedAt timestamp
             val updates = mapOf(
                 "is_live" to true,
-                "closed_at" to FieldValue.delete(), // Remove closedAt timestamp
+                "liveCount" to newLiveCount,
+                "closedAt" to FieldValue.delete(), // Remove closedAt timestamp (using correct field name)
                 "live" to FieldValue.delete() // Remove duplicate field if it exists
             )
 

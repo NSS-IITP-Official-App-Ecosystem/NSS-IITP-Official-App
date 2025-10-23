@@ -47,8 +47,11 @@ data class AttendanceEvent(
     @PropertyName("attendees")
     val attendees: List<AttendeeRecord> = emptyList(),
 
-    @PropertyName("closed_at")
+    @PropertyName("closedAt")
     val closedAt: Timestamp? = null,
+
+    @PropertyName("liveCount")
+    val liveCount: Int = 1, // Track how many times the event has been made live
 
     // Use a private backing field to prevent automatic serialization of 'live' field
     @PropertyName("is_live")
@@ -82,6 +85,7 @@ data class AttendanceEvent(
         createdAt = Timestamp.now(),
         attendees = emptyList(),
         closedAt = null,
+        liveCount = 1,
         _isLive = true
     )
 
