@@ -106,9 +106,6 @@ class NssQRScanFragment : Fragment() {
         cameraExecutor = Executors.newSingleThreadExecutor()
 
         Log.d(TAG, "NssQRScanFragment created for student: ${sessionManager.fetchUserName()}")
-
-        // Run debug test to verify QR flow
-        viewModel.debugTestQRFlow()
     }
     
     override fun onCreateView(

@@ -317,40 +317,8 @@ class QRSecurityValidator {
             Log.d(TAG, "Cached session details - AdminId: '${sessionInfo.adminId}', EventId: '${sessionInfo.eventId}', IsActive: ${sessionInfo.isActive}")
         }
 
-        // If not found in cache, check Firestore sessions first
-        if (sessionInfo == null) {
-            Log.d(TAG, "Session not found in cache, checking Firestore sessions: $sessionId")
-            
-            try {
-                val firestoreSession = runBlocking {
-                    val result = repository.getSession(sessionId)
-                    if (result.isSuccess) {
-                        result.getOrNull()
-                    } else {
-                        Log.e(TAG, "Error getting session from Firestore: ${result.exceptionOrNull()?.message}")
-                        null
-                    }
-                }
-                
-                if (firestoreSession != null) {
-                    Log.d(TAG, "✅ Session found in Firestore:")
-                    Log.d(TAG, "  - SessionId: '${firestoreSession.sessionId}'")
-                    Log.d(TAG, "  - AdminId: '${firestoreSession.adminId}'")
-                    Log.d(TAG, "  - EventId: '${firestoreSession.eventId}'")
-                    Log.d(TAG, "  - IsActive: ${firestoreSession.isActive}")
-                    
-                    // Add to cache for future lookups
-                    validSessions[sessionId] = firestoreSession
-                    sessionInfo = firestoreSession
-                } else {
-                    Log.w(TAG, "❌ Session not found in Firestore: '$sessionId'")
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error checking Firestore session", e)
-            }
-        }
-        
-        // If still not found, check Firestore using consolidated schema with retry mechanism
+        // If not found in cache, check Firestore events directly
+        // (We no longer store sessions in NSS_Sessions collection)
         if (sessionInfo == null) {
             Log.d(TAG, "Session not found in cache or Firestore, checking consolidated event with retry: $sessionId")
             
@@ -366,12 +334,38 @@ class QRSecurityValidator {
                 // In consolidated schema, session ID is the event ID
                     Log.d(TAG, "Attempting to fetch event from Firestore with ID: '$sessionId'")
                 val firestoreEvent = runBlocking {
+                        // Try to get event - if cache fails, force server read
                         val result = repository.getAttendanceEvent(sessionId)
                         Log.d(TAG, "Repository result: isSuccess=${result.isSuccess}")
                         if (result.isFailure) {
                             Log.e(TAG, "Repository error: ${result.exceptionOrNull()?.message}")
+                            // If cache read failed, try server read directly
+                            try {
+                                val serverResult = repository.getAttendanceEventForDuplicateCheck(sessionId)
+                                if (serverResult.isSuccess) {
+                                    serverResult.getOrNull()
+                                } else {
+                                    null
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Server read also failed", e)
+                                null
+                            }
+                        } else {
+                            val event = result.getOrNull()
+                            // If event is null from cache, try server read
+                            if (event == null) {
+                                Log.d(TAG, "Event not found in cache, trying server read")
+                                val serverResult = repository.getAttendanceEventForDuplicateCheck(sessionId)
+                                if (serverResult.isSuccess) {
+                                    serverResult.getOrNull()
+                                } else {
+                                    null
+                                }
+                            } else {
+                                event
+                            }
                         }
-                        result.getOrNull()
                     }
 
                     Log.d(TAG, "Firestore event fetch result: ${firestoreEvent != null}")
@@ -386,23 +380,20 @@ class QRSecurityValidator {
                         Log.d(TAG, "  3. Event was deleted or moved")
                 }
 
-                // Check if event is live by examining raw Firestore data
-                // This handles the case where is_live field is not serialized due to @get:Exclude
+                // Check if event is live - event is live if closedAt is null
+                // (We don't need to check is_live field since we're using closedAt as the source of truth)
                 val isEventLive = if (firestoreEvent != null) {
-                    // We need to get the raw document data to check is_live field
-                    // Since we can't access raw data here, we'll assume true for new events
-                    // and let the closedAt field indicate if event is ended
                     val isEnded = firestoreEvent.closedAt != null
-                        val isLive = !isEnded // Event is live if not ended
-                        Log.d(TAG, "Event live calculation - closedAt: ${firestoreEvent.closedAt}, isEnded: $isEnded, isLive: $isLive")
-                        isLive
+                    val isLive = !isEnded // Event is live if not ended (closedAt == null)
+                    Log.d(TAG, "Event live calculation - closedAt: ${firestoreEvent.closedAt}, isEnded: $isEnded, isLive: $isLive")
+                    isLive
                 } else {
-                        Log.w(TAG, "Event not found in Firestore")
+                    Log.w(TAG, "Event not found in Firestore")
                     false
                 }
 
-                if (firestoreEvent != null && isEventLive) {
-                    // Event found in Firestore and is live, add to cache as session
+                if (firestoreEvent != null) {
+                    // Event found - check if it's live
                     Log.d(TAG, "=== FIRESTORE EVENT DEBUG ===")
                     Log.d(TAG, "Event ID: ${firestoreEvent.id}")
                     Log.d(TAG, "Event createdBy: '${firestoreEvent.createdBy}'")
@@ -413,35 +404,48 @@ class QRSecurityValidator {
                     Log.d(TAG, "QR Admin ID: '${qrData.adminId}'")
                     Log.d(TAG, "=============================")
 
-                    // Use the QR admin ID instead of event createdBy to match current session
-                    val currentAdminId = qrData.adminId
-                    Log.d(TAG, "Using current admin ID from QR: '$currentAdminId' instead of event createdBy: '${firestoreEvent.createdBy}'")
+                    if (isEventLive) {
+                        // Use event creator as admin ID - this allows QR codes from event creator to work
+                        // even if another admin registers a session
+                        val eventCreatorId = firestoreEvent.createdBy
+                        Log.d(TAG, "Using event createdBy: '$eventCreatorId' as admin ID for validation")
 
-                    sessionInfo = SessionValidationInfo(
-                        sessionId = firestoreEvent.id,
-                        adminId = currentAdminId, // Use current admin ID from QR data
-                        eventId = firestoreEvent.id,
-                        startTime = firestoreEvent.createdAt.toDate().time,
-                        endTime = firestoreEvent.closedAt?.toDate()?.time,
-                        isActive = isEventLive
-                    )
-                    validSessions[sessionId] = sessionInfo
+                        sessionInfo = SessionValidationInfo(
+                            sessionId = firestoreEvent.id,
+                            adminId = eventCreatorId, // Use event creator ID so their QR codes always work
+                            eventId = firestoreEvent.id,
+                            startTime = firestoreEvent.createdAt.toDate().time,
+                            endTime = firestoreEvent.closedAt?.toDate()?.time,
+                            isActive = true
+                        )
+                        validSessions[sessionId] = sessionInfo
                         Log.d(TAG, "✅ Session found in consolidated event and added to cache: $sessionId")
-                    Log.d(TAG, "Cached session admin ID: '${sessionInfo.adminId}'")
+                        Log.d(TAG, "Cached session admin ID: '${sessionInfo.adminId}'")
                         break // Success, exit retry loop
-                } else {
-                    Log.w(TAG, "Session not found in consolidated events or is not live: $sessionId")
-                    Log.w(TAG, "Event exists: ${firestoreEvent != null}")
-                    Log.w(TAG, "Event is live: $isEventLive")
-                    if (firestoreEvent != null) {
+                    } else {
+                        Log.w(TAG, "Event exists but is not live (closedAt is not null)")
                         Log.w(TAG, "Event closedAt: ${firestoreEvent.closedAt}")
+                        // If event is closed, return error immediately (no point retrying)
+                        if (retryCount == maxRetries) {
+                            return ValidationResult(
+                                false,
+                                "Event has ended (closedAt: ${firestoreEvent.closedAt})",
+                                ValidationResult.SESSION_ENDED
+                            )
+                        }
                     }
+                } else {
+                    Log.w(TAG, "Event not found in Firestore for sessionId: '$sessionId'")
+                    Log.w(TAG, "This could be due to:")
+                    Log.w(TAG, "  1. Event ID mismatch - QR code has wrong event ID")
+                    Log.w(TAG, "  2. Event was deleted")
+                    Log.w(TAG, "  3. Network/cache issue - will retry")
                         
                         // If this is the last retry, return error
                         if (retryCount == maxRetries) {
                     return ValidationResult(
                         false,
-                                "Session not found or inactive (consolidated schema) - tried ${maxRetries + 1} times",
+                                "Event not found - sessionId '$sessionId' does not exist in database",
                         ValidationResult.SESSION_NOT_FOUND
                     )
                         }
@@ -503,9 +507,30 @@ class QRSecurityValidator {
             )
         }
 
-        if (sessionInfo.adminId != qrData.adminId) {
+        // Always validate against event creator, not session admin
+        // Fetch event to get the correct createdBy, even if session is cached
+        // Use server read to ensure we get the latest data
+        var eventCreatorId: String? = null
+        try {
+            val firestoreEvent = runBlocking {
+                // Force server read to get latest event data
+                repository.getAttendanceEventForDuplicateCheck(sessionId).getOrNull()
+                    ?: repository.getAttendanceEvent(sessionId).getOrNull()
+            }
+            eventCreatorId = firestoreEvent?.createdBy
+            Log.d(TAG, "Event creator from Firestore: '$eventCreatorId'")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching event for admin validation", e)
+            // Fallback to session admin ID if event fetch fails
+            eventCreatorId = sessionInfo.adminId
+        }
+
+        // Validate that QR admin ID matches event creator
+        // This allows event creator's QR codes to work even if another admin registered a session
+        val expectedAdminId = eventCreatorId ?: sessionInfo.adminId
+        if (expectedAdminId != qrData.adminId) {
             Log.w(TAG, "=== ADMIN ID MISMATCH DEBUG ===")
-            Log.w(TAG, "Session admin ID: '${sessionInfo.adminId}'")
+            Log.w(TAG, "Event creator (expected): '$expectedAdminId'")
             Log.w(TAG, "QR code admin ID: '${qrData.adminId}'")
             Log.w(TAG, "Session ID: '${sessionInfo.sessionId}'")
             Log.w(TAG, "Event ID: '${sessionInfo.eventId}'")
@@ -514,7 +539,7 @@ class QRSecurityValidator {
             Log.w(TAG, "===============================")
             return ValidationResult(
                 false,
-                "QR code admin doesn't match session (Session: '${sessionInfo.adminId}', QR: '${qrData.adminId}')",
+                "QR code admin doesn't match event creator (Event creator: '$expectedAdminId', QR: '${qrData.adminId}')",
                 ValidationResult.INVALID_SESSION
             )
         }
@@ -582,8 +607,8 @@ class QRSecurityValidator {
         
         validSessions[sessionId] = sessionInfo
         
-        // Store in Firestore for persistence across app instances
-        storeSessionInFirestore(sessionInfo)
+        // Don't store in Firestore - validate based on event ownership instead
+        // This prevents session overwriting when multiple admins start attendance
         
         Log.d(TAG, "✅ Session registered successfully: $sessionId")
         Log.d(TAG, "Registered session details - AdminId: '${sessionInfo.adminId}', EventId: '${sessionInfo.eventId}', IsActive: ${sessionInfo.isActive}")

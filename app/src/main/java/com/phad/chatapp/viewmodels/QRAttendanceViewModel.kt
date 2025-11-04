@@ -442,8 +442,11 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                 }
 
                 // Start QR code generation
+                // Use event creator's ID for QR codes, not current admin's ID
+                // This ensures QR codes work even if started by a different admin
                 Log.d(TAG, "Starting QR generation with SessionId: $sessionId, EventId: ${event.id}")
-                startQRGeneration(sessionId, event.id)
+                Log.d(TAG, "Using event creator ID for QR: ${event.createdBy} (not current admin: ${_adminUiState.value.adminId})")
+                startQRGeneration(sessionId, event.id, event.createdBy)
 
                 // Start listening to event updates (instead of session updates)
                 startEventListener(event.id)
@@ -461,15 +464,16 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
     
     /**
      * Start dynamic QR code generation
+     * @param adminId The admin ID to use in QR codes (should be event creator's ID)
      */
-    private fun startQRGeneration(sessionId: String, eventId: String) {
+    private fun startQRGeneration(sessionId: String, eventId: String, adminId: String) {
         qrGenerationJob?.cancel()
         qrGenerationJob = viewModelScope.launch {
             try {
                 qrService.generateDynamicQRCodes(
                     sessionId = sessionId,
                     eventId = eventId,
-                    adminId = _adminUiState.value.adminId
+                    adminId = adminId // Use event creator's ID, not current admin's ID
                 ).collectLatest { (qrData, bitmap) ->
                     _adminUiState.value = _adminUiState.value.copy(
                         currentQRCode = bitmap,
