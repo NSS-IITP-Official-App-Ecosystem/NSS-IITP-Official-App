@@ -39,6 +39,7 @@ import com.phad.chatapp.features.scheduling.SchedulingFragment
 import android.widget.ImageButton
 import com.phad.chatapp.fragments.AdminAttendanceApprovalFragment
 import com.phad.chatapp.fragments.AttendanceManagerFragment
+import com.phad.chatapp.utils.InAppUpdateHelper
 
 class MainActivity : AppCompatActivity() {
     private val TAG = "MainActivity"
@@ -120,12 +121,24 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         Log.d("MainActivity", "after super.onResume")
 
+        // Resume in-app update if needed
+        InAppUpdateHelper.resumeIfUpdateInProgress(this)
+
         // Restart notification listener when returning to the app
         val currentUserId = sessionManager.fetchUserId()
         if (currentUserId.isNotEmpty()) {
             notificationHelper.startListeningForNotifications(currentUserId)
         }
         Log.d("MainActivity", "onResume end")
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == InAppUpdateHelper.UPDATE_REQUEST_CODE) {
+            if (resultCode != RESULT_OK) {
+                finishAffinity()
+            }
+        }
     }
     
     override fun onPause() {

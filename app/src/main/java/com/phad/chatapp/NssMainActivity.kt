@@ -20,6 +20,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.phad.chatapp.utils.SessionManager
 import com.phad.chatapp.utils.NotificationHelper
 import android.content.Intent
+import com.phad.chatapp.utils.InAppUpdateHelper
 
 class NssMainActivity : AppCompatActivity() {
     private val TAG = "NssMainActivity"
@@ -58,6 +59,21 @@ class NssMainActivity : AppCompatActivity() {
 
         // Set up navigation destination change listener
         setupNavigationListener()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Resume in-app update if needed
+        InAppUpdateHelper.resumeIfUpdateInProgress(this)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == InAppUpdateHelper.UPDATE_REQUEST_CODE) {
+            if (resultCode != RESULT_OK) {
+                finishAffinity()
+            }
+        }
     }
 
     private fun setupWindowInsets() {

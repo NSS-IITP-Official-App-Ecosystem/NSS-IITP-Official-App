@@ -7,6 +7,7 @@ import android.os.Handler
 import android.os.Looper
 import androidx.appcompat.app.AppCompatActivity
 import com.phad.chatapp.databinding.ActivitySplashBinding
+import com.phad.chatapp.utils.InAppUpdateHelper
 import com.google.android.exoplayer2.ExoPlayer
 import com.google.android.exoplayer2.MediaItem
 import com.google.android.exoplayer2.Player
@@ -29,6 +30,8 @@ class SplashActivity : AppCompatActivity() {
 	override fun onStart() {
 		super.onStart()
 		player?.playWhenReady = true
+		// Trigger immediate in-app update if available (blocking)
+		InAppUpdateHelper.checkForImmediateUpdate(this)
 	}
 
 	override fun onStop() {
@@ -36,6 +39,12 @@ class SplashActivity : AppCompatActivity() {
 		binding.videoViewSplash.player = null
 		player?.release()
 		player = null
+	}
+
+	override fun onResume() {
+		super.onResume()
+		// If an update was in progress, resume it
+		InAppUpdateHelper.resumeIfUpdateInProgress(this)
 	}
 
 	private fun initPlayer() {
@@ -80,5 +89,15 @@ class SplashActivity : AppCompatActivity() {
 			startActivity(Intent(this, LoginActivity::class.java))
 		}
 		finish()
+	}
+
+	override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+		super.onActivityResult(requestCode, resultCode, data)
+		if (requestCode == InAppUpdateHelper.UPDATE_REQUEST_CODE) {
+			// For compulsory update, if user cancels, close the app
+			if (resultCode != RESULT_OK) {
+				finishAffinity()
+			}
+		}
 	}
 } 
