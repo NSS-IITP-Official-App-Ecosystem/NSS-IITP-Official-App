@@ -663,21 +663,10 @@ fun AdminSectionContentView(
                     }
                     
                     items(filteredQuestions) { question ->
-                        AdminContentCardWithActions(
+                        AdminQuestionCardWithDeleteOnly(
                             title = question.question,
                             subtitle = "Question",
                             onClick = { onQuestionClick(question) },
-                            onEdit = {
-                                val node = FaqNode(
-                                    id = question.id,
-                                    title = question.question,
-                                    type = FaqNodeType.QUESTION,
-                                    sectionId = question.sectionId,
-                                    subSectionId = question.subSectionId,
-                                    question = question
-                                )
-                                onEditSectionName(node)
-                            },
                             onDelete = {
                                 val node = FaqNode(
                                     id = question.id,
@@ -939,6 +928,56 @@ fun AdminContentCardWithActions(
             IconButton(
                 onClick = onDelete,
                 modifier = Modifier.padding(start = 4.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Delete",
+                    tint = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun AdminQuestionCardWithDeleteOnly(
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 2
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            
+            // Delete button only (no edit button for questions)
+            IconButton(
+                onClick = onDelete,
+                modifier = Modifier.padding(start = 8.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.Delete,
