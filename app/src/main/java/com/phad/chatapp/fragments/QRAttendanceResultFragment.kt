@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -103,9 +104,24 @@ fun QRAttendanceResultContent(
     isSuccess: Boolean,
     onDismiss: () -> Unit
 ) {
-    val iconColor = if (isSuccess) Color(0xFF4CAF50) else Color(0xFFF44336)
-    val icon: ImageVector = if (isSuccess) Icons.Default.CheckCircle else Icons.Default.Error
-    val title = if (isSuccess) "Attendance Marked!" else "Error Occurred"
+    // Treat already-marked attendance as a neutral info state
+    val isAlreadyMarked = message.contains("already", ignoreCase = true)
+
+    val iconColor = when {
+        isAlreadyMarked -> Color(0xFF2196F3)
+        isSuccess -> Color(0xFF4CAF50)
+        else -> Color(0xFFF44336)
+    }
+    val icon: ImageVector = when {
+        isAlreadyMarked -> Icons.Default.Info
+        isSuccess -> Icons.Default.CheckCircle
+        else -> Icons.Default.Error
+    }
+    val title = when {
+        isAlreadyMarked -> "Already Marked"
+        isSuccess -> "Attendance Marked!"
+        else -> "Error Occurred"
+    }
 
     Box(
         modifier = Modifier
@@ -163,7 +179,11 @@ fun QRAttendanceResultContent(
                 Button(
                     onClick = onDismiss,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isSuccess) Color(0xFF4CAF50) else Color(0xFF2196F3)
+                        containerColor = when {
+                            isAlreadyMarked -> Color(0xFF2196F3)
+                            isSuccess -> Color(0xFF4CAF50)
+                            else -> Color(0xFF2196F3)
+                        }
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -178,7 +198,7 @@ fun QRAttendanceResultContent(
                     )
                 }
                 
-                if (!isSuccess) {
+                if (!isSuccess && !isAlreadyMarked) {
                     Spacer(modifier = Modifier.height(12.dp))
                     
                     // Try Again button for errors

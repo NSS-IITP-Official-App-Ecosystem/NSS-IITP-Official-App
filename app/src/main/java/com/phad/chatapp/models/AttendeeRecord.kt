@@ -3,6 +3,7 @@ package com.phad.chatapp.models
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.PropertyName
 import com.google.firebase.firestore.Exclude
+import com.google.firebase.firestore.GeoPoint
 
 /**
  * Data class representing admin details who generated the QR code
@@ -35,10 +36,16 @@ data class AttendeeRecord(
     var scannedFrom: ScannedFromAdmin = ScannedFromAdmin(),
 
     @PropertyName("device_id")
-    var deviceId: String = "" // Unique device identifier for duplicate prevention
+    var deviceId: String = "", // Unique device identifier for duplicate prevention
+
+    @PropertyName("scan_location")
+    var scanLocation: GeoPoint? = null, // GPS location where QR code was scanned (null for manual entries)
+
+    @PropertyName("is_manual_entry")
+    var isManualEntry: Boolean = false // True for manual add/delete, false for QR scan
 ) {
     // Empty constructor for Firestore
-    constructor() : this("", "", Timestamp.now(), ScannedFromAdmin(), "")
+    constructor() : this("", "", Timestamp.now(), ScannedFromAdmin(), "", null, false)
     
     /**
      * Check if the attendance was marked recently (within last 5 seconds)

@@ -106,9 +106,6 @@ class NssQRScanFragment : Fragment() {
         cameraExecutor = Executors.newSingleThreadExecutor()
 
         Log.d(TAG, "NssQRScanFragment created for student: ${sessionManager.fetchUserName()}")
-
-        // Run debug test to verify QR flow
-        viewModel.debugTestQRFlow()
     }
     
     override fun onCreateView(
@@ -187,6 +184,18 @@ class NssQRScanFragment : Fragment() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Start periodic location refresh every 10s while on scan screen
+        viewModel.startStudentLocationUpdates()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // Stop refreshing location when leaving scan screen
+        viewModel.stopStudentLocationUpdates()
     }
     
     private fun allPermissionsGranted() = REQUIRED_PERMISSIONS.all {

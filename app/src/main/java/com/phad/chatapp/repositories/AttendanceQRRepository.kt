@@ -843,6 +843,49 @@ class AttendanceQRRepository {
     }
 
     /**
+     * Update attendance location for an event (GPS coordinates where attendance is being taken)
+     * @param eventId Event ID to update
+     * @param latitude GPS latitude
+     * @param longitude GPS longitude
+     * @param setByAdminId Admin roll number who set this location
+     * @return Result indicating success or failure
+     */
+    suspend fun updateEventAttendanceLocation(
+        eventId: String,
+        latitude: Double,
+        longitude: Double,
+        setByAdminId: String
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "Updating attendance location for event: $eventId")
+            Log.d(TAG, "Location: lat=$latitude, lng=$longitude, set by: $setByAdminId")
+
+            val updates = mapOf(
+                // Write camelCase fields
+                "attendanceLocationLatitude" to latitude,
+                "attendanceLocationLongitude" to longitude,
+                "attendanceLocationSetBy" to setByAdminId,
+                "attendanceLocationTimestamp" to Timestamp.now(),
+                // Remove any legacy snake_case fields if they exist
+                "attendance_location_latitude" to FieldValue.delete(),
+                "attendance_location_longitude" to FieldValue.delete(),
+                "attendance_location_set_by" to FieldValue.delete(),
+                "attendance_location_timestamp" to FieldValue.delete()
+            )
+
+            eventsAttendanceCollection.document(eventId)
+                .update(updates)
+                .await()
+
+            Log.d(TAG, "✅ Attendance location updated successfully for event: $eventId")
+            return@withContext Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error updating attendance location: ${e.message}", e)
+            return@withContext Result.failure(e)
+        }
+    }
+
+    /**
      * Recreate an attendance event with new name/date and copy all associated documents
      * This is used when the event name or date needs to be changed, which requires creating a new event
      * with a new document ID and copying all attendance records

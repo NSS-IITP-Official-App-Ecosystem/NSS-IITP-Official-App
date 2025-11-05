@@ -24,7 +24,10 @@ import com.phad.chatapp.utils.DeviceDuplicateTestUtils
 import com.phad.chatapp.utils.PDFGenerator
 import com.phad.chatapp.utils.AttendanceStatsUpdater
 import com.phad.chatapp.utils.QRSecurityValidator
+import com.phad.chatapp.services.LocationService
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.GeoPoint
+import android.location.Location
 import java.io.File
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,6 +37,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.TimeoutCancellationException
 
 /**
  * ViewModel for managing QR-based attendance system
@@ -65,6 +73,41 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
     
     // Current session listener job
     private var sessionListenerJob: Job? = null
+
+    // Periodic student location refresh while on scan screen
+    private var studentLocationJob: Job? = null
+
+    fun startStudentLocationUpdates() {
+        if (studentLocationJob?.isActive == true) return
+        val locationService = LocationService(application)
+        studentLocationJob = viewModelScope.launch(Dispatchers.IO) {
+            while (true) {
+                try {
+                    val deferred = CompletableDeferred<android.location.Location?>()
+                    // Force a fresh high-accuracy fix each tick
+                    locationService.getFreshHighAccuracyLocation { loc -> deferred.complete(loc) }
+                    val loc = withTimeout(8000) { deferred.await() }
+                    if (loc != null) {
+                        val gp = GeoPoint(loc.latitude, loc.longitude)
+                        val now = System.currentTimeMillis()
+                        val current = _studentUiState.value
+                        _studentUiState.value = current.copy(
+                            lastLocation = gp,
+                            lastLocationTimestampMs = now
+                        )
+                    } else {
+                    }
+                } catch (_: Exception) {
+                }
+                delay(10_000)
+            }
+        }
+    }
+
+    fun stopStudentLocationUpdates() {
+        studentLocationJob?.cancel()
+        studentLocationJob = null
+    }
     
     init {
         Log.d(TAG, "QRAttendanceViewModel initialized")
@@ -387,6 +430,47 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                 // The event itself serves as the "session"
                 val sessionId = event.id // Use event ID as session ID
 
+                // Enforce GPS must be ON to start attendance
+                Log.d(TAG, "Capturing GPS location for attendance session (mandatory)")
+                val locationService = LocationService(application)
+                val locationDeferred = kotlinx.coroutines.CompletableDeferred<android.location.Location?>()
+                locationService.getCurrentLocation { location ->
+                    locationDeferred.complete(location)
+                }
+                val adminLocation = try {
+                    withTimeout(10000) { // 10s timeout
+                        locationDeferred.await()
+                    }
+                } catch (e: TimeoutCancellationException) {
+                    null
+                }
+
+                if (adminLocation == null) {
+                    Log.w(TAG, "❌ Start Attendance blocked: location unavailable or permission off")
+                    _adminUiState.value = _adminUiState.value.copy(
+                        isLoading = false,
+                        errorMessage = "Turn on location and grant permission to start attendance"
+                    )
+                    return@launch
+                }
+
+                // Persist event location; if this fails, do not start session
+                val adminIdForLocation = _adminUiState.value.adminId
+                val updateResult = repository.updateEventAttendanceLocation(
+                    eventId = event.id,
+                    latitude = adminLocation.latitude,
+                    longitude = adminLocation.longitude,
+                    setByAdminId = adminIdForLocation
+                )
+                if (updateResult.isFailure) {
+                    Log.e(TAG, "❌ Failed to update event location: ${updateResult.exceptionOrNull()?.message}")
+                    _adminUiState.value = _adminUiState.value.copy(
+                        isLoading = false,
+                        errorMessage = "Failed to set event location. Please try again."
+                    )
+                    return@launch
+                }
+
                 _adminUiState.value = _adminUiState.value.copy(
                     selectedEvent = event,
                     isSessionActive = true,
@@ -442,8 +526,11 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                 }
 
                 // Start QR code generation
+                // Use event creator's ID for QR codes, not current admin's ID
+                // This ensures QR codes work even if started by a different admin
                 Log.d(TAG, "Starting QR generation with SessionId: $sessionId, EventId: ${event.id}")
-                startQRGeneration(sessionId, event.id)
+                Log.d(TAG, "Using event creator ID for QR: ${event.createdBy} (not current admin: ${_adminUiState.value.adminId})")
+                startQRGeneration(sessionId, event.id, event.createdBy)
 
                 // Start listening to event updates (instead of session updates)
                 startEventListener(event.id)
@@ -461,15 +548,16 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
     
     /**
      * Start dynamic QR code generation
+     * @param adminId The admin ID to use in QR codes (should be event creator's ID)
      */
-    private fun startQRGeneration(sessionId: String, eventId: String) {
+    private fun startQRGeneration(sessionId: String, eventId: String, adminId: String) {
         qrGenerationJob?.cancel()
         qrGenerationJob = viewModelScope.launch {
             try {
                 qrService.generateDynamicQRCodes(
                     sessionId = sessionId,
                     eventId = eventId,
-                    adminId = _adminUiState.value.adminId
+                    adminId = adminId // Use event creator's ID, not current admin's ID
                 ).collectLatest { (qrData, bitmap) ->
                     _adminUiState.value = _adminUiState.value.copy(
                         currentQRCode = bitmap,
@@ -682,6 +770,38 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                             Log.w(TAG, "SECURITY: Expired QR code rejected - Age exceeded validity window")
                         } else if (validationResult.reason.contains("already used", ignoreCase = true)) {
                             Log.w(TAG, "SECURITY: Replay attack detected - QR code already used")
+                        } else if (validationResult.reason.contains("Session has ended", ignoreCase = true)) {
+                            // Deep diagnostics: event appears active but validator says ended
+                            try {
+                                val debugData = try { QRAttendanceData.fromJson(qrText) } catch (_: Exception) { null }
+                                val sessionIdDbg = debugData?.sessionId
+                                val eventIdDbg = debugData?.eventId
+                                Log.w(TAG, "SESSION_ENDED DEBUG (ViewModel): sessionId='${sessionIdDbg}', eventId='${eventIdDbg}'")
+                                // Dump validator cache for this session
+                                if (sessionIdDbg != null) {
+                                    val cacheInfo = QRSecurityValidator.getInstance().getSessionInfo(sessionIdDbg)
+                                    if (cacheInfo != null) {
+                                        Log.w(TAG, "Cache sessionInfo: adminId='${cacheInfo.adminId}', eventId='${cacheInfo.eventId}', start=${cacheInfo.startTime}, end=${cacheInfo.endTime}, isActive=${cacheInfo.isActive}")
+                                    } else {
+                                        Log.w(TAG, "Cache sessionInfo: null for session '${sessionIdDbg}'")
+                                    }
+                                }
+                                // Fetch Firestore event with server read preferred
+                                if (eventIdDbg != null) {
+                                    val event = repository.getAttendanceEventForDuplicateCheck(eventIdDbg).getOrNull()
+                                        ?: repository.getAttendanceEvent(eventIdDbg).getOrNull()
+                                    if (event != null) {
+                                        Log.w(TAG, "Firestore event: id='${event.id}', isLive=${event.isLive}, closedAt=${event.closedAt}, createdAt=${event.createdAt}, createdBy='${event.createdBy}'")
+                                        Log.w(TAG, "Student side state: isStudent=${_studentUiState.value.isStudent}, lastLocTs=${_studentUiState.value.lastLocationTimestampMs}")
+                                    } else {
+                                        Log.w(TAG, "Firestore event fetch returned null for '${eventIdDbg}'")
+                                    }
+                                }
+                                // Dump admin session active flag if set
+                                Log.w(TAG, "Admin UI state: isSessionActive=${_adminUiState.value.isSessionActive}, selectedEventId='${_adminUiState.value.selectedEvent?.id}'")
+                            } catch (e: Exception) {
+                                Log.e(TAG, "SESSION_ENDED DEBUG (ViewModel) failed", e)
+                            }
                         }
                     }
                 } else {
@@ -757,7 +877,8 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                             Log.w(TAG, "Blocking message: ${duplicateCheck.message}")
                             _studentUiState.value = _studentUiState.value.copy(
                                 isProcessing = false,
-                                scanResult = ScanResult.Error(duplicateCheck.message)
+                                // Treat already-marked attendance as a non-error outcome for better UX
+                                scanResult = ScanResult.Success(duplicateCheck.message)
                             )
                             return
                         } else {
@@ -771,6 +892,103 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Unexpected error during comprehensive duplicate check", e)
+            }
+
+            // Location verification for QR scanning (mandatory)
+            Log.d(TAG, "=== LOCATION VERIFICATION FOR QR SCAN ===")
+            var scanLocation: Location? = null
+            var locationGeoPoint: GeoPoint? = null
+            
+            // Prefer cached location if it's fresh (<= 10s); else fetch once
+            val nowTs = System.currentTimeMillis()
+            val cached = _studentUiState.value.lastLocation
+            val cachedTs = _studentUiState.value.lastLocationTimestampMs
+            if (cached != null && (nowTs - cachedTs) <= 10_000) {
+                val loc = Location("cached")
+                loc.latitude = cached.latitude
+                loc.longitude = cached.longitude
+                scanLocation = loc
+                locationGeoPoint = GeoPoint(cached.latitude, cached.longitude)
+                Log.d(TAG, "Using cached location (fresh): lat=${loc.latitude}, lng=${loc.longitude}")
+            } else {
+                val locationService = LocationService(application)
+                try {
+                    val locationDeferred = CompletableDeferred<Location?>()
+                    // Try fresh high-accuracy fix for scan
+                    locationService.getFreshHighAccuracyLocation { location ->
+                        locationDeferred.complete(location)
+                    }
+                    scanLocation = withContext(Dispatchers.IO) {
+                        try {
+                            withTimeout(10000) { locationDeferred.await() }
+                        } catch (e: TimeoutCancellationException) { null }
+                    }
+                    if (scanLocation != null) {
+                        locationGeoPoint = GeoPoint(scanLocation.latitude, scanLocation.longitude)
+                        Log.d(TAG, "Location captured: lat=${scanLocation.latitude}, lng=${scanLocation.longitude}")
+                    } else {
+                        Log.w(TAG, "Could not capture location - blocking attendance")
+                        _studentUiState.value = _studentUiState.value.copy(
+                            isProcessing = false,
+                            scanResult = ScanResult.Error("Turn on location and grant permission to mark attendance")
+                        )
+                        return
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error getting location: ${e.message}", e)
+                    _studentUiState.value = _studentUiState.value.copy(
+                        isProcessing = false,
+                        scanResult = ScanResult.Error("Unable to get location: ${e.message}")
+                    )
+                    return
+                }
+            }
+            
+            // Verify location proximity (only if event has location set)
+            val eventForLocationCheck = try {
+                repository.getAttendanceEventForDuplicateCheck(qrData.eventId).getOrNull()
+            } catch (e: Exception) {
+                null
+            }
+            
+            if (eventForLocationCheck != null) {
+                val eventLat = eventForLocationCheck.attendanceLocationLatitude
+                val eventLng = eventForLocationCheck.attendanceLocationLongitude
+                
+                if (eventLat != null && eventLng != null) {
+                    // Event has location set - verify proximity
+                    val eventLocation = QRSecurityValidator.getInstance().createLocation(eventLat, eventLng)
+                    val locationValidation = QRSecurityValidator.getInstance().validateLocation(
+                        scanLocation = scanLocation,
+                        eventLocation = eventLocation,
+                        maxRadiusMeters = 3f
+                    )
+                    
+                    if (!locationValidation.isValid) {
+                        Log.w(TAG, "Location verification failed: ${locationValidation.message}")
+                        _studentUiState.value = _studentUiState.value.copy(
+                            isProcessing = false,
+                            scanResult = ScanResult.Error(locationValidation.message)
+                        )
+                        return
+                    }
+                    
+                    Log.d(TAG, "✅ Location verification passed")
+                } else {
+                    Log.w(TAG, "Event location not set - blocking attendance until admin sets location")
+                    _studentUiState.value = _studentUiState.value.copy(
+                        isProcessing = false,
+                        scanResult = ScanResult.Error("Event location not set. Ask admin to start attendance with location ON.")
+                    )
+                    return
+                }
+            } else {
+                Log.w(TAG, "Could not fetch event for location check - blocking attendance")
+                _studentUiState.value = _studentUiState.value.copy(
+                    isProcessing = false,
+                    scanResult = ScanResult.Error("Unable to fetch event for location check. Please try again.")
+                )
+                return
             }
 
             // Get admin name from database using the admin ID from QR data
@@ -829,7 +1047,9 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                     adminRollNumber = qrData.adminId,
                     adminName = adminName
                 ),
-                deviceId = deviceId
+                deviceId = deviceId,
+                scanLocation = locationGeoPoint, // GPS location where QR was scanned
+                isManualEntry = false // QR scan, not manual entry
             )
 
             Log.d(TAG, "Created AttendeeRecord: rollNumber=${attendee.rollNumber}, studentName=${attendee.name}, deviceId=${attendee.deviceId}")
@@ -1763,7 +1983,9 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                                 adminRollNumber = adminId,
                                 adminName = adminName
                             ),
-                            deviceId = "" // No device ID for manual entry
+                            deviceId = "", // No device ID for manual entry
+                            scanLocation = null, // No location for manual entry
+                            isManualEntry = true // Mark as manual entry (no location check)
                         )
 
                         // Add attendee to event
@@ -2009,7 +2231,11 @@ data class StudentQRUiState(
     val currentZoomLevel: Float = 1.0f,
     val minZoomLevel: Float = 1.0f,
     val maxZoomLevel: Float = 4.0f,
-    val isZooming: Boolean = false
+    val isZooming: Boolean = false,
+
+    // Live location cache for faster proximity checks
+    val lastLocation: GeoPoint? = null,
+    val lastLocationTimestampMs: Long = 0L
 )
 
 /**
