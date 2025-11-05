@@ -1,5 +1,6 @@
 package com.phad.chatapp.utils
 
+import android.location.Location
 import android.util.Log
 import com.phad.chatapp.models.QRAttendanceData
 import com.phad.chatapp.models.AttendeeRecord
@@ -224,6 +225,7 @@ class QRSecurityValidator {
 
         // First check in-memory cache
         var sessionInfo = validSessions[expectedSessionId]
+        var sessionInfoSource = if (sessionInfo != null) "cache" else "unknown"
 
         // If not found in cache, check Firestore using consolidated schema
         if (sessionInfo == null) {
@@ -263,6 +265,7 @@ class QRSecurityValidator {
                         isActive = isEventLive
                     )
                     validSessions[expectedSessionId] = sessionInfo
+                    sessionInfoSource = "firestore"
                     Log.d(TAG, "Expected session found in consolidated event and added to cache: $expectedSessionId")
                 } else {
                     Log.w(TAG, "Expected session not found in consolidated events or is not live: $expectedSessionId")
@@ -288,6 +291,20 @@ class QRSecurityValidator {
         }
 
         if (!sessionInfo.isActive) {
+            // DEBUG: Deep dive before returning SESSION_ENDED
+            try {
+                val firestoreEvent = runBlocking { repository.getAttendanceEventForDuplicateCheck(expectedSessionId).getOrNull() }
+                Log.w(TAG, "SESSION_ENDED DEBUG (validateSession): expectedSessionId='$expectedSessionId'")
+                Log.w(TAG, "Source='$sessionInfoSource', cacheKeys='${validSessions.keys.joinToString()}'")
+                Log.w(TAG, "sessionInfo: adminId='${sessionInfo.adminId}', eventId='${sessionInfo.eventId}', startTime=${sessionInfo.startTime}, endTime=${sessionInfo.endTime}, isActive=${sessionInfo.isActive}")
+                if (firestoreEvent != null) {
+                    Log.w(TAG, "firestoreEvent: id='${firestoreEvent.id}', isLive=${firestoreEvent.isLive}, closedAt=${firestoreEvent.closedAt}, createdAt=${firestoreEvent.createdAt}, createdBy='${firestoreEvent.createdBy}'")
+                } else {
+                    Log.w(TAG, "firestoreEvent: null for id='$expectedSessionId'")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "SESSION_ENDED DEBUG error (validateSession)", e)
+            }
             return ValidationResult(
                 false,
                 "Session has ended",
@@ -312,6 +329,7 @@ class QRSecurityValidator {
 
         // First check in-memory cache
         var sessionInfo = validSessions[sessionId]
+        var sessionInfoSource = if (sessionInfo != null) "cache" else "unknown"
         Log.d(TAG, "Session found in cache: ${sessionInfo != null}")
         if (sessionInfo != null) {
             Log.d(TAG, "Cached session details - AdminId: '${sessionInfo.adminId}', EventId: '${sessionInfo.eventId}', IsActive: ${sessionInfo.isActive}")
@@ -419,6 +437,7 @@ class QRSecurityValidator {
                             isActive = true
                         )
                         validSessions[sessionId] = sessionInfo
+                        sessionInfoSource = "firestore"
                         Log.d(TAG, "✅ Session found in consolidated event and added to cache: $sessionId")
                         Log.d(TAG, "Cached session admin ID: '${sessionInfo.adminId}'")
                         break // Success, exit retry loop
@@ -490,6 +509,20 @@ class QRSecurityValidator {
 
         if (!sessionInfo.isActive) {
             Log.w(TAG, "❌ Session is not active")
+            // DEBUG: Deep dive before returning SESSION_ENDED
+            try {
+                val firestoreEvent = runBlocking { repository.getAttendanceEventForDuplicateCheck(sessionId).getOrNull() }
+                Log.w(TAG, "SESSION_ENDED DEBUG (validateQRSession): sessionId='$sessionId'")
+                Log.w(TAG, "Source='$sessionInfoSource', cacheKeys='${validSessions.keys.joinToString()}'")
+                Log.w(TAG, "sessionInfo: adminId='${sessionInfo.adminId}', eventId='${sessionInfo.eventId}', startTime=${sessionInfo.startTime}, endTime=${sessionInfo.endTime}, isActive=${sessionInfo.isActive}")
+                if (firestoreEvent != null) {
+                    Log.w(TAG, "firestoreEvent: id='${firestoreEvent.id}', isLive=${firestoreEvent.isLive}, closedAt=${firestoreEvent.closedAt}, createdAt=${firestoreEvent.createdAt}, createdBy='${firestoreEvent.createdBy}'")
+                } else {
+                    Log.w(TAG, "firestoreEvent: null for id='$sessionId'")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "SESSION_ENDED DEBUG error (validateQRSession)", e)
+            }
             return ValidationResult(
                 false,
                 "Session has ended",
@@ -881,6 +914,76 @@ class QRSecurityValidator {
     }
     
     /**
+     * Validate location proximity for QR scanning
+     * Verifies that the scanner is within the specified radius (3 meters) of the event location
+     * @param scanLocation Current GPS location of the scanner
+     * @param eventLocation Target GPS location of the event
+     * @param maxRadiusMeters Maximum allowed distance in meters (default: 3)
+     * @return ValidationResult indicating if location is valid
+     */
+    fun validateLocation(
+        scanLocation: Location?,
+        eventLocation: Location?,
+        maxRadiusMeters: Float = 3f
+    ): ValidationResult {
+        Log.d(TAG, "=== LOCATION VALIDATION START ===")
+        
+        // Check if locations are provided
+        if (scanLocation == null) {
+            Log.w(TAG, "Scan location is null - location verification failed")
+            return ValidationResult(
+                false,
+                "Location verification required. Please enable location permissions.",
+                ValidationResult.MISSING_LOCATION
+            )
+        }
+        
+        if (eventLocation == null) {
+            Log.w(TAG, "Event location is null - location verification skipped")
+            // If event location is not set, allow attendance (for backward compatibility)
+            return ValidationResult(
+                true,
+                "Event location not set - location check skipped",
+                ValidationResult.VALID
+            )
+        }
+        
+        // Calculate distance between locations
+        val distance = scanLocation.distanceTo(eventLocation)
+        Log.d(TAG, "Distance from event: ${distance}m (max allowed: ${maxRadiusMeters}m)")
+        Log.d(TAG, "Scan location: lat=${scanLocation.latitude}, lng=${scanLocation.longitude}")
+        Log.d(TAG, "Event location: lat=${eventLocation.latitude}, lng=${eventLocation.longitude}")
+        
+        if (distance > maxRadiusMeters) {
+            Log.w(TAG, "SECURITY VIOLATION: Scanner is too far from event location")
+            Log.w(TAG, "Distance: ${distance}m, Max allowed: ${maxRadiusMeters}m")
+            return ValidationResult(
+                false,
+                "You must be at the event location to mark attendance. You are ${distance.toInt()} meters away (max: ${maxRadiusMeters.toInt()}m)",
+                ValidationResult.LOCATION_MISMATCH
+            )
+        }
+        
+        Log.d(TAG, "✅ Location validation successful - within ${distance}m of event")
+        Log.d(TAG, "=== LOCATION VALIDATION END ===")
+        return ValidationResult(
+            true,
+            "Location verified (${distance.toInt()}m from event)",
+            ValidationResult.VALID
+        )
+    }
+    
+    /**
+     * Create Location object from latitude and longitude
+     */
+    fun createLocation(latitude: Double, longitude: Double): Location {
+        val location = Location("QR_Scanner")
+        location.latitude = latitude
+        location.longitude = longitude
+        return location
+    }
+    
+    /**
      * Get security statistics
      */
     fun getSecurityStats(): SecurityStats {
@@ -913,6 +1016,8 @@ data class ValidationResult(
         const val INVALID_SESSION = 8
         const val SESSION_NOT_FOUND = 9
         const val SESSION_ENDED = 10
+        const val MISSING_LOCATION = 11
+        const val LOCATION_MISMATCH = 12
         const val ERROR = 99
     }
 }

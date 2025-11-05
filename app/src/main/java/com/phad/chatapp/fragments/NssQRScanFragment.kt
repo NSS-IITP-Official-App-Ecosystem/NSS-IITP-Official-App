@@ -185,6 +185,18 @@ class NssQRScanFragment : Fragment() {
             }
         }
     }
+
+    override fun onResume() {
+        super.onResume()
+        // Start periodic location refresh every 10s while on scan screen
+        viewModel.startStudentLocationUpdates()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // Stop refreshing location when leaving scan screen
+        viewModel.stopStudentLocationUpdates()
+    }
     
     private fun allPermissionsGranted() = REQUIRED_PERMISSIONS.all {
         ContextCompat.checkSelfPermission(requireContext(), it) == PackageManager.PERMISSION_GRANTED

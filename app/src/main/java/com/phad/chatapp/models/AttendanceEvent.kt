@@ -41,6 +41,18 @@ data class AttendanceEvent(
     @PropertyName("location")
     val location: String = "", // Location where the event will take place
 
+    @PropertyName("attendanceLocationLatitude")
+    val attendanceLocationLatitude: Double? = null, // GPS latitude where attendance is being taken
+
+    @PropertyName("attendanceLocationLongitude")
+    val attendanceLocationLongitude: Double? = null, // GPS longitude where attendance is being taken
+
+    @PropertyName("attendanceLocationSetBy")
+    val attendanceLocationSetBy: String = "", // Admin roll number who set this location
+
+    @PropertyName("attendanceLocationTimestamp")
+    val attendanceLocationTimestamp: Timestamp? = null, // When the location was last updated
+
     @PropertyName("created_at")
     val createdAt: Timestamp = Timestamp.now(), // When the event was created in the system
 
@@ -79,6 +91,10 @@ data class AttendanceEvent(
         isMandatory = false,
         negativeHours = 0.0,
         location = "",
+        attendanceLocationLatitude = null,
+        attendanceLocationLongitude = null,
+        attendanceLocationSetBy = "",
+        attendanceLocationTimestamp = null,
         description = "",
         createdBy = "",
         creatorName = "",

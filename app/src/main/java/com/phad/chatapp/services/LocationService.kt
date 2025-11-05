@@ -7,6 +7,7 @@ import android.location.Location
 import android.util.Log
 import androidx.core.app.ActivityCompat
 import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
@@ -56,6 +57,43 @@ class LocationService(private val context: Context) {
                 }
         } catch (e: Exception) {
             Log.e(TAG, "Exception while getting location", e)
+            callback(null)
+        }
+    }
+
+    /**
+     * Force a fresh high-accuracy location fix (Play Services getCurrentLocation)
+     * Falls back to requestLocationUpdates if it returns null
+     */
+    fun getFreshHighAccuracyLocation(callback: (Location?) -> Unit) {
+        if (ActivityCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            Log.e(TAG, "Location permission not granted")
+            callback(null)
+            return
+        }
+
+        try {
+            val cts = CancellationTokenSource()
+            fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.token)
+                .addOnSuccessListener { location ->
+                    if (location != null) {
+                        Log.d(TAG, "Fresh location: ${location.latitude}, ${location.longitude}, acc=${location.accuracy}")
+                        callback(location)
+                    } else {
+                        Log.w(TAG, "Fresh getCurrentLocation returned null; falling back to updates")
+                        requestLocationUpdates(callback)
+                    }
+                }
+                .addOnFailureListener { e ->
+                    Log.e(TAG, "Error getting fresh location", e)
+                    callback(null)
+                }
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception calling getCurrentLocation", e)
             callback(null)
         }
     }

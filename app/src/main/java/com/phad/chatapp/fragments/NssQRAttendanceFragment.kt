@@ -47,6 +47,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -87,6 +91,22 @@ class NssQRAttendanceFragment : Fragment() {
     
     private lateinit var viewModel: QRAttendanceViewModel
     private lateinit var sessionManager: SessionManager
+    private var pendingStartEvent: com.phad.chatapp.models.AttendanceEvent? = null
+
+    private val locationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        val fine = result[Manifest.permission.ACCESS_FINE_LOCATION] == true
+        val coarse = result[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        val granted = fine || coarse
+        val event = pendingStartEvent
+        pendingStartEvent = null
+        if (granted && event != null) {
+            viewModel.startAttendanceSession(event)
+        } else if (!granted) {
+            Toast.makeText(requireContext(), "Location permission is required to start attendance", Toast.LENGTH_LONG).show()
+        }
+    }
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -127,7 +147,18 @@ class NssQRAttendanceFragment : Fragment() {
                 QRAttendanceAdminScreen(
                     uiState = uiState,
                     onEventSelected = { event ->
-                        viewModel.startAttendanceSession(event)
+                        val ctx = requireContext()
+                        val fineGranted = ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                        val coarseGranted = ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                        if (fineGranted || coarseGranted) {
+                            viewModel.startAttendanceSession(event)
+                        } else {
+                            pendingStartEvent = event
+                            locationPermissionLauncher.launch(arrayOf(
+                                Manifest.permission.ACCESS_FINE_LOCATION,
+                                Manifest.permission.ACCESS_COARSE_LOCATION
+                            ))
+                        }
                     },
                     onEndSession = {
                         viewModel.endAttendanceSession()
