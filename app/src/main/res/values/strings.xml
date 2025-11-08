@@ -99,4 +99,11 @@
     <string name="hello_blank_fragment">Hello blank fragment</string>
     <string name="add_file">Add File Button</string>
     <string name="item_icon">Item Icon</string>
+
+    <!-- Forced update dialog -->
+    <string name="force_update_icon_cd">Compulsory update icon</string>
+    <string name="force_update_title">Update Required</string>
+    <string name="force_update_message_default">We have made some improvements. Please update to continue using the app.</string>
+    <string name="force_update_button_update">Update Now</string>
+    <string name="force_update_button_exit">Exit App</string>
 </resources>
