@@ -84,8 +84,13 @@ class SessionManager(context: Context) {
     /**
      * Emergency bypass for Firebase authentication issues
      * This should ONLY be used for testing/debugging
+     * Only works in DEBUG builds
      */
     fun enableFirebaseAuthBypass(enable: Boolean) {
+        if (!com.phad.chatapp.BuildConfig.DEBUG) {
+            Log.w(TAG, "Bypass can only be enabled in DEBUG builds")
+            return
+        }
         Log.w(TAG, "Setting Firebase auth bypass to: $enable")
         editor.putBoolean(KEY_BYPASS_FIREBASE_AUTH, enable)
         editor.apply()
@@ -173,8 +178,12 @@ class SessionManager(context: Context) {
      * Check login status
      */
     fun isLoggedIn(): Boolean {
-        // Get bypass setting
-        val bypassAuth = pref.getBoolean(KEY_BYPASS_FIREBASE_AUTH, false)
+        // Get bypass setting (only works in DEBUG builds)
+        val bypassAuth = if (com.phad.chatapp.BuildConfig.DEBUG) {
+            pref.getBoolean(KEY_BYPASS_FIREBASE_AUTH, false)
+        } else {
+            false // Always false in release builds
+        }
         if (bypassAuth) {
             Log.w(TAG, "⚠️ USING AUTHENTICATION BYPASS! This is for testing only!")
             return pref.getBoolean(KEY_IS_LOGGED_IN, false)
