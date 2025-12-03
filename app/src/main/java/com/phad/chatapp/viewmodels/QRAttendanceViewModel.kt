@@ -1649,51 +1649,12 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                 
                 if (pdfPath != null) {
                     Log.d(TAG, "PDF generated successfully: $pdfPath")
-                    val pdfFile = File(pdfPath as String)
                     
-                    // Use FileProvider to create URI and share the PDF
-                    try {
-                        val uri = FileProvider.getUriForFile(
-                            application,
-                            application.packageName + ".fileprovider",
-                            pdfFile
-                        )
-                        
-                        val intent = Intent(Intent.ACTION_VIEW).apply {
-                            setDataAndType(uri, "application/pdf")
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        }
-                        
-                        if (intent.resolveActivity(application.packageManager) != null) {
-                            application.startActivity(intent)
-                            _adminUiState.value = _adminUiState.value.copy(
-                                isLoading = false,
-                                successMessage = "PDF report generated and opened successfully!"
-                            )
-                        } else {
-                            // If no PDF viewer app is available, offer to share the file
-                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                type = "application/pdf"
-                                putExtra(Intent.EXTRA_STREAM, uri)
-                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            }
-                            application.startActivity(Intent.createChooser(shareIntent, "Share PDF").apply {
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            })
-                            _adminUiState.value = _adminUiState.value.copy(
-                                isLoading = false,
-                                successMessage = "PDF report generated! Choose an app to open or share it."
-                            )
-                        }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error sharing PDF", e)
-                        _adminUiState.value = _adminUiState.value.copy(
-                            isLoading = false,
-                            errorMessage = "PDF generated but could not open it: ${e.message}"
-                        )
-                    }
+                    // Show success message with path
+                    _adminUiState.value = _adminUiState.value.copy(
+                        isLoading = false,
+                        successMessage = "PDF saved to Downloads/NSS_Reports"
+                    )
                 } else {
                     Log.e(TAG, "Failed to generate PDF")
                     _adminUiState.value = _adminUiState.value.copy(

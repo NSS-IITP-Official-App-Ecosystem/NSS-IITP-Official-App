@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.firebase.firestore.FirebaseFirestore
 import com.phad.chatapp.models.AttendanceEvent
-import com.phad.chatapp.utils.ExcelGenerator
+import com.phad.chatapp.utils.PDFGenerator
 import kotlinx.coroutines.tasks.await
 import android.net.Uri
 import androidx.core.content.FileProvider
@@ -159,16 +159,16 @@ fun EventsListScreen(
                                 isGeneratingFile = true
                                 scope.launch {
                                     try {
-                                        val generator = ExcelGenerator(context)
-                                        val rows = events.map { Triple(it.name, it.date, it.hours) }
+                                        val generator = PDFGenerator(context)
+                                        val rows = events.map { Triple(it.name, it.date, it.hours.toInt()) }
                                         val path = generator.generateStudentEventsList(studentName, rollNumber, semester, rows)
                                         if (path != null) {
-                                            showFileMessage = "File saved to: $path"
+                                            showFileMessage = "PDF saved to Downloads/NSS_Reports"
                                         } else {
-                                            showFileMessage = "Failed to generate CSV file"
+                                            showFileMessage = "Failed to generate PDF report"
                                         }
                                     } catch (e: Exception) {
-                                        showFileMessage = e.message ?: "Failed to generate CSV file"
+                                        showFileMessage = e.message ?: "Failed to generate PDF report"
                                     } finally {
                                         isGeneratingFile = false
                                     }
@@ -177,7 +177,7 @@ fun EventsListScreen(
                         ) {
                             Icon(
                                 Icons.Default.Download,
-                                contentDescription = "Download Excel",
+                                contentDescription = "Download PDF",
                                 tint = Color.White
                             )
                         }
@@ -323,7 +323,7 @@ fun EventsListScreen(
             ) {
                 Card(
                     colors = CardDefaults.cardColors(
-                        containerColor = if (message.contains("success")) Color(0xFF4CAF50) else Color(0xFFF44336)
+                        containerColor = if (message.contains("PDF saved") || message.contains("saved")) Color(0xFF4CAF50) else Color(0xFFF44336)
                     ),
                     shape = RoundedCornerShape(8.dp)
                 ) {
