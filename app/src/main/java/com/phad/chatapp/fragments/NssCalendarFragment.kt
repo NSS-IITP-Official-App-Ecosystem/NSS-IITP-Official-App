@@ -1064,7 +1064,7 @@ private fun DayCell(
                 verticalArrangement = Arrangement.Center,
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(8.dp)
+                    .padding(4.dp)
             ) {
                 Text(
                     text = date.dayOfMonth.toString(),
@@ -1073,8 +1073,10 @@ private fun DayCell(
                         backgroundColor = backgroundColor,
                         isToday = isToday
                     ),
-                    fontSize = 20.sp,
-                    textAlign = TextAlign.Center
+                    fontSize = 14.sp, // Reduced from 20.sp to fit two-digit dates on smaller screens
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Visible
                 )
             }
         }

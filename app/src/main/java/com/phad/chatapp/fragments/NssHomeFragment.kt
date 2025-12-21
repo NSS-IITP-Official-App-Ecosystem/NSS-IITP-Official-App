@@ -105,7 +105,7 @@ class NssHomeFragment : Fragment() {
         }
     }
     
-    private val _uiState = MutableStateFlow(HomeUiState())
+    private val _uiState = MutableStateFlow(HomeUiState(isNssInterface = true))
     private val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
     
     override fun onCreateView(

@@ -15,7 +15,7 @@ android {
         applicationId = "com.phad.chatapp"
         minSdk = 24
         targetSdk = 35
-        versionCode = 26
+        versionCode = 35
         versionName = "1.0.9"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -57,8 +57,8 @@ android {
     buildFeatures {
         viewBinding = true
         compose = true
-        // Disable Java compilation
-        buildConfig = false
+        // Enable BuildConfig for debug flags
+        buildConfig = true
     }
 
     // Add packaging options to handle conflicts and 16KB page size alignment
@@ -137,6 +137,11 @@ dependencies {
     implementation("com.google.android.exoplayer:exoplayer:2.19.1")
     implementation("com.google.android.exoplayer:exoplayer-ui:2.19.1")
     
+    // Play Core for update detection
+    implementation("com.google.android.play:app-update:2.1.0")
+    implementation("com.google.android.play:app-update-ktx:2.1.0")
+    
+
     // Firebase with BOM (Bill of Materials)
     implementation(platform("com.google.firebase:firebase-bom:32.8.0"))
     

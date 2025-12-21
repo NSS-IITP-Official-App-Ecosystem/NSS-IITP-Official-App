@@ -21,6 +21,7 @@ import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
 import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
+import com.phad.chatapp.BuildConfig
 import com.phad.chatapp.models.Admin
 import com.phad.chatapp.models.Student
 import com.phad.chatapp.utils.Constants
@@ -139,12 +140,14 @@ class LoginActivity : AppCompatActivity() {
             }
         }
         
-        // TEMPORARY DEBUG OPTION - Long press on the login screen to enable bypass
-        // This is for emergency testing only when Firebase rules are causing issues
-        val rootView = findViewById<View>(android.R.id.content)
-        rootView.setOnLongClickListener {
-            showBypassDialog()
-            true
+        // DEBUG OPTION - Only available in debug builds
+        // Long press on the login screen to enable bypass (for testing only)
+        if (BuildConfig.DEBUG) {
+            val rootView = findViewById<View>(android.R.id.content)
+            rootView.setOnLongClickListener {
+                showBypassDialog()
+                true
+            }
         }
         
         // Set up click listeners for login buttons

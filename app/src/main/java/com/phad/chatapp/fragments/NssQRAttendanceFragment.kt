@@ -671,21 +671,49 @@ fun EditEventDialog(
         showError = !errorMessage.isNullOrEmpty()
     }
 
-    AlertDialog(
-        onDismissRequest = {
-            if (!isUpdating) {
-                onDismiss()
-            }
-        },
-        title = {
-            Text(
-                text = "Edit Event",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
-            )
-        },
-        text = {
-            Column {
+    // Custom Dialog with fixed header and footer, scrollable content
+    Dialog(onDismissRequest = { 
+        if (!isUpdating) {
+            onDismiss()
+        }
+    }) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = RoundedCornerShape(16.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 600.dp) // Limit max height to prevent overflow
+            ) {
+                // Fixed Header
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color.White)
+                        .padding(20.dp, 16.dp)
+                ) {
+                    Text(
+                        text = "Edit Event",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                // Scrollable Content
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .background(Color.White)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp)
+                ) {
                 // Event Name Field
                 OutlinedTextField(
                     value = eventName,
@@ -962,76 +990,90 @@ fun EditEventDialog(
                     )
                 }
 
-                // Loading indicator
-                if (isUpdating) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
+                    // Loading indicator
+                    if (isUpdating) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Updating event...",
+                                fontSize = 14.sp,
+                                color = Color.Gray
+                            )
+                        }
+                    }
+
+                    // Add bottom padding to ensure content doesn't get cut off
+                    Spacer(modifier = Modifier.height(20.dp))
+                }
+
+                // Fixed Footer with buttons
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color.White)
+                        .padding(20.dp, 16.dp),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(
+                        onClick = onDismiss,
+                        enabled = !isUpdating
                     ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Updating event...",
-                            fontSize = 14.sp,
-                            color = Color.Gray
-                        )
+                        Text("Cancel")
+                    }
+                    
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
+                    Button(
+                        onClick = {
+                            val trimmedName = eventName.trim()
+                            val trimmedHours = eventHours.trim()
+                            val hoursValue = trimmedHours.toDoubleOrNull() ?: -1.0
+                            val negHoursValue = negativeHours.trim().toDoubleOrNull() ?: 0.0
+
+                            when {
+                                trimmedName.isEmpty() -> {
+                                    showError = true
+                                    validationErrorMessage = "Event name is required"
+                                }
+                                trimmedHours.isEmpty() || hoursValue < 0.0 -> {
+                                    showError = true
+                                    validationErrorMessage = "Please enter valid hours (0 or greater)"
+                                }
+                                isMandatory && negativeHours.trim().isEmpty() -> {
+                                    showError = true
+                                    validationErrorMessage = "Negative hours are required for mandatory events"
+                                }
+                                !com.phad.chatapp.utils.AttendanceEventUtils.validateEventTimes(openingTime, closingTime) -> {
+                                    showError = true
+                                    validationErrorMessage = "Closing time must be after opening time"
+                                }
+                                // Allow edits regardless of whether opening time is in the past
+                                else -> {
+                                    showError = false
+                                    validationErrorMessage = ""
+                                    onUpdateEvent(trimmedName, eventDescription.trim(), eventLocation.trim(), selectedDate, openingTime, closingTime, hoursValue, isMandatory, negHoursValue, event.id)
+                                }
+                            }
+                        },
+                        enabled = !isUpdating,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2196F3))
+                    ) {
+                        Text("Update Event")
                     }
                 }
             }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val trimmedName = eventName.trim()
-                    val trimmedHours = eventHours.trim()
-                    val hoursValue = trimmedHours.toDoubleOrNull() ?: -1.0
-                    val negHoursValue = negativeHours.trim().toDoubleOrNull() ?: 0.0
-
-                    when {
-                        trimmedName.isEmpty() -> {
-                            showError = true
-                            validationErrorMessage = "Event name is required"
-                        }
-                        trimmedHours.isEmpty() || hoursValue < 0.0 -> {
-                            showError = true
-                            validationErrorMessage = "Please enter valid hours (0 or greater)"
-                        }
-                        isMandatory && negativeHours.trim().isEmpty() -> {
-                            showError = true
-                            validationErrorMessage = "Negative hours are required for mandatory events"
-                        }
-                        !com.phad.chatapp.utils.AttendanceEventUtils.validateEventTimes(openingTime, closingTime) -> {
-                            showError = true
-                            validationErrorMessage = "Closing time must be after opening time"
-                        }
-                        // Allow edits regardless of whether opening time is in the past
-                        else -> {
-                            showError = false
-                            validationErrorMessage = ""
-                            onUpdateEvent(trimmedName, eventDescription.trim(), eventLocation.trim(), selectedDate, openingTime, closingTime, hoursValue, isMandatory, negHoursValue, event.id)
-                        }
-                    }
-                },
-                enabled = !isUpdating,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2196F3))
-            ) {
-                Text("Update Event")
-            }
-        },
-        dismissButton = {
-            TextButton(
-                onClick = onDismiss,
-                enabled = !isUpdating
-            ) {
-                Text("Cancel")
-            }
         }
-    )
+    }
 
     // Date Picker Dialog
     if (showDatePicker) {

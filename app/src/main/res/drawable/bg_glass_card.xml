@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="40dp" />
+    <!-- Subtle linear gradient to mimic glass tint -->
+    <gradient
+        android:startColor="#331A2A46"
+        android:endColor="#331F1E33"
+        android:angle="270" />
+    <!-- Soft inner-like stroke -->
+    <stroke
+        android:width="2dp"
+        android:color="#4DFFFFFF" />
+    <!-- Slight translucent fill -->
+    <solid android:color="#26FFFFFF" />
+</shape>
+
+

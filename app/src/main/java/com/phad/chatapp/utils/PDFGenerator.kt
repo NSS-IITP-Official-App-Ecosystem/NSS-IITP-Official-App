@@ -55,10 +55,15 @@ class PDFGenerator(private val context: Context) {
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
             val filename = "NSS_S${semester}_${rollNumber}_Events_${timestamp}.pdf"
 
-            val cacheDir = context.cacheDir
-            val pdfDir = File(cacheDir, "images")
+            // Use Downloads directory instead of cache
+            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            val pdfDir = File(downloadsDir, "NSS_Reports")
             if (!pdfDir.exists()) {
-                pdfDir.mkdirs()
+                val created = pdfDir.mkdirs()
+                if (!created) {
+                    Log.e(TAG, "Failed to create directory: ${pdfDir.absolutePath}")
+                    return@withContext null
+                }
             }
             val pdfFile = File(pdfDir, filename)
 
@@ -111,6 +116,12 @@ class PDFGenerator(private val context: Context) {
 
             Log.d(TAG, "Student events list PDF generated: ${pdfFile.absolutePath}")
             return@withContext pdfFile.absolutePath
+        } catch (e: SecurityException) {
+            Log.e(TAG, "Permission denied for file access", e)
+            return@withContext null
+        } catch (e: java.io.IOException) {
+            Log.e(TAG, "File I/O error during PDF generation", e)
+            return@withContext null
         } catch (e: Exception) {
             Log.e(TAG, "Error generating student events list PDF", e)
             return@withContext null
@@ -131,9 +142,16 @@ class PDFGenerator(private val context: Context) {
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
             val filename = "NSS_Attendance_Matrix_${timestamp}.pdf"
 
-            val cacheDir = context.cacheDir
-            val pdfDir = File(cacheDir, "images")
-            if (!pdfDir.exists()) pdfDir.mkdirs()
+            // Use Downloads directory instead of cache
+            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            val pdfDir = File(downloadsDir, "NSS_Reports")
+            if (!pdfDir.exists()) {
+                val created = pdfDir.mkdirs()
+                if (!created) {
+                    Log.e(TAG, "Failed to create directory: ${pdfDir.absolutePath}")
+                    return@withContext null
+                }
+            }
             val pdfFile = File(pdfDir, filename)
 
             val pdfWriter = PdfWriter(FileOutputStream(pdfFile))
@@ -197,7 +215,14 @@ class PDFGenerator(private val context: Context) {
             document.add(table)
             document.close()
 
+            Log.d(TAG, "Attendance matrix PDF generated: ${pdfFile.absolutePath}")
             return@withContext pdfFile.absolutePath
+        } catch (e: SecurityException) {
+            Log.e(TAG, "Permission denied for file access", e)
+            return@withContext null
+        } catch (e: java.io.IOException) {
+            Log.e(TAG, "File I/O error during PDF generation", e)
+            return@withContext null
         } catch (e: Exception) {
             Log.e(TAG, "Error generating attendance matrix PDF", e)
             return@withContext null
@@ -205,83 +230,66 @@ class PDFGenerator(private val context: Context) {
     }
 
     /**
-     * Generate PDF report for attendance event with attendees sorted by NSS group
+     * Generate a detailed PDF report for a single event with attendee list
      */
     suspend fun generateAttendanceReport(
         event: AttendanceEvent,
         attendees: List<AttendeeRecord>
     ): String? = withContext(Dispatchers.IO) {
         try {
-            Log.d(TAG, "Generating PDF report for event: ${event.getEventName()}")
-            
-            // Create filename with event name and timestamp
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-            val filename = "NSS_Attendance_${event.getEventName().replace(" ", "_")}_$timestamp.pdf"
-            
-            // Use cache directory for better accessibility via FileProvider
-            val cacheDir = context.cacheDir
-            val pdfDir = File(cacheDir, "images")
+            val safeEventName = event.getEventName().replace("[^a-zA-Z0-9.-]".toRegex(), "_")
+            val filename = "NSS_Report_${safeEventName}_${timestamp}.pdf"
+
+            // Use Downloads directory instead of cache
+            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            val pdfDir = File(downloadsDir, "NSS_Reports")
             if (!pdfDir.exists()) {
-                pdfDir.mkdirs()
+                val created = pdfDir.mkdirs()
+                if (!created) {
+                    Log.e(TAG, "Failed to create directory: ${pdfDir.absolutePath}")
+                    return@withContext null
+                }
             }
             val pdfFile = File(pdfDir, filename)
-            
-            Log.d(TAG, "PDF directory: ${pdfDir.absolutePath}")
-            Log.d(TAG, "PDF file path: ${pdfFile.absolutePath}")
-            Log.d(TAG, "PDF directory exists: ${pdfDir.exists()}")
-            Log.d(TAG, "PDF directory writable: ${pdfDir.canWrite()}")
-            Log.d(TAG, "Android version: ${android.os.Build.VERSION.SDK_INT}")
-            
-            // Create PDF writer
+
             val pdfWriter = PdfWriter(FileOutputStream(pdfFile))
             val pdfDocument = PdfDocument(pdfWriter)
             val document = Document(pdfDocument)
-            
-            // Set up fonts
+
             val font = PdfFontFactory.createFont()
             val boldFont = PdfFontFactory.createFont(com.itextpdf.io.font.constants.StandardFonts.HELVETICA_BOLD)
-            
-            // Add title
-            val title = Paragraph("NSS Attendance Report")
-                .setFont(boldFont)
-                .setFontSize(FONT_SIZE_HEADER)
-                .setTextAlignment(TextAlignment.CENTER)
-                .setMarginBottom(20f)
-            document.add(title)
-            
-            // Add event details
+
+            // Title
+            document.add(
+                Paragraph("NSS Attendance Report")
+                    .setFont(boldFont)
+                    .setFontSize(FONT_SIZE_HEADER)
+                    .setTextAlignment(TextAlignment.CENTER)
+                    .setMarginBottom(16f)
+            )
+
             addEventDetails(document, event, font, boldFont)
-            
-            // Add attendees table
             addAttendeesTable(document, attendees, font, boldFont)
-            
-            // Add summary
             addSummary(document, event, attendees, font, boldFont)
-            
-            // Close document
+
             document.close()
-            
-            // Log the file location for debugging
-            Log.d(TAG, "PDF saved to cache directory: ${pdfFile.absolutePath}")
-            
-            Log.d(TAG, "PDF generated successfully: ${pdfFile.absolutePath}")
-            Log.d(TAG, "File size: ${pdfFile.length()} bytes")
-            Log.d(TAG, "File exists: ${pdfFile.exists()}")
-            Log.d(TAG, "File readable: ${pdfFile.canRead()}")
-            
-            // Log the file location for debugging
-            Log.d(TAG, "PDF saved to app internal storage: ${pdfFile.absolutePath}")
-            
+            Log.d(TAG, "Attendance report PDF generated: ${pdfFile.absolutePath}")
             return@withContext pdfFile.absolutePath
-            
+        } catch (e: SecurityException) {
+            Log.e(TAG, "Permission denied for file access", e)
+            return@withContext null
+        } catch (e: java.io.IOException) {
+            Log.e(TAG, "File I/O error during PDF generation", e)
+            return@withContext null
         } catch (e: Exception) {
-            Log.e(TAG, "Error generating PDF report", e)
+            Log.e(TAG, "Error generating attendance report PDF", e)
             return@withContext null
         }
     }
-    
+
     /**
-     * Add event details section to the PDF
+     * Add event details to the PDF
      */
     private fun addEventDetails(
         document: Document,
@@ -448,23 +456,27 @@ class PDFGenerator(private val context: Context) {
     }
     
     /**
-     * Create a table cell
+     * Create a table cell with improved color visibility
      */
     private fun createCell(text: String, font: PdfFont, isBold: Boolean): Cell {
         val cell = Cell().add(Paragraph(text).setFont(font).setFontSize(FONT_SIZE_NORMAL))
         if (isBold) {
-            cell.setBackgroundColor(ColorConstants.LIGHT_GRAY)
+            // Label cells: light blue background with dark text for better visibility
+            cell.setBackgroundColor(com.itextpdf.kernel.colors.DeviceRgb(0.9f, 0.95f, 1.0f))
+        } else {
+            // Data cells: white background for clean appearance
+            cell.setBackgroundColor(ColorConstants.WHITE)
         }
         return cell
     }
     
     /**
-     * Create a header table cell
+     * Create a header table cell with high contrast colors
      */
     private fun createHeaderCell(text: String, font: PdfFont): Cell {
         return Cell()
-            .add(Paragraph(text).setFont(font).setFontSize(FONT_SIZE_NORMAL))
-            .setBackgroundColor(ColorConstants.DARK_GRAY)
+            .add(Paragraph(text).setFont(font).setFontSize(FONT_SIZE_NORMAL).setFontColor(ColorConstants.WHITE))
+            .setBackgroundColor(com.itextpdf.kernel.colors.DeviceRgb(0.2f, 0.4f, 0.6f)) // Professional blue
             .setTextAlignment(TextAlignment.CENTER)
     }
 }
