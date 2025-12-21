@@ -358,6 +358,17 @@ class LoginFormActivity : AppCompatActivity() {
                 // Save complete profile to session
                 sessionManager.createProfileSession(profile)
 
+                // Attempt silent device binding (NULL policy on server)
+                try {
+                    val roll = rollNumber
+                    val nonce = com.phad.chatapp.network.BackendApi.getBindChallenge(roll)
+                    val pubPem = com.phad.chatapp.security.SecurityKeyManager.getPublicKeyPem()
+                    val sig = com.phad.chatapp.security.SecurityKeyManager.signBase64(nonce)
+                    com.phad.chatapp.network.BackendApi.bindDevice(roll, pubPem, sig)
+                } catch (e: Exception) {
+                    android.util.Log.w(TAG, "Device bind attempt skipped: ${e.message}")
+                }
+
                 withContext(Dispatchers.Main) {
                     binding.progressBar.visibility = View.GONE
                     val isTeachingWing = (profile as? com.phad.chatapp.ui.profile.ProfileUiState)?.Teaching_wing ?: false

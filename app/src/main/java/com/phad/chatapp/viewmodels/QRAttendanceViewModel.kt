@@ -1055,41 +1055,54 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
             Log.d(TAG, "Created AttendeeRecord: rollNumber=${attendee.rollNumber}, studentName=${attendee.name}, deviceId=${attendee.deviceId}")
             Log.d(TAG, "AttendeeRecord validation: isDataValid=${attendee.isDataValid()}")
 
-            Log.d(TAG, "Calling repository.addAttendeeToEvent...")
-            val result = repository.addAttendeeToEvent(qrData.eventId, attendee)
-
-            Log.d(TAG, "Repository result: isSuccess=${result.isSuccess}")
-            if (result.isFailure) {
-                Log.e(TAG, "Repository failure details:", result.exceptionOrNull())
-            }
-
-            if (result.isSuccess) {
-                // Avoid additional reads for event name; use cached selected event if present or generic text
-                val eventName = _adminUiState.value.selectedEvent?.getEventName() ?: "the event"
-                _studentUiState.value = _studentUiState.value.copy(
-                    isProcessing = false,
-                    scanResult = ScanResult.Success("Attendance marked successfully for $eventName")
-                )
-                
-                // Update attendance stats in session after successful attendance marking
-                try {
-                    AttendanceStatsUpdater.updateAttendanceStatsInSession(application)
-                    Log.d(TAG, "✅ Attendance stats updated in session")
-                } catch (e: Exception) {
-                    Log.w(TAG, "⚠️ Failed to update attendance stats in session: ${e.message}")
+            Log.d(TAG, "Calling backend markAttendance with signature challenge...")
+            try {
+                val rollUpper = _studentUiState.value.studentId.uppercase()
+                val nonce = com.phad.chatapp.network.BackendApi.getAttendanceChallenge(rollUpper, qrData.eventId)
+                val sig = com.phad.chatapp.security.SecurityKeyManager.signBase64(nonce)
+                val attendeeJson = org.json.JSONObject().apply {
+                    put("roll_number", attendee.rollNumber)
+                    put("name", attendee.name)
+                    put("is_manual_entry", attendee.isManualEntry)
+                    put("device_id", attendee.deviceId)
+                    put("scanned_from", org.json.JSONObject().apply {
+                        put("admin_roll_number", attendee.scannedFrom.adminRollNumber)
+                        put("admin_name", attendee.scannedFrom.adminName)
+                    })
+                    attendee.scanLocation?.let { gp ->
+                        put("scan_location", org.json.JSONObject().apply {
+                            put("latitude", gp.latitude)
+                            put("longitude", gp.longitude)
+                        })
+                    }
                 }
-                
-                Log.d(TAG, "✅ Attendance marked successfully for ${_studentUiState.value.studentId} - Event: $eventName")
-                Log.d(TAG, "=== ATTENDANCE MARKING COMPLETED SUCCESSFULLY ===")
-            } else {
-                val error = result.exceptionOrNull()?.message ?: "Failed to mark attendance"
+                com.phad.chatapp.network.BackendApi.markAttendance(rollUpper, qrData.eventId, attendeeJson, sig)
+                val result = Result.success(Unit)
+                Log.d(TAG, "Backend attendance marked successfully")
+                if (result.isSuccess) {
+                    // Avoid additional reads for event name; use cached selected event if present or generic text
+                    val eventName = _adminUiState.value.selectedEvent?.getEventName() ?: "the event"
+                    _studentUiState.value = _studentUiState.value.copy(
+                        isProcessing = false,
+                        scanResult = ScanResult.Success("Attendance marked successfully for $eventName")
+                    )
+                    try {
+                        AttendanceStatsUpdater.updateAttendanceStatsInSession(application)
+                        Log.d(TAG, "✅ Attendance stats updated in session")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "⚠️ Failed to update attendance stats in session: ${e.message}")
+                    }
+                    Log.d(TAG, "✅ Attendance marked successfully for ${_studentUiState.value.studentId}")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Backend markAttendance failed", e)
                 _studentUiState.value = _studentUiState.value.copy(
                     isProcessing = false,
-                    scanResult = ScanResult.Error(error)
+                    scanResult = ScanResult.Error(e.message ?: "Failed to mark attendance")
                 )
-                Log.e(TAG, "❌ Error marking attendance: $error", result.exceptionOrNull())
-                Log.e(TAG, "=== ATTENDANCE MARKING FAILED ===")
+                return
             }
+
         } catch (e: Exception) {
             Log.e(TAG, "Exception marking attendance", e)
             _studentUiState.value = _studentUiState.value.copy(

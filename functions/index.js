@@ -23,6 +23,222 @@ const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 admin.initializeApp();
 
+// Utilities for HTTPS endpoints
+const crypto = require('crypto');
+
+/**
+ * Verify Firebase Auth ID token from Authorization: Bearer header
+ */
+async function verifyAuth(req) {
+  const authHeader = req.headers.authorization || '';
+  const match = authHeader.match(/^Bearer (.+)$/);
+  if (!match) throw Object.assign(new Error('Missing Authorization header'), { status: 401 });
+  const idToken = match[1];
+  try {
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    return decoded; // contains uid, email, etc.
+  } catch (e) {
+    throw Object.assign(new Error('Invalid ID token'), { status: 401 });
+  }
+}
+
+function sendError(res, err) {
+  const status = err && err.status ? err.status : 500;
+  res.status(status).json({ error: err.message || 'Internal error' });
+}
+
+function generateNonce(bytes = 32) {
+  return crypto.randomBytes(bytes).toString('base64url');
+}
+
+function pemToKeyObject(pem) {
+  return crypto.createPublicKey({ key: pem, format: 'pem' });
+}
+
+async function assertUserIdentityMatches(db, rollNumber, decodedToken) {
+  // This project stores users by rollNumber in Firestore. We map auth identity to that user by email field.
+  // If you want to enforce a different mapping, adjust here.
+  const userSnap = await db.collection('users').doc(rollNumber).get();
+  if (!userSnap.exists) throw Object.assign(new Error('User not found'), { status: 404 });
+  const data = userSnap.data() || {};
+  const storedEmail = data.instituteOutlookId || data.email;
+  if (storedEmail && decodedToken.email && storedEmail.toLowerCase() === decodedToken.email.toLowerCase()) return;
+  // If no email on file, allow but log; otherwise enforce match
+  if (!storedEmail) return;
+  throw Object.assign(new Error('Authenticated user does not match roll number'), { status: 403 });
+}
+
+/**
+ * Issue a short-lived bind challenge for device binding
+ * POST body: { rollNumber }
+ */
+exports.getDeviceBindChallenge = functions.region('asia-south1').https.onRequest(async (req, res) => {
+  try {
+    if (req.method !== 'POST') throw Object.assign(new Error('Method not allowed'), { status: 405 });
+    const decoded = await verifyAuth(req);
+    const { rollNumber } = req.body || {};
+    if (!rollNumber) throw Object.assign(new Error('Missing rollNumber'), { status: 400 });
+    const db = admin.firestore();
+    await assertUserIdentityMatches(db, rollNumber, decodedToken = decoded);
+    const nonce = generateNonce();
+    const expiresAt = admin.firestore.Timestamp.fromDate(new Date(Date.now() + 5 * 60 * 1000));
+    await db.collection('users').doc(rollNumber)
+      .collection('deviceChallenges').doc('bind')
+      .set({ nonce, expiresAt }, { merge: true });
+    res.json({ nonce, expiresAt: expiresAt.toMillis() });
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
+/**
+ * Bind a device public key when user has no active binding (NULL policy)
+ * POST body: { rollNumber, publicKeyPem, signatureBase64 } where signature = sign(nonce)
+ */
+exports.bindDevice = functions.region('asia-south1').https.onRequest(async (req, res) => {
+  try {
+    if (req.method !== 'POST') throw Object.assign(new Error('Method not allowed'), { status: 405 });
+    const decoded = await verifyAuth(req);
+    const { rollNumber, publicKeyPem, signatureBase64 } = req.body || {};
+    if (!rollNumber || !publicKeyPem || !signatureBase64) throw Object.assign(new Error('Missing fields'), { status: 400 });
+    const db = admin.firestore();
+    await assertUserIdentityMatches(db, rollNumber, decoded);
+
+    const userRef = db.collection('users').doc(rollNumber);
+    await db.runTransaction(async (tx) => {
+      const userDoc = await tx.get(userRef);
+      if (!userDoc.exists) throw Object.assign(new Error('User not found'), { status: 404 });
+      const deviceBinding = userDoc.get('deviceBinding') || null;
+      if (deviceBinding && deviceBinding.status === 'active') {
+        throw Object.assign(new Error('Device already bound'), { status: 409 });
+      }
+      const challengeDocRef = userRef.collection('deviceChallenges').doc('bind');
+      const challengeSnap = await tx.get(challengeDocRef);
+      if (!challengeSnap.exists) throw Object.assign(new Error('No challenge found'), { status: 400 });
+      const { nonce, expiresAt } = challengeSnap.data();
+      if (!nonce || !expiresAt) throw Object.assign(new Error('Invalid challenge'), { status: 400 });
+      if (expiresAt.toMillis() < Date.now()) throw Object.assign(new Error('Challenge expired'), { status: 400 });
+
+      // Verify client signed the nonce with the provided public key
+      const verifier = crypto.createVerify('SHA256');
+      verifier.update(Buffer.from(nonce));
+      verifier.end();
+      const pubKey = pemToKeyObject(publicKeyPem);
+      const isValid = verifier.verify(pubKey, Buffer.from(signatureBase64, 'base64'));
+      if (!isValid) throw Object.assign(new Error('Invalid signature'), { status: 400 });
+
+      const binding = {
+        publicKey: publicKeyPem,
+        fingerprint: crypto.createHash('sha256').update(pubKey.export({ type: 'spki', format: 'der' })).digest('hex'),
+        status: 'active',
+        registeredAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastVerifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+      tx.set(userRef, { deviceBinding: binding }, { merge: true });
+      tx.delete(challengeDocRef);
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
+/**
+ * Issue attendance challenge for the bound device
+ * POST body: { rollNumber, eventId }
+ */
+exports.getAttendanceChallenge = functions.region('asia-south1').https.onRequest(async (req, res) => {
+  try {
+    if (req.method !== 'POST') throw Object.assign(new Error('Method not allowed'), { status: 405 });
+    const decoded = await verifyAuth(req);
+    const { rollNumber, eventId } = req.body || {};
+    if (!rollNumber || !eventId) throw Object.assign(new Error('Missing fields'), { status: 400 });
+    const db = admin.firestore();
+    await assertUserIdentityMatches(db, rollNumber, decoded);
+    const userRef = db.collection('users').doc(rollNumber);
+    const userSnap = await userRef.get();
+    const deviceBinding = userSnap.get('deviceBinding') || null;
+    if (!deviceBinding || deviceBinding.status !== 'active') {
+      throw Object.assign(new Error('No active device binding'), { status: 403 });
+    }
+    const nonce = generateNonce();
+    const expiresAt = admin.firestore.Timestamp.fromDate(new Date(Date.now() + 2 * 60 * 1000));
+    await userRef.collection('deviceChallenges').doc(`attendance_${eventId}`)
+      .set({ nonce, expiresAt }, { merge: true });
+    res.json({ nonce, expiresAt: expiresAt.toMillis() });
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
+/**
+ * Verify attendance signature and write attendance (server-side)
+ * POST body: { rollNumber, eventId, attendee, signatureBase64 }
+ *   where signature signs the nonce from getAttendanceChallenge
+ */
+exports.markAttendance = functions.region('asia-south1').https.onRequest(async (req, res) => {
+  try {
+    if (req.method !== 'POST') throw Object.assign(new Error('Method not allowed'), { status: 405 });
+    const decoded = await verifyAuth(req);
+    const { rollNumber, eventId, signatureBase64, attendee } = req.body || {};
+    if (!rollNumber || !eventId || !signatureBase64 || !attendee) throw Object.assign(new Error('Missing fields'), { status: 400 });
+    const db = admin.firestore();
+    await assertUserIdentityMatches(db, rollNumber, decoded);
+    const userRef = db.collection('users').doc(rollNumber);
+    const userSnap = await userRef.get();
+    const deviceBinding = userSnap.get('deviceBinding') || null;
+    if (!deviceBinding || deviceBinding.status !== 'active') throw Object.assign(new Error('No active device binding'), { status: 403 });
+
+    const challengeRef = userRef.collection('deviceChallenges').doc(`attendance_${eventId}`);
+    const challengeSnap = await challengeRef.get();
+    if (!challengeSnap.exists) throw Object.assign(new Error('No challenge found'), { status: 400 });
+    const { nonce, expiresAt } = challengeSnap.data();
+    if (!nonce || !expiresAt) throw Object.assign(new Error('Invalid challenge'), { status: 400 });
+    if (expiresAt.toMillis() < Date.now()) throw Object.assign(new Error('Challenge expired'), { status: 400 });
+
+    // Verify signature using stored public key
+    const pubKey = pemToKeyObject(deviceBinding.publicKey);
+    const verifier = crypto.createVerify('SHA256');
+    verifier.update(Buffer.from(nonce));
+    verifier.end();
+    const isValid = verifier.verify(pubKey, Buffer.from(signatureBase64, 'base64'));
+    if (!isValid) throw Object.assign(new Error('Invalid signature'), { status: 400 });
+
+    // Build normalized attendee object (server authoritative timestamp)
+    let scanLocation = null;
+    if (attendee && attendee.scan_location && typeof attendee.scan_location.latitude === 'number' && typeof attendee.scan_location.longitude === 'number') {
+      scanLocation = new admin.firestore.GeoPoint(attendee.scan_location.latitude, attendee.scan_location.longitude);
+    }
+
+    const normalizedAttendee = Object.assign({}, attendee, {
+      roll_number: rollNumber.toUpperCase(),
+      scan_timestamp: admin.firestore.Timestamp.now(),
+      ...(scanLocation ? { scan_location: scanLocation } : {}),
+    });
+
+    // Proceed to write attendance using existing schema
+    const eventRef = db.collection('NSS_Events_Attendence').doc(eventId);
+    const attendanceDocRef = eventRef.collection('attendance').doc(rollNumber.toUpperCase());
+
+    await db.runTransaction(async (tx) => {
+      const eventSnap = await tx.get(eventRef);
+      if (!eventSnap.exists) throw Object.assign(new Error('Event not found'), { status: 404 });
+      tx.set(attendanceDocRef, normalizedAttendee);
+      tx.update(eventRef, {
+        attendees: admin.firestore.FieldValue.arrayUnion(normalizedAttendee),
+        total_marked: admin.firestore.FieldValue.increment(1),
+      });
+    });
+
+    await challengeRef.delete();
+    await userRef.set({ deviceBinding: { ...deviceBinding, lastVerifiedAt: admin.firestore.FieldValue.serverTimestamp() } }, { merge: true });
+
+    res.json({ ok: true });
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
 // Increment counters and update user stats when a new attendance record is written
 exports.onAttendanceCreate = functions.firestore
   .document('NSS_Events_Attendence/{eventId}/attendance/{rollNumber}')
