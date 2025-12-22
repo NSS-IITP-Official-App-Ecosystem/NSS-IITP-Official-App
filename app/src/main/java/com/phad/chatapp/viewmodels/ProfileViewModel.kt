@@ -76,7 +76,8 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
                             collegeEmail = outlook,
                             instituteId = outlook,
                             userType = userTypeFromDb,
-                            isStudent = userTypeFromDb.equals("Student", ignoreCase = true)
+                            isStudent = userTypeFromDb.equals("Student", ignoreCase = true),
+                            wings = (map["wings"] as? List<*>)?.filterIsInstance<String>() ?: emptyList()
                         )
                     }
                 }

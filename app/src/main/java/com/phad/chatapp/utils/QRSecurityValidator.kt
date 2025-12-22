@@ -17,8 +17,8 @@ class QRSecurityValidator {
     private val TAG = "QRSecurityValidator"
     
     companion object {
-        // Security constants - 3 second validity window to account for processing delays and network latency
-        private const val MAX_QR_AGE_MS = 8000L // 3 seconds maximum age for security
+        // Security constants - 10 second validity window to account for GPS acquisition and network latency
+        private const val MAX_QR_AGE_MS = 10000L // 10 seconds maximum age for security
         private const val MIN_QR_AGE_MS = -2000L // Allow 2 second tolerance for clock differences
         private const val MAX_SCAN_ATTEMPTS_PER_MINUTE = 10
         private const val RATE_LIMIT_WINDOW_MS = 60000L // 1 minute
@@ -915,16 +915,16 @@ class QRSecurityValidator {
     
     /**
      * Validate location proximity for QR scanning
-     * Verifies that the scanner is within the specified radius (3 meters) of the event location
+     * Verifies that the scanner is within the specified radius (100 meters) of the event location
      * @param scanLocation Current GPS location of the scanner
      * @param eventLocation Target GPS location of the event
-     * @param maxRadiusMeters Maximum allowed distance in meters (default: 3)
+     * @param maxRadiusMeters Maximum allowed distance in meters (default: 100)
      * @return ValidationResult indicating if location is valid
      */
     fun validateLocation(
         scanLocation: Location?,
         eventLocation: Location?,
-        maxRadiusMeters: Float = 3f
+        maxRadiusMeters: Float = 100f
     ): ValidationResult {
         Log.d(TAG, "=== LOCATION VALIDATION START ===")
         
@@ -959,7 +959,7 @@ class QRSecurityValidator {
             Log.w(TAG, "Distance: ${distance}m, Max allowed: ${maxRadiusMeters}m")
             return ValidationResult(
                 false,
-                "You must be at the event location to mark attendance. You are ${distance.toInt()} meters away (max: ${maxRadiusMeters.toInt()}m)",
+                "You must be at the event location to mark attendance. You are ${distance.toInt()} meters away",
                 ValidationResult.LOCATION_MISMATCH
             )
         }

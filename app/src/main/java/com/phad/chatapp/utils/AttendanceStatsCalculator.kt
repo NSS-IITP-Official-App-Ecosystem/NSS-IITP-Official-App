@@ -68,7 +68,35 @@ object AttendanceStatsCalculator {
                 // Determine totals
                 // Total events should be the count of all docs in NSS_Events_Attendence
                 val totalEventsSnapshot = db.collection("NSS_Events_Attendence").get().await()
-                val totalEvents = totalEventsSnapshot.size().toLong()
+                
+                // Calculate custom total events based on wings logic
+                val userWings = (userDoc.get("wings") as? List<*>)?.filterIsInstance<String>() ?: emptyList()
+                var totalRelevantEvents = 0L
+                
+                totalEventsSnapshot.documents.forEach { doc ->
+                    val event = doc.toObject(AttendanceEvent::class.java)
+                    if (event != null) {
+                        val eventWings = event.wings
+                        val isDnc = eventWings.contains("Design and Curation Wing")
+                        val isUserWing = eventWings.any { it in userWings }
+                        val attended = event.attendees.any { it.rollNumber == rollNumber }
+                        
+                        if (event.visibleOnlyToPresent) {
+                            if (attended) {
+                                totalRelevantEvents++
+                            }
+                        } else {
+                            val eventWings = event.wings
+                            val isDnc = eventWings.contains("Design and Curation Wing")
+                            val isUserWing = eventWings.any { it in userWings }
+                            
+                            if (isDnc || isUserWing || attended) {
+                                totalRelevantEvents++
+                            }
+                        }
+                    }
+                }
+                val totalEvents = totalRelevantEvents
 
                 // Keep meta totals for denominators if present, but not required by UI
                 val metaSnap = db.collection("meta").document("statistics").get().await()
@@ -94,10 +122,16 @@ object AttendanceStatsCalculator {
                                     1 -> s1 += event.hours
                                     2 -> s2 += event.hours
                                 }
-                            } else if (event.isMandatory && event.negativeHours > 0.0) {
-                                when (semester) {
-                                    1 -> s1 -= event.negativeHours
-                                    2 -> s2 -= event.negativeHours
+                            } else if (!event.visibleOnlyToPresent && event.isMandatory && event.negativeHours > 0.0) {
+                                val eventWings = event.wings
+                                val isDnc = eventWings.contains("Design and Curation Wing")
+                                val isUserWing = eventWings.any { it in userWings }
+                                
+                                if (isDnc || isUserWing) {
+                                    when (semester) {
+                                        1 -> s1 -= event.negativeHours
+                                        2 -> s2 -= event.negativeHours
+                                    }
                                 }
                             }
                         }
@@ -109,8 +143,10 @@ object AttendanceStatsCalculator {
 
                 Log.d(TAG, "Totals - events=$totalEvents, SEM1 total (meta)=$totalSem1Hours, SEM2 total (meta)=$totalSem2Hours")
 
-                val sem1Stats = "${computedSem1}/$totalSem1Hours"
-                val sem2Stats = "${computedSem2}/$totalSem2Hours"
+                val sem1Formatted = AttendanceEventUtils.formatHours(computedSem1)
+                val sem2Formatted = AttendanceEventUtils.formatHours(computedSem2)
+                val sem1Stats = "${sem1Formatted}/$totalSem1Hours"
+                val sem2Stats = "${sem2Formatted}/$totalSem2Hours"
                 val eventsStats = "$computedEvents/$totalEvents"
                 
                 Log.d(TAG, "Final stats - SEM1=$sem1Stats, SEM2=$sem2Stats, Events=$eventsStats")
@@ -143,15 +179,34 @@ object AttendanceStatsCalculator {
             var eventsAttended = 0
             var totalEvents = 0
             
+            // Fetch user wings for total calculation
+            val userDoc = db.collection("users").document(rollNumber).get().await()
+            val userWings = (userDoc.get("wings") as? List<*>)?.filterIsInstance<String>() ?: emptyList()
+            
             eventsSnapshot.documents.forEach { doc ->
                 val event = doc.toObject(AttendanceEvent::class.java)
                 if (event != null) {
-                    totalEvents++
+                    // Check if event counts towards total
+                    val eventWings = event.wings
+                    val isDnc = eventWings.contains("Design and Curation Wing")
+                    val isUserWing = eventWings.any { it in userWings }
+                    val attended = event.attendees.any { it.rollNumber == rollNumber }
+
+                    if (event.visibleOnlyToPresent) {
+                        // STRICT CHECK: If visibleOnlyToPresent is true, ONLY count if attended. 
+                        // Wing membership does NOT matter.
+                        if (attended) {
+                            totalEvents++
+                        }
+                    } else if (isDnc || isUserWing || attended) {
+                        // Standard logic: Count if DNC, User's Wing, or Attended
+                        totalEvents++
+                    }
+
                     Log.d(TAG, "Processing event: ${event.id}, date: ${event.eventDate}, hours: ${event.hours}")
                     Log.d(TAG, "Event attendees: ${event.attendees.map { it.rollNumber }}")
                     
                     // Check if student attended this event
-                    val attended = event.attendees.any { it.rollNumber == rollNumber }
                     if (attended) {
                         eventsAttended++
                         Log.d(TAG, "Student $rollNumber attended event ${event.id}")
@@ -163,11 +218,17 @@ object AttendanceStatsCalculator {
                             1 -> sem1Hours += event.hours
                             2 -> sem2Hours += event.hours
                         }
-                    } else if (event.isMandatory && event.negativeHours > 0.0) {
-                        val semester = getSemesterFromDate(event.eventDate)
-                        when (semester) {
-                            1 -> sem1Hours -= event.negativeHours
-                            2 -> sem2Hours -= event.negativeHours
+                    } else if (!event.visibleOnlyToPresent && event.isMandatory && event.negativeHours > 0.0) {
+                        val eventWings = event.wings
+                        val isDnc = eventWings.contains("Design and Curation Wing")
+                        val isUserWing = eventWings.any { it in userWings }
+                        
+                        if (isDnc || isUserWing) {
+                            val semester = getSemesterFromDate(event.eventDate)
+                            when (semester) {
+                                1 -> sem1Hours -= event.negativeHours
+                                2 -> sem2Hours -= event.negativeHours
+                            }
                         }
                     }
                 } else {
@@ -176,11 +237,17 @@ object AttendanceStatsCalculator {
             }
             
             // Calculate total hours for each semester
-            val totalSem1Hours = calculateTotalSemesterHours(eventsSnapshot.documents, 1)
-            val totalSem2Hours = calculateTotalSemesterHours(eventsSnapshot.documents, 2)
+            val totalSem1Hours = calculateTotalSemesterHours(eventsSnapshot.documents, 1, rollNumber)
+            val totalSem2Hours = calculateTotalSemesterHours(eventsSnapshot.documents, 2, rollNumber)
             
-            val sem1Stats = "$sem1Hours/$totalSem1Hours"
-            val sem2Stats = "$sem2Hours/$totalSem2Hours"
+            val totalSem1Formatted = AttendanceEventUtils.formatHours(totalSem1Hours)
+            val totalSem2Formatted = AttendanceEventUtils.formatHours(totalSem2Hours)
+            
+            val sem1Formatted = AttendanceEventUtils.formatHours(sem1Hours)
+            val sem2Formatted = AttendanceEventUtils.formatHours(sem2Hours)
+            
+            val sem1Stats = "$sem1Formatted/$totalSem1Formatted"
+            val sem2Stats = "$sem2Formatted/$totalSem2Formatted"
             val eventsStats = "$eventsAttended/$totalEvents"
             
             Log.d(TAG, "Stats calculated - SEM1: $sem1Stats, SEM2: $sem2Stats, Events: $eventsStats")
@@ -195,6 +262,8 @@ object AttendanceStatsCalculator {
     
     /**
      * Determine semester from event date
+     * Semester 1: July 1 - December 10 (any year)
+     * Semester 2: December 11 - June 30 (any year)
      */
     private fun getSemesterFromDate(eventDate: String): Int {
         try {
@@ -205,17 +274,23 @@ object AttendanceStatsCalculator {
                 calendar.time = date
                 
                 val month = calendar.get(Calendar.MONTH) + 1 // Calendar.MONTH is 0-based
-                val year = calendar.get(Calendar.YEAR)
+                val day = calendar.get(Calendar.DAY_OF_MONTH)
                 
-                Log.d(TAG, "Parsed date: year=$year, month=$month")
+                Log.d(TAG, "Parsed date: month=$month, day=$day")
                 
-                // Semester 1: July 2025 to December 2025
-                if (year == 2025 && month in 7..12) {
+                // Semester 1: July 1 - December 10
+                if (month in 7..11) {
+                    Log.d(TAG, "Date belongs to Semester 1")
+                    return 1
+                } else if (month == 12 && day <= 10) {
                     Log.d(TAG, "Date belongs to Semester 1")
                     return 1
                 }
-                // Semester 2: January 2026 to May 2026
-                else if (year == 2026 && month in 1..5) {
+                // Semester 2: December 11 - June 30
+                else if (month == 12 && day >= 11) {
+                    Log.d(TAG, "Date belongs to Semester 2")
+                    return 2
+                } else if (month in 1..6) {
                     Log.d(TAG, "Date belongs to Semester 2")
                     return 2
                 } else {
@@ -234,7 +309,7 @@ object AttendanceStatsCalculator {
     /**
      * Calculate total hours for a specific semester
      */
-    private fun calculateTotalSemesterHours(documents: List<com.google.firebase.firestore.DocumentSnapshot>, semester: Int): Double {
+    private fun calculateTotalSemesterHours(documents: List<com.google.firebase.firestore.DocumentSnapshot>, semester: Int, rollNumber: String? = null): Double {
         var totalHours = 0.0
         
         documents.forEach { doc ->
@@ -242,7 +317,13 @@ object AttendanceStatsCalculator {
             if (event != null) {
                 val eventSemester = getSemesterFromDate(event.eventDate)
                 if (eventSemester == semester) {
-                    totalHours += event.hours
+                    if (event.visibleOnlyToPresent) {
+                        if (rollNumber != null && event.hasStudentAttended(rollNumber)) {
+                            totalHours += event.hours
+                        }
+                    } else {
+                        totalHours += event.hours
+                    }
                 }
             }
         }

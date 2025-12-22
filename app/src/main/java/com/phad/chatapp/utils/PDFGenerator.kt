@@ -28,6 +28,13 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 
+data class StudentEventReportRow(
+    val name: String, 
+    val date: String, 
+    val hours: Double, 
+    val wings: String
+)
+
 /**
  * Utility class for generating PDF reports for NSS attendance events
  */
@@ -48,7 +55,11 @@ class PDFGenerator(private val context: Context) {
         studentName: String,
         rollNumber: String,
         semester: Int,
-        rows: List<Triple<String, String, Int>>
+        wingEvents: List<StudentEventReportRow>,
+        openEvents: List<StudentEventReportRow>,
+        wingHours: Double,
+        openHours: Double,
+        eventsAttendedCount: Int
     ): String? = withContext(Dispatchers.IO) {
         try {
             Log.d(TAG, "Generating student events list PDF for $studentName ($rollNumber), semester $semester")
@@ -91,26 +102,61 @@ class PDFGenerator(private val context: Context) {
             details.addCell(createCell(rollNumber, font, false))
             details.addCell(createCell("Semester:", boldFont, true))
             details.addCell(createCell(semester.toString(), font, false))
-            val totalHours = rows.sumOf { it.third }
+            
+            val totalHours = wingHours + openHours
             details.addCell(createCell("Total Hours:", boldFont, true))
-            details.addCell(createCell(totalHours.toString(), font, false))
+            details.addCell(createCell(AttendanceEventUtils.formatHours(totalHours), font, false))
             details.addCell(createCell("Events Attended:", boldFont, true))
-            details.addCell(createCell(rows.size.toString(), font, false))
+            details.addCell(createCell(eventsAttendedCount.toString(), font, false))
             document.add(details)
 
-            // Table header
-            val table = Table(3).setWidth(UnitValue.createPercentValue(100f))
-            table.addCell(createHeaderCell("Event", boldFont))
-            table.addCell(createHeaderCell("Date", boldFont))
-            table.addCell(createHeaderCell("Hours", boldFont))
+            // 1. Wing Events Section
+            if (wingEvents.isNotEmpty()) {
+                document.add(
+                    Paragraph("Wing Events Hours = ${AttendanceEventUtils.formatHours(wingHours)}")
+                        .setFont(boldFont)
+                        .setFontSize(FONT_SIZE_TITLE)
+                        .setMarginBottom(8f)
+                )
 
-            // Rows
-            rows.forEach { (name, date, hours) ->
-                table.addCell(createCell(name, font, false))
-                table.addCell(createCell(date, font, false))
-                table.addCell(createCell(hours.toString(), font, false))
+                val wingTable = Table(4).setWidth(UnitValue.createPercentValue(100f)).setMarginBottom(16f)
+                wingTable.addCell(createHeaderCell("Event", boldFont))
+                wingTable.addCell(createHeaderCell("Date", boldFont))
+                wingTable.addCell(createHeaderCell("Wing", boldFont))
+                wingTable.addCell(createHeaderCell("Hours", boldFont))
+
+                wingEvents.forEach { (name, date, hours, wings) ->
+                    wingTable.addCell(createCell(name, font, false))
+                    wingTable.addCell(createCell(date, font, false))
+                    wingTable.addCell(createCell(wings, font, false))
+                    wingTable.addCell(createCell(AttendanceEventUtils.formatHours(hours), font, false))
+                }
+                document.add(wingTable)
             }
-            document.add(table)
+
+            // 2. Open Events Section
+            if (openEvents.isNotEmpty()) {
+                document.add(
+                    Paragraph("Open Event Hours = ${AttendanceEventUtils.formatHours(openHours)}")
+                        .setFont(boldFont)
+                        .setFontSize(FONT_SIZE_TITLE)
+                        .setMarginBottom(8f)
+                )
+
+                val openTable = Table(4).setWidth(UnitValue.createPercentValue(100f)).setMarginBottom(16f)
+                openTable.addCell(createHeaderCell("Event", boldFont))
+                openTable.addCell(createHeaderCell("Date", boldFont))
+                openTable.addCell(createHeaderCell("Wing", boldFont))
+                openTable.addCell(createHeaderCell("Hours", boldFont))
+
+                openEvents.forEach { (name, date, hours, wings) ->
+                    openTable.addCell(createCell(name, font, false))
+                    openTable.addCell(createCell(date, font, false))
+                    openTable.addCell(createCell(wings, font, false))
+                    openTable.addCell(createCell(AttendanceEventUtils.formatHours(hours), font, false))
+                }
+                document.add(openTable)
+            }
 
             document.close()
 
@@ -322,7 +368,7 @@ class PDFGenerator(private val context: Context) {
         
         // Hours
         detailsTable.addCell(createCell("Hours:", boldFont, true))
-        detailsTable.addCell(createCell(event.hours.toString(), font, false))
+        detailsTable.addCell(createCell(AttendanceEventUtils.formatHours(event.hours), font, false))
         
         // Description
         if (event.description.isNotEmpty()) {
@@ -334,7 +380,7 @@ class PDFGenerator(private val context: Context) {
     }
     
     /**
-     * Add attendees table sorted by NSS group
+     * Add attendees table sorted by Wing
      */
     private fun addAttendeesTable(
         document: Document,
@@ -351,7 +397,7 @@ class PDFGenerator(private val context: Context) {
             return
         }
         
-        // Group attendees by NSS group
+        // Group attendees by Wing
         val groupedAttendees = runBlockingGroupBy(attendees)
         
         // Create table for attendees
@@ -360,14 +406,15 @@ class PDFGenerator(private val context: Context) {
             .setMarginBottom(20f)
         
         // Add header
-        attendeesTable.addCell(createHeaderCell("NSS Group", boldFont))
+        // Add header
+        attendeesTable.addCell(createHeaderCell("Wing", boldFont))
         attendeesTable.addCell(createHeaderCell("Name", boldFont))
         attendeesTable.addCell(createHeaderCell("Roll Number", boldFont))
         
-        // Add attendees sorted by NSS group
-        groupedAttendees.forEach { (nssGroup, groupAttendees) ->
+        // Add attendees sorted by Wing
+        groupedAttendees.forEach { (wing, groupAttendees) ->
             groupAttendees.forEach { attendee ->
-                attendeesTable.addCell(createCell(nssGroup, font, false))
+                attendeesTable.addCell(createCell(wing, font, false))
                 attendeesTable.addCell(createCell(attendee.name, font, false))
                 attendeesTable.addCell(createCell(attendee.rollNumber, font, false))
             }
@@ -393,10 +440,10 @@ class PDFGenerator(private val context: Context) {
         summaryTable.addCell(createCell("Total Attendees:", boldFont, true))
         summaryTable.addCell(createCell(attendees.size.toString(), font, false))
         
-        // NSS groups count
-        val nssGroups = runBlockingGroupBy(attendees).keys.size
-        summaryTable.addCell(createCell("NSS Groups Represented:", boldFont, true))
-        summaryTable.addCell(createCell(nssGroups.toString(), font, false))
+        // NSS groups count - REMOVED as per request
+        // val nssGroups = runBlockingGroupBy(attendees).keys.size
+        // summaryTable.addCell(createCell("NSS Groups Represented:", boldFont, true))
+        // summaryTable.addCell(createCell(nssGroups.toString(), font, false))
         
         // Report generation time
         val currentTime = SimpleDateFormat("dd MMM yyyy, HH:mm:ss", Locale.getDefault()).format(Date())
@@ -407,24 +454,24 @@ class PDFGenerator(private val context: Context) {
     }
     
     /**
-     * Group attendees by their NSS group
+     * Group attendees by their Wing
      */
     private fun runBlockingGroupBy(attendees: List<AttendeeRecord>): Map<String, List<AttendeeRecord>> {
         // Since we are already on Dispatchers.IO, block for simplicity inside PDF generation
         return kotlinx.coroutines.runBlocking {
-            groupAttendeesByNSSGroup(attendees)
+            groupAttendeesByWing(attendees)
         }
     }
 
-    private suspend fun groupAttendeesByNSSGroup(attendees: List<AttendeeRecord>): Map<String, List<AttendeeRecord>> {
+    private suspend fun groupAttendeesByWing(attendees: List<AttendeeRecord>): Map<String, List<AttendeeRecord>> {
         val groupedAttendees = mutableMapOf<String, MutableList<AttendeeRecord>>()
         
         for (attendee in attendees) {
-            val nssGroup = getNSSGroupForStudent(attendee.rollNumber)
-            if (!groupedAttendees.containsKey(nssGroup)) {
-                groupedAttendees[nssGroup] = mutableListOf()
+            val wing = getStudentWing(attendee.rollNumber)
+            if (!groupedAttendees.containsKey(wing)) {
+                groupedAttendees[wing] = mutableListOf()
             }
-            groupedAttendees[nssGroup]?.add(attendee)
+            groupedAttendees[wing]?.add(attendee)
         }
         
         // Sort each group by name
@@ -437,20 +484,26 @@ class PDFGenerator(private val context: Context) {
     }
     
     /**
-     * Get NSS group for a student by their roll number
+     * Get Wing for a student by their roll number
      */
-    private suspend fun getNSSGroupForStudent(rollNumber: String): String {
+    private suspend fun getStudentWing(rollNumber: String): String {
         return try {
             val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-            val studentDoc = db.collection("Student").document(rollNumber).get().await()
+            // Modified to fetch from 'users' collection instead of 'Student'
+            val studentDoc = db.collection("users").document(rollNumber).get().await()
             
             if (studentDoc.exists()) {
-                studentDoc.getString("NSS_gro") ?: "Unknown"
+                val wings = studentDoc.get("wings")
+                if (wings is List<*>) {
+                   if (wings.isNotEmpty()) wings.joinToString(", ") else "None"
+                } else {
+                   "None"
+                }
             } else {
                 "Unknown"
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error fetching NSS group for student $rollNumber", e)
+            Log.e(TAG, "Error fetching Wing for student $rollNumber", e)
             "Unknown"
         }
     }

@@ -55,14 +55,13 @@ class ProfileFragment : Fragment() {
     ): View {
         return ComposeView(requireContext()).apply {
             setContent {
-                val state by viewModel.uiState.collectAsState()
+                val state by uiState.collectAsState()
                 val teachingWing = sessionManager.getTeachingWing()
                 ProfileScreen(
                     state = state,
                     onLogoutClick = { logout() },
                     onRefreshClick = {
-                        viewModel.refreshStatistics()
-                        Toast.makeText(requireContext(), "Refreshing...", Toast.LENGTH_SHORT).show()
+                        refreshAttendanceStats()
                     },
                     onLibraryClick = {
                         findNavController().navigate(R.id.action_profileFragment_to_libraryItemListFragment)
@@ -253,6 +252,10 @@ class ProfileFragment : Fragment() {
             lifecycleScope.launch {
                 try {
                     Log.d(TAG, "ProfileFragment: Starting to read statistics for rollNumber: $rollNumber")
+                    
+                    // Set refreshing state to true
+                    _uiState.update { it.copy(isRefreshing = true) }
+                    
                     // Read statistics directly from users collection
                     val (sem1Stats, sem2Stats, eventsStats) = AttendanceStatsCalculator.readStudentStatsFromUsers(rollNumber)
                     Log.d(TAG, "ProfileFragment: Received stats - SEM1=$sem1Stats, SEM2=$sem2Stats, Events=$eventsStats")
@@ -261,7 +264,8 @@ class ProfileFragment : Fragment() {
                         it.copy(
                             sem1Hours = sem1Stats,
                             sem2Hours = sem2Stats,
-                            eventsAttended = eventsStats
+                            eventsAttended = eventsStats,
+                            isRefreshing = false // Reset refreshing state
                         ) 
                     }
                     
@@ -278,6 +282,7 @@ class ProfileFragment : Fragment() {
                         ) 
                     }
                     Log.e(TAG, "Error refreshing student attendance statistics", e)
+                    _uiState.update { it.copy(isRefreshing = false) } // Ensure false on error
                 }
             }
         } else { // Admin or other
@@ -287,12 +292,15 @@ class ProfileFragment : Fragment() {
                     val db = FirebaseFirestore.getInstance()
                     val meta = db.collection("meta").document("statistics").get().await()
                     val totalEvents = (meta.getLong("totalEvents") ?: 0L).toInt()
+
+                    _uiState.update { it.copy(isRefreshing = true) }
                     
                     _uiState.update { 
                         it.copy(
                             sem1Hours = "-/$totalEvents",
                             sem2Hours = "-/$totalEvents",
-                            eventsAttended = "-/$totalEvents"
+                            eventsAttended = "-/$totalEvents",
+                            isRefreshing = false // Reset refreshing state
                         ) 
                     }
                     
@@ -306,6 +314,7 @@ class ProfileFragment : Fragment() {
                         ) 
                     }
                     Log.e(TAG, "Error refreshing admin event statistics", e)
+                    _uiState.update { it.copy(isRefreshing = false) }
                 }
             }
         }
@@ -354,6 +363,9 @@ class ProfileFragment : Fragment() {
                     val name = (map["name"] as? String) ?: "Unknown"
                     val outlook = (map["instituteOutlookId"] as? String) ?: "Not found"
                     val userTypeFromDb = (map["userType"] as? String) ?: baseProfile.userType
+                    
+                    val rawWings = map["wings"]
+                    val wingsList = if (rawWings is List<*>) rawWings.map { it.toString() } else emptyList()
 
                     _uiState.value = baseProfile.copy(
                         name = name,
@@ -363,6 +375,7 @@ class ProfileFragment : Fragment() {
                         collegeEmail = outlook,
                         instituteId = outlook,
                         phone = baseProfile.phone,
+                        wings = wingsList,
                         isStudent = userTypeFromDb.equals("Student", ignoreCase = true)
                     )
                 } else {

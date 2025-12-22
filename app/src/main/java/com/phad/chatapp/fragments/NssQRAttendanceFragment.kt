@@ -9,9 +9,11 @@ import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -21,6 +23,7 @@ import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Refresh
 
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Description
@@ -29,11 +32,15 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.selection.toggleable // Added import
 import java.util.Date
 import java.time.LocalDate
 import java.time.LocalTime
@@ -41,6 +48,9 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.window.Dialog
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -70,6 +80,7 @@ import androidx.navigation.fragment.findNavController
 import com.phad.chatapp.R
 import com.phad.chatapp.models.AttendanceEvent
 import com.phad.chatapp.utils.SessionManager
+import com.phad.chatapp.utils.LocationPermissionHelper
 import com.phad.chatapp.viewmodels.QRAttendanceViewModel
 import com.phad.chatapp.viewmodels.QRAttendanceViewModelFactory
 import kotlinx.coroutines.launch
@@ -78,6 +89,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
+import com.phad.chatapp.ui.components.GradientHeader
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.material.icons.filled.Edit
@@ -92,6 +104,7 @@ class NssQRAttendanceFragment : Fragment() {
     private lateinit var viewModel: QRAttendanceViewModel
     private lateinit var sessionManager: SessionManager
     private var pendingStartEvent: com.phad.chatapp.models.AttendanceEvent? = null
+    private var showLocationDialog by mutableStateOf(false)
 
     private val locationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -100,10 +113,19 @@ class NssQRAttendanceFragment : Fragment() {
         val coarse = result[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         val granted = fine || coarse
         val event = pendingStartEvent
-        pendingStartEvent = null
+        
         if (granted && event != null) {
-            viewModel.startAttendanceSession(event)
+            // Permissions granted, now check if location is enabled
+            if (LocationPermissionHelper.isLocationEnabled(requireContext())) {
+                // All good, start attendance
+                viewModel.startAttendanceSession(event)
+                pendingStartEvent = null
+            } else {
+                // Show dialog to enable location
+                showLocationDialog = true
+            }
         } else if (!granted) {
+            pendingStartEvent = null
             Toast.makeText(requireContext(), "Location permission is required to start attendance", Toast.LENGTH_LONG).show()
         }
     }
@@ -144,15 +166,39 @@ class NssQRAttendanceFragment : Fragment() {
             setContent {
                 val uiState by viewModel.adminUiState.collectAsState()
                 
+                // Show location dialog if needed
+                if (showLocationDialog) {
+                    LocationEnableDialog(
+                        onEnableClick = {
+                            LocationPermissionHelper.openLocationSettings(requireContext())
+                            showLocationDialog = false
+                        },
+                        onDismiss = {
+                            showLocationDialog = false
+                            pendingStartEvent = null
+                        }
+                    )
+                }
+                
                 QRAttendanceAdminScreen(
                     uiState = uiState,
                     onEventSelected = { event ->
                         val ctx = requireContext()
                         val fineGranted = ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
                         val coarseGranted = ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                        
                         if (fineGranted || coarseGranted) {
-                            viewModel.startAttendanceSession(event)
+                            // Permissions granted, check if location is enabled
+                            if (LocationPermissionHelper.isLocationEnabled(ctx)) {
+                                // All good, start attendance
+                                viewModel.startAttendanceSession(event)
+                            } else {
+                                // Show dialog to enable location
+                                pendingStartEvent = event
+                                showLocationDialog = true
+                            }
                         } else {
+                            // Request permissions first
                             pendingStartEvent = event
                             locationPermissionLauncher.launch(arrayOf(
                                 Manifest.permission.ACCESS_FINE_LOCATION,
@@ -169,8 +215,8 @@ class NssQRAttendanceFragment : Fragment() {
                     onClearError = {
                         viewModel.clearError()
                     },
-                    onCreateEvent = { name, description, location, date, openingTime, closingTime, hours, isMandatory, negativeHours ->
-                        viewModel.createAttendanceEvent(name, description, location, date, openingTime, closingTime, hours, isMandatory, negativeHours)
+                    onCreateEvent = { name, description, location, date, openingTime, closingTime, hours, isMandatory, negativeHours, wings, visibleOnlyToPresent ->
+                        viewModel.createAttendanceEvent(name, description, location, date, openingTime, closingTime, hours, isMandatory, negativeHours, wings, visibleOnlyToPresent)
                     },
                     onShowCreateDialog = {
                         viewModel.showCreateEventDialog()
@@ -193,8 +239,8 @@ class NssQRAttendanceFragment : Fragment() {
                     onHideEditDialog = {
                         viewModel.hideEditEventDialog()
                     },
-                    onUpdateEvent = { name, description, location, date, openingTime, closingTime, hours, isMandatory, negativeHours, eventId ->
-                        viewModel.updateAttendanceEvent(name, description, location, date, openingTime, closingTime, hours, isMandatory, negativeHours, eventId)
+                    onUpdateEvent = { name, description, location, date, openingTime, closingTime, hours, isMandatory, negativeHours, wings, visibleOnlyToPresent, eventId ->
+                        viewModel.updateAttendanceEvent(name, description, location, date, openingTime, closingTime, hours, isMandatory, negativeHours, wings, visibleOnlyToPresent, eventId)
                     },
                     onGeneratePDF = { event ->
                         viewModel.generateAttendancePDF(event)
@@ -266,7 +312,7 @@ fun QRAttendanceAdminScreen(
     onEndSession: () -> Unit,
     onLoadEvents: () -> Unit,
     onClearError: () -> Unit,
-    onCreateEvent: (String, String, String, Date, Date, Date, Double, Boolean, Double) -> Unit,
+    onCreateEvent: (String, String, String, Date, Date, Date, Double, Boolean, Double, List<String>, Boolean) -> Unit,
     onShowCreateDialog: () -> Unit,
     onHideCreateDialog: () -> Unit,
     onClearCreateSuccess: () -> Unit,
@@ -274,13 +320,16 @@ fun QRAttendanceAdminScreen(
     onNavigateBack: () -> Unit = {},
     onShowEditDialog: (AttendanceEvent) -> Unit, // New parameter
     onHideEditDialog: () -> Unit, // New parameter
-    onUpdateEvent: (String, String, String, Date, Date, Date, Double, Boolean, Double, String) -> Unit, // New parameter (added eventId)
+    onUpdateEvent: (String, String, String, Date, Date, Date, Double, Boolean, Double, List<String>, Boolean, String) -> Unit, // New parameter (added eventId)
     onGeneratePDF: (AttendanceEvent) -> Unit, // PDF generation callback
     onClearSuccessMessage: () -> Unit, // Clear success message callback
     onDismissRollResults: () -> Unit, // Dismiss roll results dialog
     onAddManualAttendance: (AttendanceEvent, String) -> Unit, // Manual attendance callback
     onMarkAbsent: (AttendanceEvent, String) -> Unit // Mark absent callback
 ) {
+    // Scroll state for events list (hoisted to persist across navigation/dialogs)
+    val eventsListState = rememberLazyListState()
+
     // Handle success message
     val context = LocalContext.current
     LaunchedEffect(uiState.createEventSuccess) {
@@ -355,110 +404,82 @@ fun QRAttendanceAdminScreen(
             }
         }
     ) { paddingValues ->
-        Column(
+        val pullRefreshState = rememberPullToRefreshState()
+        
+        if (pullRefreshState.isRefreshing) {
+            LaunchedEffect(true) {
+                onLoadEvents()
+                pullRefreshState.endRefresh()
+            }
+        }
+
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFFF5F5F5))
-                .padding(paddingValues)
-                .padding(16.dp)
+                .padding(bottom = paddingValues.calculateBottomPadding())
+                .nestedScroll(pullRefreshState.nestedScrollConnection)
         ) {
-            // Header with back button
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF2196F3))
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0xFFF5F5F5))
+                    // Removed parent padding(16.dp) to extend header
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                // Header with back button - Full Width
+                GradientHeader(
+                    title = "QR Attendance",
+                    icon = Icons.Default.QrCode,
+                    onBackClick = null,
+                    isTitleCentered = true
+                    // Removed refresh action
+                )
+
+                Spacer(modifier = Modifier.height(12.dp)) // Increased spacing below header
+
+                // Content container with padding
+                Column(
+                     modifier = Modifier
+                         .fillMaxWidth()
+                         .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
                 ) {
-                    // Back button on the left
-                    if (!uiState.isLoading) {
-                        IconButton(
-                            onClick = {
-                                if (uiState.isSessionActive) {
-                                    onEndSession() // End session if active
-                                } else {
-                                    onNavigateBack() // Navigate back to previous screen
-                                }
-                            },
-                            modifier = Modifier.size(48.dp)
+                    // Spacer removed
+    
+                    if (uiState.isLoading) {
+                        // Loading state
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back",
-                                tint = Color.White,
-                                modifier = Modifier.size(28.dp)
-                            )
+                            CircularProgressIndicator()
                         }
+                    } else if (!uiState.isSessionActive) {
+                        // Event selection screen
+                        EventSelectionScreen(
+                            events = uiState.availableEvents,
+                            onEventSelected = onEventSelected,
+                            onRefresh = onLoadEvents,
+                            onCloseEvent = onCloseEvent,
+                            onShowEditDialog = onShowEditDialog, // Pass the new lambda here
+                            onGeneratePDF = onGeneratePDF, // Pass PDF generation callback
+                            onAddManualAttendance = onAddManualAttendance, // Pass manual attendance callback
+                            onMarkAbsent = onMarkAbsent, // Pass mark absent callback
+                            listState = eventsListState
+                        )
                     } else {
-                        // Empty space to maintain layout balance when loading
-                        Spacer(modifier = Modifier.size(48.dp))
-                    }
-
-                    // Center content with QR icon and title
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f),
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.QrCode,
-                            contentDescription = "QR Attendance",
-                            tint = Color.White,
-                            modifier = Modifier.size(32.dp)
+                        // Active session screen
+                        ActiveSessionScreen(
+                            uiState = uiState,
+                            onEndSession = onEndSession
                         )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = "QR Attendance",
-                            color = Color.White,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    // Refresh button on the right (only on event list screen). Hidden during active QR session.
-                    if (!uiState.isSessionActive) {
-                        IconButton(onClick = onLoadEvents) { // Use onLoadEvents from QRAttendanceAdminScreen
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = "Refresh Events",
-                                tint = Color.White
-                            )
-                        }
                     }
                 }
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            if (uiState.isLoading) {
-                // Loading state
-                Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
-            } else if (!uiState.isSessionActive) {
-                // Event selection screen
-                EventSelectionScreen(
-                    events = uiState.availableEvents,
-                    onEventSelected = onEventSelected,
-                    onRefresh = onLoadEvents,
-                    onCloseEvent = onCloseEvent,
-                    onShowEditDialog = onShowEditDialog, // Pass the new lambda here
-                    onGeneratePDF = onGeneratePDF, // Pass PDF generation callback
-                    onAddManualAttendance = onAddManualAttendance, // Pass manual attendance callback
-                    onMarkAbsent = onMarkAbsent // Pass mark absent callback
-                )
-            } else {
-                // Active session screen
-                ActiveSessionScreen(
-                    uiState = uiState,
-                    onEndSession = onEndSession
+            
+            // Pull Refresh Indicator (only when not in active session)
+            if (!uiState.isSessionActive) {
+                PullToRefreshContainer(
+                    state = pullRefreshState,
+                    modifier = Modifier.align(Alignment.TopCenter)
                 )
             }
         }
@@ -486,89 +507,374 @@ fun QRAttendanceAdminScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EventSelectionScreen(
     events: List<AttendanceEvent>,
     onEventSelected: (AttendanceEvent) -> Unit,
     onRefresh: () -> Unit,
     onCloseEvent: ((AttendanceEvent) -> Unit)? = null,
-    onShowEditDialog: (AttendanceEvent) -> Unit, // New parameter
-    onGeneratePDF: (AttendanceEvent) -> Unit, // PDF generation callback
-    onAddManualAttendance: (AttendanceEvent, String) -> Unit, // Manual attendance callback
-    onMarkAbsent: (AttendanceEvent, String) -> Unit // Mark absent callback
+    onShowEditDialog: (AttendanceEvent) -> Unit,
+    onGeneratePDF: (AttendanceEvent) -> Unit,
+    onAddManualAttendance: (AttendanceEvent, String) -> Unit,
+    onMarkAbsent: (AttendanceEvent, String) -> Unit,
+    listState: androidx.compose.foundation.lazy.LazyListState // Added list state
 ) {
-    val sortedEvents = remember(events) {
-        events.sortedWith(compareBy<AttendanceEvent> {
-            // Parse eventDate - handle multiple date formats for robust sorting
+    // State for Search and Filters
+    var searchQuery by remember { mutableStateOf("") }
+    var showFilters by remember { mutableStateOf(false) }
+    var fromDate by remember { mutableStateOf<LocalDate?>(null) }
+    var toDate by remember { mutableStateOf<LocalDate?>(null) }
+    var selectedWing by remember { mutableStateOf<String?>(null) }
+    var isMandatoryFilter by remember { mutableStateOf(false) }
+    var showFromDatePicker by remember { mutableStateOf(false) }
+    var showToDatePicker by remember { mutableStateOf(false) }
+
+    // Date Formatters
+    val displayDateFormatter = remember { DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH) }
+
+    // Collect all available wings from events for the dropdown
+    val availableWings = remember(events) {
+        events.flatMap { it.wings }.distinct().sorted()
+    }
+
+    // Filter Logic
+    val filteredEvents = remember(events, searchQuery, fromDate, toDate, selectedWing, isMandatoryFilter) {
+        events.filter { event ->
+            // 1. Search Query
+            val matchesSearch = if (searchQuery.isBlank()) true else {
+                event.getEventName().contains(searchQuery, ignoreCase = true)
+            }
+
+            // 2. Date Filter
+            val eventDate = try {
+                val formatter = DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH)
+                LocalDate.parse(event.eventDate, formatter)
+            } catch (e: Exception) {
+                 try {
+                    val fallback = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.ENGLISH)
+                    LocalDate.parse(event.eventDate, fallback)
+                 } catch (e2: Exception) {
+                     null
+                 }
+            }
+            
+            val matchesFromDate = fromDate?.let { start ->
+                eventDate != null && !eventDate.isBefore(start)
+            } ?: true
+            
+            val matchesToDate = toDate?.let { end ->
+                eventDate != null && !eventDate.isAfter(end)
+            } ?: true
+
+            // 3. Wing Filter
+            val matchesWing = selectedWing?.let { wing ->
+                event.wings.contains(wing)
+            } ?: true
+
+            // 4. Mandatory Filter
+            val matchesMandatory = if (isMandatoryFilter) event.isMandatory else true
+
+            matchesSearch && matchesFromDate && matchesToDate && matchesWing && matchesMandatory
+        }
+    }
+
+    val sortedEvents = remember(filteredEvents) {
+        filteredEvents.sortedWith(compareByDescending<AttendanceEvent> {
             try {
-                // Try new format first (DD MMM YYYY) with 3-letter month abbreviation
                 val dateFormatter3 = DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH)
                 LocalDate.parse(it.eventDate, dateFormatter3)
             } catch (e: Exception) {
                 try {
-                    // Try with 4-letter month abbreviation (e.g., "Sept")
                     val dateFormatter4 = DateTimeFormatter.ofPattern("dd MMMM yyyy", Locale.ENGLISH)
                     LocalDate.parse(it.eventDate, dateFormatter4)
                 } catch (e2: Exception) {
                     try {
-                        // Try old format (YYYY-MM-DD) for backward compatibility
                         val oldDateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.ENGLISH)
                         LocalDate.parse(it.eventDate, oldDateFormatter)
                     } catch (e3: Exception) {
-                        try {
-                            // Fallback: try with default locale for new format
-                            val dateFormatterDefault = DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.getDefault())
-                            LocalDate.parse(it.eventDate, dateFormatterDefault)
-                        } catch (e4: Exception) {
-                            try {
-                                // Last fallback: try with default locale for old format
-                                val oldDateFormatterDefault = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault())
-                                LocalDate.parse(it.eventDate, oldDateFormatterDefault)
-                            } catch (e5: Exception) {
-                                // If all parsing fails, use creation date as fallback
-                                it.createdAt.toDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate()
-                            }
-                        }
+                        it.createdAt.toDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate()
                     }
                 }
             }
-        }.thenBy {
-            // Parse eventTime (HH:MM AM/PM - HH:MM AM/PM) - sort by start time
+        }.thenByDescending {
             try {
                 val timeFormatter = DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)
                 val timeParts = it.eventTime.split(" - ")
                 if (timeParts.isNotEmpty()) {
-                    LocalTime.parse(timeParts[0].trim(), timeFormatter) // Sort by start time
+                    LocalTime.parse(timeParts[0].trim(), timeFormatter)
                 } else {
-                    LocalTime.of(0, 0) // Default time if parsing fails
+                    LocalTime.of(0, 0)
                 }
             } catch (e: Exception) {
-                try {
-                    // Try with 24-hour format as fallback
-                    val timeFormatter24 = DateTimeFormatter.ofPattern("HH:mm", Locale.ENGLISH)
-                    val timeParts = it.eventTime.split(" - ")
-                    if (timeParts.isNotEmpty()) {
-                        LocalTime.parse(timeParts[0].trim(), timeFormatter24)
-                    } else {
-                        LocalTime.of(0, 0)
-                    }
-                } catch (e2: Exception) {
-                    LocalTime.of(0, 0) // Default time if all parsing fails
-                }
+                LocalTime.of(0, 0)
             }
         })
     }
 
-    Column {
-        // Removed Header with refresh button
-        
-        Spacer(modifier = Modifier.height(8.dp)) // Keep this spacer for consistent spacing
+    // Date Picker Dialogs
+    if (showFromDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = fromDate?.atStartOfDay(ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
+        )
+        DatePickerDialog(
+            onDismissRequest = { showFromDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let {
+                        fromDate = java.time.Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
+                    }
+                    showFromDatePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { 
+                    fromDate = null
+                    showFromDatePicker = false 
+                }) { Text("Clear") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
 
-        if (sortedEvents.isEmpty()) { // Use sortedEvents here
-            // No events available - with proper bottom padding for floating navigation bar
+    if (showToDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = toDate?.atStartOfDay(ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
+        )
+        DatePickerDialog(
+            onDismissRequest = { showToDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let {
+                        toDate = java.time.Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
+                    }
+                    showToDatePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { 
+                    toDate = null
+                    showToDatePicker = false 
+                }) { Text("Clear") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Reduced spacer
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // Search and Filter UI Section - Removed Card wrapper
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+        ) {
             Column {
-                Card(
+                // Row 1: Search Bar and Toggle Filter
+
+                Row(
                     modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Modern Search Bar Look
+                    TextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = { Text("Search events...", color = Color.Gray, fontSize = 14.sp) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(50.dp),
+                        singleLine = true,
+                        shape = RoundedCornerShape(25.dp), // Pill shape
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White,
+                            disabledContainerColor = Color.White,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                        ),
+                        leadingIcon = {
+                             Icon(
+                                 imageVector = Icons.Default.Search, 
+                                 contentDescription = "Search", 
+                                 tint = Color.Gray,
+                                 modifier = Modifier.size(20.dp)
+                             )
+                        },
+                         trailingIcon = {
+                             if(searchQuery.isNotEmpty()) {
+                                 IconButton(onClick = { searchQuery = "" }) {
+                                     Icon(
+                                         imageVector = Icons.Default.Close, 
+                                         contentDescription = "Clear", 
+                                         tint = Color.Gray, 
+                                         modifier = Modifier.size(20.dp)
+                                     )
+                                 }
+                             }
+                        }
+                    )
+                    
+                    Spacer(modifier = Modifier.width(12.dp))
+                    
+                    // Filter Toggle Button
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (showFilters) MaterialTheme.colorScheme.primary else Color.White,
+                        modifier = Modifier.size(50.dp).clickable { 
+                            showFilters = !showFilters
+                            if (!showFilters) {
+                                fromDate = null
+                                toDate = null
+                                selectedWing = null
+                                isMandatoryFilter = false
+                            }
+                        }
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.FilterList,
+                                contentDescription = "Filters",
+                                tint = if (showFilters) Color.White else Color.Gray
+                            )
+                        }
+                    }
+                }
+
+                // Expanded Filter Section
+                if (showFilters) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    HorizontalDivider(color = Color.LightGray.copy(alpha = 0.5f))
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Date Range
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // From Date
+                        OutlinedCard(
+                            onClick = { showFromDatePicker = true },
+                            modifier = Modifier.weight(1f),
+                            border = BorderStroke(1.dp, Color.Gray.copy(alpha = 0.5f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.DateRange, "From", modifier = Modifier.size(16.dp), tint = Color.Gray)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = fromDate?.format(displayDateFormatter) ?: "From Date",
+                                    fontSize = 13.sp,
+                                    color = if (fromDate != null) Color.Black else Color.Gray
+                                )
+                            }
+                        }
+
+                        // To Date
+                        OutlinedCard(
+                            onClick = { showToDatePicker = true },
+                            modifier = Modifier.weight(1f),
+                            border = BorderStroke(1.dp, Color.Gray.copy(alpha = 0.5f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.DateRange, "To", modifier = Modifier.size(16.dp), tint = Color.Gray)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = toDate?.format(displayDateFormatter) ?: "To Date",
+                                    fontSize = 13.sp,
+                                    color = if (toDate != null) Color.Black else Color.Gray
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Wing and Mandatory
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Wing Dropdown (Simplified as a Box with DropdownMenu)
+                        var wingMenuExpanded by remember { mutableStateOf(false) }
+                        Box(modifier = Modifier.weight(1f)) {
+                            OutlinedCard(
+                                onClick = { wingMenuExpanded = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                border = BorderStroke(1.dp, Color.Gray.copy(alpha = 0.5f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = selectedWing ?: "All Wings",
+                                        fontSize = 13.sp,
+                                        color = if (selectedWing != null) Color.Black else Color.Gray,
+                                        maxLines = 1
+                                    )
+                                    Icon(Icons.Default.ExpandMore, "Select Wing", modifier = Modifier.size(16.dp), tint = Color.Gray)
+                                }
+                            }
+                            DropdownMenu(
+                                expanded = wingMenuExpanded,
+                                onDismissRequest = { wingMenuExpanded = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("All Wings") },
+                                    onClick = { 
+                                        selectedWing = null
+                                        wingMenuExpanded = false
+                                    }
+                                )
+                                availableWings.forEach { wing ->
+                                    DropdownMenuItem(
+                                        text = { Text(wing) },
+                                        onClick = { 
+                                            selectedWing = wing
+                                            wingMenuExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        // Mandatory Checkbox
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable { isMandatoryFilter = !isMandatoryFilter }
+                        ) {
+                            Checkbox(
+                                checked = isMandatoryFilter,
+                                onCheckedChange = { isMandatoryFilter = it }
+                            )
+                            Text("Mandatory", fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        if (sortedEvents.isEmpty()) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                 // No events available message
+                 Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0))
                 ) {
                     Column(
@@ -576,40 +882,41 @@ fun EventSelectionScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "No Active Events",
+                            text = "No Events Found",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Medium
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "There are no live events available for attendance. Please check back later or create a new event.",
+                            text = "Try adjusting your search or filters.",
                             fontSize = 14.sp,
                             textAlign = TextAlign.Center,
                             color = Color.Gray
                         )
                     }
                 }
-                // Add bottom spacer for floating navigation bar and FAB
-                Spacer(modifier = Modifier.height(96.dp)) // 56dp nav height + 20dp margin + 20dp FAB space
             }
         } else {
-            // Events list with proper bottom padding for floating navigation bar
             LazyColumn(
+                state = listState,
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(
-                    bottom = 96.dp // 56dp nav height + 20dp margin + 20dp FAB space
+                    bottom = 96.dp,
+                    start = 4.dp, // Reduced horizontal padding
+                    end = 4.dp,
+                    top = 8.dp
                 )
             ) {
-                items(sortedEvents) { event -> // Use sortedEvents here
+                items(sortedEvents) { event ->
                     EventCard(
                         event = event,
                         onSelect = { onEventSelected(event) },
                         onCloseEvent = onCloseEvent,
-                        onLongPress = onShowEditDialog, // Pass the new lambda here
-                        onDownloadPDF = onGeneratePDF, // Pass PDF generation callback
-                        onAddManualAttendance = onAddManualAttendance, // Pass manual attendance callback
-                        onMarkAbsent = onMarkAbsent // Pass mark absent callback
+                        onLongPress = onShowEditDialog,
+                        onDownloadPDF = onGeneratePDF,
+                        onAddManualAttendance = onAddManualAttendance,
+                        onMarkAbsent = onMarkAbsent
                     )
                 }
             }
@@ -624,7 +931,7 @@ fun EventSelectionScreen(
 fun EditEventDialog(
     event: AttendanceEvent,
     isUpdating: Boolean,
-    onUpdateEvent: (String, String, String, Date, Date, Date, Double, Boolean, Double, String) -> Unit,
+    onUpdateEvent: (String, String, String, Date, Date, Date, Double, Boolean, Double, List<String>, Boolean, String) -> Unit,
     onDismiss: () -> Unit,
     errorMessage: String?
 ) {
@@ -649,6 +956,8 @@ fun EditEventDialog(
     var validationErrorMessage by remember { mutableStateOf("") }
     var isMandatory by remember { mutableStateOf(event.isMandatory) }
     var negativeHours by remember { mutableStateOf(if (event.negativeHours > 0) event.negativeHours.toString() else "") }
+    var selectedWings by remember { mutableStateOf(event.wings) }
+    var visibleOnlyToPresent by remember { mutableStateOf(event.visibleOnlyToPresent) }
 
     // Reset error state when dialog opens or event changes
     LaunchedEffect(event) {
@@ -657,13 +966,15 @@ fun EditEventDialog(
         eventName = event.getEventName()
         eventDescription = event.description
         eventLocation = event.location
-        eventHours = event.hours.toString()
+        eventHours = com.phad.chatapp.utils.AttendanceEventUtils.formatHours(event.hours)
         selectedDate = event.getEventDateAsDate()
         val updatedTimePair = com.phad.chatapp.utils.AttendanceEventUtils.parseTimeRange(event.eventTime)
         openingTime = updatedTimePair?.first ?: com.phad.chatapp.utils.AttendanceEventUtils.createTimeFromHourMinute(Date(), 9, 0)
         closingTime = updatedTimePair?.second ?: com.phad.chatapp.utils.AttendanceEventUtils.createTimeFromHourMinute(Date(), 17, 0)
         isMandatory = event.isMandatory
-        negativeHours = if (event.negativeHours > 0) event.negativeHours.toString() else ""
+        negativeHours = if (event.negativeHours > 0) com.phad.chatapp.utils.AttendanceEventUtils.formatHours(event.negativeHours) else ""
+        selectedWings = event.wings
+        visibleOnlyToPresent = event.visibleOnlyToPresent
     }
 
     // Show error if there's an error message
@@ -736,7 +1047,7 @@ fun EditEventDialog(
                     }
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(4.dp)) // Reduced to 4dp
 
                 // Event Date Field with prominent styling
                 Box(
@@ -845,7 +1156,7 @@ fun EditEventDialog(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(8.dp)) // Reduced from 16.dp
 
                 // Hours Field with prominent styling
                 OutlinedTextField(
@@ -891,7 +1202,7 @@ fun EditEventDialog(
                     }
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(4.dp)) // Further reduced to 4.dp
 
                 // Location Field with prominent styling
                 OutlinedTextField(
@@ -924,16 +1235,64 @@ fun EditEventDialog(
                     }
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                // Increased spacing before "Visible Only" section
+                Spacer(modifier = Modifier.height(24.dp))
 
-                // Mandatory Event checkbox
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                // Visible only to attendees
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .toggleable(
+                            value = visibleOnlyToPresent,
+                            onValueChange = { 
+                                if (!isUpdating) {
+                                    visibleOnlyToPresent = it
+                                    if (it) isMandatory = false // Mutual exclusivity
+                                }
+                            }
+                        ),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Checkbox(
-                        checked = isMandatory,
-                        onCheckedChange = { isMandatory = it },
+                        checked = visibleOnlyToPresent,
+                        onCheckedChange = null, // Handled by toggleable
                         enabled = !isUpdating
                     )
-                    Text("Mandatory event", modifier = Modifier.padding(start = 8.dp))
+                    Text(
+                        text = "Visible only to Attendees",
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 14.sp
+                    )
+                }
+
+                // Add spacer between "Visible only" and "Mandatory"
+                Spacer(modifier = Modifier.height(8.dp)) // Reduced to 8dp
+
+                // Mandatory Event checkbox
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .toggleable(
+                            value = isMandatory,
+                            onValueChange = { 
+                                if (!isUpdating) {
+                                    isMandatory = it
+                                    if (it) visibleOnlyToPresent = false // Mutual exclusivity
+                                }
+                            }
+                        ),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = isMandatory,
+                        onCheckedChange = null, // Handled by toggleable
+                        enabled = !isUpdating
+                    )
+                    Text(
+                        text = "Mandatory Event",
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 14.sp
+                    )
                 }
 
                 if (isMandatory) {
@@ -967,6 +1326,61 @@ fun EditEventDialog(
                         }
                     )
                 }
+
+                // Wing Selection
+                // Increased spacing before "Select Wings"
+                Spacer(modifier = Modifier.height(24.dp))
+                Column {
+                    Text(
+                        "Select Wings",
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 14.sp
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    val wings = listOf(
+                        "Teaching and Technical Wing",
+                        "Chetna Wing",
+                        "Prayatna Wing",
+                        "Rural Development Wing",
+                        "Environmental Wing",
+                        "Design and Curation Wing"
+                    )
+                    wings.forEach { wing ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(enabled = !isUpdating) {
+                                    if (selectedWings.contains(wing)) {
+                                        selectedWings = selectedWings - wing
+                                    } else {
+                                        selectedWings = selectedWings + wing
+                                    }
+                                }
+                                .height(30.dp) // Explicit height to reduce spacing further
+                        ) {
+                            Checkbox(
+                                checked = selectedWings.contains(wing),
+                                onCheckedChange = { isChecked ->
+                                    if (isChecked) selectedWings = selectedWings + wing
+                                    else selectedWings = selectedWings - wing
+                                },
+                                enabled = !isUpdating
+                            )
+                            Text(
+                                text = wing,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(start = 8.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+
+
+                Spacer(modifier = Modifier.height(16.dp))
 
                 // Event Description Field
                 OutlinedTextField(
@@ -1057,11 +1471,15 @@ fun EditEventDialog(
                                     showError = true
                                     validationErrorMessage = "Closing time must be after opening time"
                                 }
+                                selectedWings.isEmpty() -> {
+                                    showError = true
+                                    validationErrorMessage = "Please select at least one wing"
+                                }
                                 // Allow edits regardless of whether opening time is in the past
                                 else -> {
                                     showError = false
                                     validationErrorMessage = ""
-                                    onUpdateEvent(trimmedName, eventDescription.trim(), eventLocation.trim(), selectedDate, openingTime, closingTime, hoursValue, isMandatory, negHoursValue, event.id)
+                                    onUpdateEvent(trimmedName, eventDescription.trim(), eventLocation.trim(), selectedDate, openingTime, closingTime, hoursValue, isMandatory, negHoursValue, selectedWings, visibleOnlyToPresent, event.id)
                                 }
                             }
                         },
@@ -1268,24 +1686,26 @@ fun EventCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Date and time information in a 2-column layout, left-aligned
+                // Refactored Layout: 40% Left (Date/Hours), 60% Right (Time/Location)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Start // Changed to Start
+                    horizontalArrangement = Arrangement.Start
                 ) {
-                    // Date section
-                    Column(modifier = Modifier.weight(1f)) { // Added weight
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                    // Left Column (40%): Date + Hours
+                    Column(
+                        modifier = Modifier.weight(0.4f),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Date
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Default.DateRange,
                                 contentDescription = "Date",
                                 tint = Color(0xFF4CAF50),
                                 modifier = Modifier.size(18.dp)
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = event.getFormattedEventDate(),
                                 fontSize = 14.sp,
@@ -1293,20 +1713,45 @@ fun EventCard(
                                 color = Color(0xFF333333)
                             )
                         }
+
+                        // Hours
+                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Star,
+                                contentDescription = "Hours",
+                                tint = Color(0xFFFFC107),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (event.hours > 0) {
+                                    if (event.isMandatory && event.negativeHours > 0) {
+                                        "${com.phad.chatapp.utils.AttendanceEventUtils.formatHours(event.hours)} / -${com.phad.chatapp.utils.AttendanceEventUtils.formatHours(event.negativeHours)}"
+                                    } else {
+                                        com.phad.chatapp.utils.AttendanceEventUtils.formatHours(event.hours)
+                                    }
+                                } else "Not specified",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = if (event.hours > 0) Color(0xFF333333) else Color.Gray
+                            )
+                        }
                     }
 
-                    // Time section
-                    Column(modifier = Modifier.weight(1f)) { // Added weight
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                    // Right Column (60%): Time + Location
+                    Column(
+                        modifier = Modifier.weight(0.6f),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Time
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Default.AccessTime,
                                 contentDescription = "Time",
                                 tint = Color(0xFF2196F3),
                                 modifier = Modifier.size(18.dp)
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = event.getFormattedTimeRange(),
                                 fontSize = 14.sp,
@@ -1314,27 +1759,16 @@ fun EventCard(
                                 color = Color(0xFF333333)
                             )
                         }
-                    }
-                }
 
-                // Location and Hours on the second line in a 2-column layout, left-aligned
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Start // Changed to Start
-                ) {
-                    // Location section
-                    Column(modifier = Modifier.weight(1f)) { // Added weight
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        // Location
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Default.LocationOn,
                                 contentDescription = "Location",
                                 tint = Color(0xFFE91E63),
                                 modifier = Modifier.size(18.dp)
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = if (event.location.isNotBlank()) event.location else "Not Specified",
                                 fontSize = 14.sp,
@@ -1343,30 +1777,29 @@ fun EventCard(
                             )
                         }
                     }
+                }
 
-                    // Hours section
-                    Column(modifier = Modifier.weight(1f)) { // Added weight
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                // Wings Information
+                if (event.wings.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.Start
+                    ) {
+                        Row(verticalAlignment = Alignment.Top) {
                             Icon(
-                                imageVector = Icons.Default.Star,
-                                contentDescription = "Hours",
-                                tint = Color(0xFFFFC107),
-                                modifier = Modifier.size(18.dp)
+                                imageVector = Icons.Default.Category,
+                                contentDescription = "Wing",
+                                tint = Color(0xFF673AB7),
+                                modifier = Modifier.size(18.dp).padding(top = 2.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
+                            
                             Text(
-                                text = if (event.hours > 0) {
-                                    if (event.isMandatory && event.negativeHours > 0) {
-                                        "Hours: ${event.hours} / -${event.negativeHours}"
-                                    } else {
-                                        "Hours: ${event.hours}"
-                                    }
-                                } else "Not Specified",
+                                text = event.getDisplayWings(),
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Medium,
-                                color = if (event.hours > 0) Color(0xFF333333) else Color.Gray
+                                color = Color(0xFF333333)
                             )
                         }
                     }
@@ -1633,7 +2066,8 @@ fun ActiveSessionScreen(
     onEndSession: () -> Unit
 ) {
     Column(
-        modifier = Modifier.padding(bottom = 76.dp) // 56dp nav height + 20dp margin
+        modifier = Modifier
+            .verticalScroll(rememberScrollState())
     ) {
         // Enhanced session info header with better visual hierarchy
         Card(
@@ -1665,49 +2099,7 @@ fun ActiveSessionScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         // Date and time with left-right alignment (prominent styling)
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Date section on the left
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.DateRange,
-                                    contentDescription = "Date",
-                                    tint = Color.White.copy(alpha = 0.9f),
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = event.getFormattedEventDate(),
-                                    color = Color.White.copy(alpha = 0.9f),
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
 
-                            // Time section on the right
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.AccessTime,
-                                    contentDescription = "Time",
-                                    tint = Color.White.copy(alpha = 0.9f),
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = event.getFormattedTimeRange(),
-                                    color = Color.White.copy(alpha = 0.9f),
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                        }
 
                         // Hours and Attendees row
                         Row(
@@ -1728,9 +2120,9 @@ fun ActiveSessionScreen(
                                 Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = if (event.isMandatory && event.negativeHours > 0) {
-                                    "Hours: ${event.hours} / -${event.negativeHours}"
+                                    "Hours: ${com.phad.chatapp.utils.AttendanceEventUtils.formatHours(event.hours)} / -${com.phad.chatapp.utils.AttendanceEventUtils.formatHours(event.negativeHours)}"
                                 } else {
-                                    "Hours: ${event.hours}"
+                                    "Hours: ${com.phad.chatapp.utils.AttendanceEventUtils.formatHours(event.hours)}"
                                 },
                                     color = Color.White.copy(alpha = 0.9f),
                                     fontSize = 13.sp,
@@ -1789,7 +2181,7 @@ fun ActiveSessionScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Descriptive text at the top
@@ -1802,7 +2194,7 @@ fun ActiveSessionScreen(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(0.dp))
 
                 // QR Code Image - enhanced size for projection visibility, perfectly centered horizontally
                 uiState.currentQRCode?.let { bitmap ->
@@ -1827,8 +2219,34 @@ fun ActiveSessionScreen(
                         )
                     }
                 }
+
+                Spacer(modifier = Modifier.height(0.dp))
+
+                // End Session Button - Centered inside card
+                Button(
+                    onClick = onEndSession,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .height(48.dp)
+                        .wrapContentWidth()
+                        .widthIn(min = 200.dp)
+                        .align(Alignment.CenterHorizontally) 
+                ) {
+                    Text(
+                        text = "End Session",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
+        
+        // Add spacer at the bottom to allow scrolling past the floating nav bar
+        Spacer(modifier = Modifier.height(90.dp))
+
+
     }
 }
 
@@ -1852,7 +2270,7 @@ private fun isValidDecimalInput(input: String): Boolean {
 @Composable
 fun CreateEventDialog(
     isCreating: Boolean,
-    onCreateEvent: (String, String, String, Date, Date, Date, Double, Boolean, Double) -> Unit,
+    onCreateEvent: (String, String, String, Date, Date, Date, Double, Boolean, Double, List<String>, Boolean) -> Unit,
     onDismiss: () -> Unit,
     errorMessage: String?,
     initialDate: Date? = null
@@ -1875,6 +2293,9 @@ fun CreateEventDialog(
     var validationErrorMessage by remember { mutableStateOf("") }
     var isMandatory by remember { mutableStateOf(false) }
     var negativeHours by remember { mutableStateOf("") }
+
+    var selectedWings by remember { mutableStateOf(emptyList<String>()) }
+    var visibleOnlyToPresent by remember { mutableStateOf(false) }
 
     // Reset error state when dialog opens
     LaunchedEffect(Unit) {
@@ -1951,7 +2372,7 @@ fun CreateEventDialog(
                         }
                     )
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(4.dp)) // Reduced to 4dp
 
                     // Event Date Field with prominent styling
                     OutlinedTextField(
@@ -1984,7 +2405,7 @@ fun CreateEventDialog(
                         }
                     )
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(8.dp)) // Reduced from 16.dp
 
                     // Time Pickers Row
                     Row(
@@ -2058,7 +2479,7 @@ fun CreateEventDialog(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(8.dp)) // Reduced from 16.dp
 
                     // Hours Field with prominent styling
                     OutlinedTextField(
@@ -2104,7 +2525,7 @@ fun CreateEventDialog(
                         }
                     )
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(4.dp)) // Further reduced to 4.dp
 
                     // Location Field with prominent styling
                     OutlinedTextField(
@@ -2137,17 +2558,59 @@ fun CreateEventDialog(
                         }
                     )
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    // Increased spacing before "Visible Only" section
+                    Spacer(modifier = Modifier.height(24.dp))
 
-                    // Mandatory Event checkbox
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = isMandatory,
-                            onCheckedChange = { isMandatory = it },
-                            enabled = !isCreating
-                        )
-                        Text("Mandatory event", modifier = Modifier.padding(start = 8.dp))
-                    }
+                                // Visible only to attendees - Renamed and moved above Mandatory
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .toggleable(
+                                            value = visibleOnlyToPresent,
+                                            onValueChange = { 
+                                                visibleOnlyToPresent = it
+                                                if (it) isMandatory = false // Mutual exclusivity
+                                            }
+                                        ),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Checkbox(
+                                        checked = visibleOnlyToPresent,
+                                        onCheckedChange = null // Handled by toggleable
+                                    )
+                                    Text(
+                                        text = "Visible only to Attendees",
+                                        fontWeight = FontWeight.Medium,
+                                        fontSize = 14.sp
+                                    )
+                                }
+
+                                // Add spacer between "Visible only" and "Mandatory"
+                                Spacer(modifier = Modifier.height(8.dp)) // Reduced to 8dp
+
+                                // Mandatory Event Checkbox
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .toggleable(
+                                            value = isMandatory,
+                                            onValueChange = { 
+                                                isMandatory = it
+                                                if (it) visibleOnlyToPresent = false // Mutual exclusivity
+                                            }
+                                        ),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Checkbox(
+                                        checked = isMandatory,
+                                        onCheckedChange = null // Handled by toggleable
+                                    )
+                                    Text(
+                                        text = "Mandatory Event",
+                                        fontWeight = FontWeight.Medium,
+                                        fontSize = 14.sp
+                                    )
+                                }
 
                     // Negative hours input shown only when mandatory
                     if (isMandatory) {
@@ -2180,6 +2643,55 @@ fun CreateEventDialog(
                                 }
                             }
                         )
+                    }
+
+                    // Wing Selection
+                    // Increased spacing before "Select Wings"
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Column {
+                        Text(
+                            "Select Wings",
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 14.sp
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        val wings = listOf(
+                            "Teaching and Technical Wing",
+                            "Chetna Wing",
+                            "Prayatna Wing",
+                            "Rural Development Wing",
+                            "Environmental Wing",
+                            "Design and Curation Wing"
+                        )
+                        wings.forEach { wing ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable(enabled = !isCreating) {
+                                        if (selectedWings.contains(wing)) {
+                                            selectedWings = selectedWings - wing
+                                        } else {
+                                            selectedWings = selectedWings + wing
+                                        }
+                                    }
+                                    .height(30.dp) // Explicit height to reduce spacing further
+                            ) {
+                                Checkbox(
+                                    checked = selectedWings.contains(wing),
+                                    onCheckedChange = { isChecked ->
+                                        if (isChecked) selectedWings = selectedWings + wing
+                                        else selectedWings = selectedWings - wing
+                                    },
+                                    enabled = !isCreating
+                                )
+                                Text(
+                                    text = wing,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.padding(start = 8.dp)
+                                )
+                            }
+                        }
                     }
 
                     // Event Description Field
@@ -2271,11 +2783,15 @@ fun CreateEventDialog(
                                     showError = true
                                     validationErrorMessage = "Closing time must be after opening time"
                                 }
+                                selectedWings.isEmpty() -> {
+                                    showError = true
+                                    validationErrorMessage = "Please select at least one wing"
+                                }
                                 // Allow creation even if opening time is in the past (no restriction)
                                 else -> {
                                     showError = false
                                     validationErrorMessage = ""
-                                    onCreateEvent(trimmedName, eventDescription.trim(), eventLocation.trim(), selectedDate, openingTime, closingTime, hoursValue, isMandatory, negHoursValue)
+                                    onCreateEvent(trimmedName, eventDescription.trim(), eventLocation.trim(), selectedDate, openingTime, closingTime, hoursValue, isMandatory, negHoursValue, selectedWings, visibleOnlyToPresent)
                                 }
                             }
                         },

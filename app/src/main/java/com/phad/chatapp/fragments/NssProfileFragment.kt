@@ -54,14 +54,13 @@ class NssProfileFragment : Fragment() {
     ): View {
         return ComposeView(requireContext()).apply {
             setContent {
-                val state by viewModel.uiState.collectAsState()
+                val state by uiState.collectAsState()
                 val teachingWing = sessionManager.getTeachingWing()
                 ProfileScreen(
                     state = state,
                     onLogoutClick = { logout() },
                     onRefreshClick = {
-                        viewModel.refreshStatistics()
-                        Toast.makeText(requireContext(), "Refreshing...", Toast.LENGTH_SHORT).show()
+                        refreshAttendanceStats()
                     },
                     onLibraryClick = {
                         findNavController().navigate(R.id.action_nssProfileFragment_to_nssLibraryItemListFragment)
@@ -149,6 +148,9 @@ class NssProfileFragment : Fragment() {
         if (userType.equals("Student", ignoreCase = true)) {
             lifecycleScope.launch {
                 try {
+                    // Set refreshing state to true
+                    _uiState.update { it.copy(isRefreshing = true) }
+                    
                     // Read statistics directly from users collection
                     val (sem1Stats, sem2Stats, eventsStats) = AttendanceStatsCalculator.readStudentStatsFromUsers(rollNumber)
                     
@@ -156,7 +158,8 @@ class NssProfileFragment : Fragment() {
                         it.copy(
                             sem1Hours = sem1Stats,
                             sem2Hours = sem2Stats,
-                            eventsAttended = eventsStats
+                            eventsAttended = eventsStats,
+                            isRefreshing = false // Reset refreshing state
                         ) 
                     }
                     
@@ -169,7 +172,8 @@ class NssProfileFragment : Fragment() {
                         it.copy(
                             sem1Hours = "0/0",
                             sem2Hours = "0/0",
-                            eventsAttended = "0/0"
+                            eventsAttended = "0/0",
+                            isRefreshing = false // Reset refreshing state on error
                         ) 
                     }
                     Log.e(TAG, "Error refreshing student attendance statistics", e)
@@ -178,6 +182,9 @@ class NssProfileFragment : Fragment() {
         } else { // Admin or other
             lifecycleScope.launch {
                 try {
+                    // Set refreshing state
+                    _uiState.update { it.copy(isRefreshing = true) }
+
                     // For admins, just show total events conducted from meta/statistics
                     val db = FirebaseFirestore.getInstance()
                     val meta = db.collection("meta").document("statistics").get().await()
@@ -187,7 +194,8 @@ class NssProfileFragment : Fragment() {
                         it.copy(
                             sem1Hours = "-/$totalEvents",
                             sem2Hours = "-/$totalEvents",
-                            eventsAttended = "-/$totalEvents"
+                            eventsAttended = "-/$totalEvents",
+                             isRefreshing = false // Reset refreshing state
                         ) 
                     }
                     
@@ -197,7 +205,8 @@ class NssProfileFragment : Fragment() {
                         it.copy(
                             sem1Hours = "-/0",
                             sem2Hours = "-/0",
-                            eventsAttended = "-/0"
+                            eventsAttended = "-/0",
+                            isRefreshing = false // Reset refreshing state on error
                         ) 
                     }
                     Log.e(TAG, "Error refreshing admin event statistics", e)
@@ -249,6 +258,9 @@ class NssProfileFragment : Fragment() {
                     val name = (map["name"] as? String) ?: "Unknown"
                     val outlook = (map["instituteOutlookId"] as? String) ?: "Not found"
                     val userTypeFromDb = (map["userType"] as? String) ?: baseProfile.userType
+                    
+                    val rawWings = map["wings"]
+                    val wingsList = if (rawWings is List<*>) rawWings.map { it.toString() } else emptyList()
 
                     _uiState.value = baseProfile.copy(
                         name = name,
@@ -258,6 +270,7 @@ class NssProfileFragment : Fragment() {
                         collegeEmail = outlook,
                         instituteId = outlook,
                         phone = baseProfile.phone,
+                        wings = wingsList,
                         isStudent = userTypeFromDb.equals("Student", ignoreCase = true)
                     )
                 } else {
@@ -392,7 +405,8 @@ class NssProfileFragment : Fragment() {
                     
                     // Add negative hours for mandatory events where student is absent
                     events.forEach { event ->
-                        if (event.isMandatory && event.id !in eventsList) {
+                        // Only penalize for non-visible-only-to-present events
+                        if (!event.visibleOnlyToPresent && event.isMandatory && event.id !in eventsList) {
                             perEvent[event.id] = -event.negativeHours
                         }
                     }

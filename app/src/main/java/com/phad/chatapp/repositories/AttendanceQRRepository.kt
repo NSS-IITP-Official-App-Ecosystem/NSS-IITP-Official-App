@@ -623,6 +623,29 @@ class AttendanceQRRepository {
     }
     
     /**
+     * Get user's registered wings
+     */
+    suspend fun getUserWings(rollNumber: String): Result<List<String>> = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "Getting wings for user: $rollNumber")
+            
+            val doc = usersCollection.document(rollNumber).get().await()
+            
+            if (doc.exists()) {
+                val wings = doc.get("wings") as? List<String> ?: emptyList()
+                Log.d(TAG, "User wings found: $wings")
+                Result.success(wings)
+            } else {
+                Log.d(TAG, "User not found for wings fetch")
+                Result.success(emptyList())
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting user wings", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
      * Get attendance sessions for an event
      */
     suspend fun getSessionsForEvent(eventId: String): Result<List<AttendanceSession>> = withContext(Dispatchers.IO) {
@@ -712,7 +735,8 @@ class AttendanceQRRepository {
                 "location" to event.location,
                 // Ensure mandatory penalty config is persisted on edit
                 "mandatory" to event.isMandatory,
-                "negativeHours" to event.negativeHours
+                "negativeHours" to event.negativeHours,
+                "wings" to event.wings
             )
             batch.update(eventDocRef, eventUpdates)
 
@@ -761,9 +785,42 @@ class AttendanceQRRepository {
 
             if (oldPenalty != newPenalty || oldSemester != newSemester) {
                 // Determine absentee set: prefer stored metadata, else recompute
-                val attendeeRolls = (oldEvent.attendees.map { it.rollNumber } + event.attendees.map { it.rollNumber }).toSet()
-                val allUsersDocs = usersCollection.get().await().documents
-                val absentees = allUsersDocs.map { it.id }.filter { it.isNotBlank() && !attendeeRolls.contains(it) }
+                @Suppress("UNCHECKED_CAST")
+                val storedAbsentees = (existingSnapshot.get("absenteeRollNumbers") as? List<String>)
+                    ?: (existingSnapshot.get("absentee_roll_numbers") as? List<String>)
+                    ?: emptyList()
+
+                val absentees = if (storedAbsentees.isNotEmpty()) {
+                    Log.d(TAG, "Using stored absentee list of size: ${storedAbsentees.size}")
+                    storedAbsentees
+                } else {
+                    Log.d(TAG, "No stored absentee list found, recomputing with wing logic...")
+                    val attendeeRolls = (oldEvent.attendees.map { it.rollNumber } + event.attendees.map { it.rollNumber }).toSet()
+                    var allUsersDocs = usersCollection.get().await().documents
+                    
+                    if (allUsersDocs.isEmpty()) {
+                        Log.w(TAG, "users collection is empty; falling back to ttwStudents")
+                        allUsersDocs = firestore.collection("ttwStudents").get().await().documents
+                    }
+                    
+                    // Filter using wing logic
+                    allUsersDocs.mapNotNull { doc ->
+                        val roll = doc.id
+                        val isPresent = attendeeRolls.contains(roll)
+                        if (roll.isBlank() || isPresent) return@mapNotNull null
+                        
+                        val userWings = (doc.get("wings") as? List<String>) ?: emptyList()
+                        val isDNCEvent = event.wings.contains("Design and Curation Wing")
+                        
+                        val shouldDeduct = when {
+                            isDNCEvent -> true
+                            event.wings.isEmpty() -> true
+                            else -> event.wings.any { it in userWings }
+                        }
+                        
+                        if (shouldDeduct) roll else null
+                    }
+                }
 
                 // If semester unchanged, apply delta in place
                 if (oldSemester == newSemester) {
@@ -929,10 +986,12 @@ class AttendanceQRRepository {
                 "mandatory" to newEvent.isMandatory,
                 "negativeHours" to newEvent.negativeHours,
                 "location" to newEvent.location,
+                "wings" to newEvent.wings, // Added wings field to preserve wing data
                 "created_at" to newEvent.createdAt,
                 "attendees" to newEvent.attendees,
                 "closedAt" to newEvent.closedAt,
                 "is_live" to newEvent.isLive,
+                "visibleOnlyToPresent" to newEvent.visibleOnlyToPresent, // Also added this field
                 "total_marked" to oldEvent.attendees.size // Preserve the total count
             )
             
@@ -1334,7 +1393,9 @@ class AttendanceQRRepository {
             // Read penalty metadata
             val penaltyApplied = (eventSnap.get("absentPenaltyApplied") as? Boolean) == true
             @Suppress("UNCHECKED_CAST")
-            val storedAbsentees: List<String> = (eventSnap.get("absentee_roll_numbers") as? List<String>) ?: emptyList()
+            val storedAbsentees: List<String> = (eventSnap.get("absentee_roll_numbers") as? List<String>)
+                ?: (eventSnap.get("absenteeRollNumbers") as? List<String>)
+                ?: emptyList()
 
             if (event != null) {
                 val isMandatory = try { eventSnap.getBoolean("mandatory") ?: event.isMandatory } catch (e: Exception) { event.isMandatory }
@@ -1357,8 +1418,27 @@ class AttendanceQRRepository {
                         allUsers = fallback
                     }
 
-                    val absentees = allUsers.map { it.id }
-                        .filter { it.isNotBlank() && !attendeeRolls.contains(it) }
+                    val absentees = allUsers.mapNotNull { doc ->
+                        val roll = doc.id
+                        val isPresent = attendeeRolls.contains(roll)
+                        if (roll.isBlank() || isPresent) return@mapNotNull null
+                        
+                        // Wing-specific deduction logic
+                        val userWings = (doc.get("wings") as? List<String>) ?: emptyList()
+                        val isDNCEvent = event.wings.contains("Design and Curation Wing")
+                        
+                        // Rules:
+                        // 1. DNC Event -> Deduct ALL absentees
+                        // 2. Generic Mandatory (No wings) -> Deduct ALL absentees
+                        // 3. Winged Event -> Deduct ONLY matching wing members
+                        val shouldDeduct = when {
+                            isDNCEvent -> true
+                            event.wings.isEmpty() -> true
+                            else -> event.wings.any { it in userWings }
+                        }
+                        
+                        if (shouldDeduct) roll else null
+                    }
 
                     Log.d(TAG, "Found ${absentees.size} absentees for initial penalty application")
 
@@ -1385,7 +1465,8 @@ class AttendanceQRRepository {
                         .update(
                             mapOf(
                                 "absentPenaltyApplied" to true,
-                                "absenteeRollNumbers" to absentees,
+                                "absentee_roll_numbers" to absentees,
+                                "absenteeRollNumbers" to absentees, // Store both for compatibility
                                 "absentPenaltyCount" to absentees.size
                             )
                         )
@@ -1402,7 +1483,23 @@ class AttendanceQRRepository {
                             // Fallback: recompute from all users and attendees
                             val attendeeRolls = event.attendees.map { it.rollNumber }.toSet()
                             val allUsers = usersCollection.get().await().documents
-                            allUsers.map { it.id }.filter { it.isNotBlank() && !attendeeRolls.contains(it) }
+                            allUsers.mapNotNull { doc ->
+                                val roll = doc.id
+                                val isPresent = attendeeRolls.contains(roll)
+                                if (roll.isBlank() || isPresent) return@mapNotNull null
+
+                                // Wing-specific deduction logic (mirrored)
+                                val userWings = (doc.get("wings") as? List<String>) ?: emptyList()
+                                val isDNCEvent = event.wings.contains("Design and Curation Wing")
+                                
+                                val shouldDeduct = when {
+                                    isDNCEvent -> true
+                                    event.wings.isEmpty() -> true
+                                    else -> event.wings.any { it in userWings }
+                                }
+
+                                if (shouldDeduct) roll else null
+                            }
                         }
 
                         val inc = -delta // if reduced hours (delta negative), this becomes positive to refund
@@ -1632,6 +1729,8 @@ class AttendanceQRRepository {
     
     /**
      * Determine semester from event date
+     * Semester 1: July 1 - December 10 (any year)
+     * Semester 2: December 11 - June 30 (any year)
      */
     private fun getSemesterFromDate(eventDate: String): Int {
         try {
@@ -1642,14 +1741,18 @@ class AttendanceQRRepository {
                 calendar.time = date
                 
                 val month = calendar.get(java.util.Calendar.MONTH) + 1 // Calendar.MONTH is 0-based
-                val year = calendar.get(java.util.Calendar.YEAR)
+                val day = calendar.get(java.util.Calendar.DAY_OF_MONTH)
                 
-                // Semester 1: July 2025 to December 2025
-                if (year == 2025 && month in 7..12) {
+                // Semester 1: July 1 - December 10
+                if (month in 7..11) {
+                    return 1
+                } else if (month == 12 && day <= 10) {
                     return 1
                 }
-                // Semester 2: January 2026 to May 2026
-                else if (year == 2026 && month in 1..5) {
+                // Semester 2: December 11 - June 30
+                else if (month == 12 && day >= 11) {
+                    return 2
+                } else if (month in 1..6) {
                     return 2
                 }
             }

@@ -65,6 +65,12 @@ data class AttendanceEvent(
     @PropertyName("liveCount")
     val liveCount: Int = 1, // Track how many times the event has been made live
 
+    @PropertyName("wings")
+    val wings: List<String> = emptyList(), // List of wings this event belongs to
+
+    @PropertyName("visibleOnlyToPresent")
+    val visibleOnlyToPresent: Boolean = false, // If true, only visible to attendees
+
     // Use a private backing field to prevent automatic serialization of 'live' field
     @PropertyName("is_live")
     private val _isLive: Boolean = true // Default to true for new events
@@ -80,6 +86,30 @@ data class AttendanceEvent(
         // Status constants (removed eventStatus field as it's not in new schema)
         const val STATUS_LIVE = "Live"
         const val STATUS_END = "End"
+
+        // All available wings
+        val ALL_WINGS = setOf(
+            "Teaching and Technical Wing",
+            "Chetna Wing",
+            "Prayatna Wing",
+            "Rural Development Wing",
+            "Environmental Wing",
+            "Design and Curation Wing"
+        )
+    }
+
+    /**
+     * Get display string for wings. Returns "Open Event" if all wings are present
+     */
+    @Exclude
+    fun getDisplayWings(): String {
+        return if (wings.containsAll(ALL_WINGS) || (wings.isNotEmpty() && ALL_WINGS.containsAll(wings) && wings.size >= ALL_WINGS.size)) {
+            "Open Event"
+        } else if (wings.isNotEmpty()) {
+            wings.joinToString("\n")
+        } else {
+            "No Wings" // Or handle empty case as needed
+        }
     }
 
     // Empty constructor for Firestore
@@ -96,12 +126,14 @@ data class AttendanceEvent(
         attendanceLocationSetBy = "",
         attendanceLocationTimestamp = null,
         description = "",
+        wings = emptyList(),
         createdBy = "",
         creatorName = "",
         createdAt = Timestamp.now(),
         attendees = emptyList(),
         closedAt = null,
         liveCount = 1,
+        visibleOnlyToPresent = false,
         _isLive = true
     )
 

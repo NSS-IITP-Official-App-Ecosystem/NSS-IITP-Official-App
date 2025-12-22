@@ -43,7 +43,9 @@ import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import com.phad.chatapp.R
 import com.phad.chatapp.ui.components.DimmedHomeBackground
+import com.phad.chatapp.ui.components.GradientHeader
 import com.phad.chatapp.utils.SessionManager
+import com.phad.chatapp.utils.LocationPermissionHelper
 import com.phad.chatapp.viewmodels.QRAttendanceViewModel
 import com.phad.chatapp.viewmodels.QRAttendanceViewModelFactory
 import com.phad.chatapp.viewmodels.ScanResult
@@ -72,17 +74,30 @@ class NssQRScanFragment : Fragment() {
     // Barcode scanner
     private val barcodeScanner = BarcodeScanning.getClient()
     
-    // Permission handling
-    private val requestPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            startCamera()
-        } else {
+    
+    // Permission handling for camera and location
+    private val requestPermissionsLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val cameraGranted = permissions[Manifest.permission.CAMERA] ?: false
+        val locationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false ||
+                             permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+        
+        if (cameraGranted && locationGranted) {
+            // Both permissions granted, check if location is enabled
+            checkLocationEnabledAndStart()
+        } else if (!cameraGranted) {
             Toast.makeText(requireContext(), "Camera permission is required for QR scanning", Toast.LENGTH_LONG).show()
+            parentFragmentManager.popBackStack()
+        } else if (!locationGranted) {
+            Toast.makeText(requireContext(), "Location permission is required for attendance verification", Toast.LENGTH_LONG).show()
             parentFragmentManager.popBackStack()
         }
     }
+    
+    // State for showing location dialog
+    private var showLocationDialog by mutableStateOf(false)
+
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -126,6 +141,20 @@ class NssQRScanFragment : Fragment() {
         composeOverlay.setContent {
             val uiState by viewModel.studentUiState.collectAsState()
 
+            // Show location dialog if needed
+            if (showLocationDialog) {
+                LocationEnableDialog(
+                    onEnableClick = {
+                        LocationPermissionHelper.openLocationSettings(requireContext())
+                        showLocationDialog = false
+                    },
+                    onDismiss = {
+                        showLocationDialog = false
+                        parentFragmentManager.popBackStack()
+                    }
+                )
+            }
+
             // Show processing overlay with dimmed home background when camera has exited
             if (uiState.cameraExited && uiState.isProcessing) {
                 ProcessingOverlayWithHomeBackground()
@@ -146,12 +175,8 @@ class NssQRScanFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        // Check camera permission and start camera
-        if (allPermissionsGranted()) {
-            startCamera()
-        } else {
-            requestPermissionLauncher.launch(Manifest.permission.CAMERA)
-        }
+        // Auto-check and request permissions if needed
+        requestPermissionsIfNeeded()
 
         // Observe UI state for navigation and camera control
         lifecycleScope.launch {
@@ -198,8 +223,41 @@ class NssQRScanFragment : Fragment() {
         viewModel.stopStudentLocationUpdates()
     }
     
-    private fun allPermissionsGranted() = REQUIRED_PERMISSIONS.all {
-        ContextCompat.checkSelfPermission(requireContext(), it) == PackageManager.PERMISSION_GRANTED
+    private fun allPermissionsGranted(): Boolean {
+        val cameraGranted = ContextCompat.checkSelfPermission(
+            requireContext(), 
+            Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED
+        
+        val locationGranted = LocationPermissionHelper.hasLocationPermission(requireContext())
+        
+        return cameraGranted && locationGranted
+    }
+    
+    private fun requestPermissionsIfNeeded() {
+        if (!allPermissionsGranted()) {
+            // Request camera + location permissions
+            requestPermissionsLauncher.launch(
+                arrayOf(
+                    Manifest.permission.CAMERA,
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        } else {
+            // Permissions granted, check if location is enabled
+            checkLocationEnabledAndStart()
+        }
+    }
+    
+    private fun checkLocationEnabledAndStart() {
+        if (!LocationPermissionHelper.isLocationEnabled(requireContext())) {
+            // Show dialog asking user to enable location
+            showLocationDialog = true
+        } else {
+            // All good, start camera
+            startCamera()
+        }
     }
     
     private fun startCamera() {
@@ -397,7 +455,11 @@ class NssQRScanFragment : Fragment() {
     }
     
     companion object {
-        private val REQUIRED_PERMISSIONS = arrayOf(Manifest.permission.CAMERA)
+        private val REQUIRED_PERMISSIONS = arrayOf(
+            Manifest.permission.CAMERA,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        )
     }
 }
 
@@ -475,42 +537,13 @@ fun QRScanOverlay(
         modifier = Modifier.fillMaxSize()
     ) {
         // Top header - center-aligned content in blue header box
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF2196F3).copy(alpha = 0.9f))
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Icon(
-                    imageVector = Icons.Default.QrCodeScanner,
-                    contentDescription = "QR Scanner",
-                    tint = Color.White,
-                    modifier = Modifier.size(32.dp)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Scan QR Code for Attendance",
-                    color = Color.White,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Text(
-                    text = "Student: ${uiState.studentName}",
-                    color = Color.White.copy(alpha = 0.9f),
-                    fontSize = 14.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
+        GradientHeader(
+            title = "Scan QR Code",
+            subtitle = "Student: ${uiState.studentName}",
+            icon = Icons.Default.QrCodeScanner,
+            modifier = Modifier.align(Alignment.TopCenter),
+            isTitleCentered = true
+        )
 
         // Scanning frame overlay
         Box(
@@ -674,3 +707,55 @@ fun ProcessingOverlayWithHomeBackground() {
 }
 
 // DimmedHomeBackground moved to shared component
+
+@Composable
+fun LocationEnableDialog(
+    onEnableClick: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = Icons.Default.Error,
+                contentDescription = "Location Required",
+                tint = Color(0xFFFFA726),
+                modifier = Modifier.size(48.dp)
+            )
+        },
+        title = {
+            Text(
+                text = "Location Required",
+                fontWeight = FontWeight.Bold,
+                fontSize = 20.sp
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Please enable location to mark attendance.",
+                    fontSize = 16.sp,
+                    color = Color(0xFF212121)
+                )
+                Text(
+                    text = "We use your location to verify you're at the event.",
+                    fontSize = 14.sp,
+                    color = Color(0xFF757575)
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onEnableClick,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2196F3))
+            ) {
+                Text("Enable Location")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = Color(0xFF757575))
+            }
+        }
+    )
+}

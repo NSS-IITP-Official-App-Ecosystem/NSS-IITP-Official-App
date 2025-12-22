@@ -56,6 +56,11 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.runtime.LaunchedEffect
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.phad.chatapp.R
@@ -87,12 +92,15 @@ data class ProfileUiState(
     val subjectPreference3: String = "loading...",
     val teachingWingStatus: String = "loading...",
     val profileImageUrl: String = "",
+    val wings: List<String> = emptyList(),
     // New semester-based statistics fields
     val sem1Hours: String = "0/0",
     val sem2Hours: String = "0/0",
-    val eventsAttended: String = "0/0"
+    val eventsAttended: String = "0/0",
+    val isRefreshing: Boolean = false
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
     modifier: Modifier = Modifier,
@@ -137,6 +145,23 @@ fun ProfileScreen(
         modifier = modifier.fillMaxSize(),
         color = backgroundColor
     ) {
+        val pullRefreshState = rememberPullToRefreshState()
+
+        if (pullRefreshState.isRefreshing) {
+            LaunchedEffect(true) {
+                onRefreshClick()
+            }
+        }
+        
+        // Synch logic: if state.isRefreshing is false, allow stop. 
+        // Note: We don't force startRefresh from state here usually, 
+        // we just ensure it stops when state says so.
+        LaunchedEffect(state.isRefreshing) {
+            if (!state.isRefreshing) {
+                pullRefreshState.endRefresh()
+            }
+        }
+
         // Comprehensive insets handling to avoid conflicts with MainActivity
         val navigationBars = WindowInsets.navigationBars.asPaddingValues()
         
@@ -154,8 +179,15 @@ fun ProfileScreen(
         // Ensure we have enough white background to cover the entire area above the nav
         val whiteBackgroundHeight = effectiveBottomSpace + 80.dp // extra space for content safety
         
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .nestedScroll(pullRefreshState.nestedScrollConnection)
+        ) {
         Column(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
         ) {
             // Top Section with background images and stats
             Box(
@@ -296,18 +328,17 @@ fun ProfileScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f) // Take remaining space
+                    //.weight(1f) // Removed weight to allow scrolling in parent Column
                     .clip(RoundedCornerShape(topStart = 40.dp, topEnd = 40.dp))
                     .background(surfaceColor)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
                         .padding(24.dp)
                         .padding(bottom = 80.dp) // Reduced bottom padding since logout button is now inside content
                 ) {
-                    // Name section with refresh button
+                    // Name section with refresh button removed (since we have pull to refresh)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -321,11 +352,7 @@ fun ProfileScreen(
                             modifier = Modifier.weight(1f)
                         )
                         
-                        // Refresh button
-                        RefreshButton(
-                            onRefreshClick = onRefreshClick,
-                            modifier = Modifier.padding(start = 16.dp)
-                        )
+
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -340,6 +367,16 @@ fun ProfileScreen(
 
                         // Third row: Institute ID
                         LabeledInfoItem(label = "Institute ID", value = state.instituteId, color = onSurfaceColor)
+
+                        // Wings
+                        if (state.wings.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            LabeledInfoItem(
+                                label = "Wing", 
+                                value = state.wings.joinToString("\n"), 
+                                color = onSurfaceColor
+                            )
+                        }
                         
                         // Add bottom spacing to ensure content is not cut off
                         Spacer(modifier = Modifier.height(32.dp))
@@ -351,7 +388,17 @@ fun ProfileScreen(
                         Spacer(modifier = Modifier.height(16.dp))
 
                         // College Email only
-                        LabeledInfoItem(label = "College Email", value = state.collegeEmail, color = onSurfaceColor)
+                        LabeledInfoItem(label = "Institute ID", value = state.instituteId, color = onSurfaceColor)
+
+                        // Wings
+                        if (state.wings.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            LabeledInfoItem(
+                                label = "Wing", 
+                                value = state.wings.joinToString("\n"), 
+                                color = onSurfaceColor
+                            )
+                        }
                         
                         // Admin actions are now in the hamburger menu
 
@@ -372,6 +419,14 @@ fun ProfileScreen(
 //                    .height(whiteBackgroundHeight) // Standard height since logout button is now inside content
 //                    .background(Color.White)
 //            )
+        }
+            
+            PullToRefreshContainer(
+                state = pullRefreshState,
+                modifier = Modifier.align(Alignment.TopCenter),
+                containerColor = Color.White,
+                contentColor = Color(0xFF2196F3)
+            )
         }
     }
     
@@ -729,21 +784,7 @@ fun ProfileMenu(
             )
         }
 
-        // Refresh - available for all users
-        DropdownMenuItem(
-            text = { Text("Refresh", color = Color(0xFF444343)) },
-            onClick = {
-                onRefresh()
-                onDismiss()
-            },
-            leadingIcon = {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_refresh),
-                    contentDescription = null,
-                    tint = Color(0xFF444343)
-                )
-            }
-        )
+
 
         // Export Attendance Matrix - only for admins
         if (isAdmin) {

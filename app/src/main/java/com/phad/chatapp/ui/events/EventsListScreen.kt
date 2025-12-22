@@ -9,7 +9,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,13 +32,23 @@ import androidx.core.content.FileProvider
 import android.content.Intent
 import kotlinx.coroutines.launch
 import com.phad.chatapp.utils.SessionManager
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.ui.geometry.Offset
+import com.phad.chatapp.ui.components.GradientHeader
 
 data class EventDetail(
     val id: String,
     val name: String,
     val date: String,
     val hours: Double,
-    val isMandatory: Boolean
+    val isMandatory: Boolean,
+    val wings: List<String> = emptyList()
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -45,7 +59,11 @@ fun EventsListScreen(
     onBackClick: () -> Unit
 ) {
     var events by remember { mutableStateOf<List<EventDetail>>(emptyList()) }
+    var wingEvents by remember { mutableStateOf<List<EventDetail>>(emptyList()) }
+    var openEvents by remember { mutableStateOf<List<EventDetail>>(emptyList()) }
     var attendedCount by remember { mutableStateOf(0) }
+    var wingHours by remember { mutableStateOf(0.0) }
+    var openEventHours by remember { mutableStateOf(0.0) }
     var isLoading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var studentName by remember { mutableStateOf("") }
@@ -53,11 +71,12 @@ fun EventsListScreen(
     var isGeneratingFile by remember { mutableStateOf(false) }
     var showFileMessage by remember { mutableStateOf<String?>(null) }
     var headerTotal by remember { mutableStateOf<Double?>(null) }
+    var refreshKey by remember { mutableStateOf(0) }
     
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(semester, rollNumber) {
+    LaunchedEffect(semester, rollNumber, refreshKey) {
         try {
             isLoading = true
             error = null
@@ -70,8 +89,10 @@ fun EventsListScreen(
 
             // Prefer unified users collection
             val userDoc = db.collection("users").document(rollNumber).get().await()
+            var userWings: List<String> = emptyList()
             if (userDoc.exists()) {
                 studentName = userDoc.getString("name") ?: studentName
+                userWings = (userDoc.get("wings") as? List<*>)?.filterIsInstance<String>() ?: emptyList()
             } else {
                 // Legacy fallback: Student collection (deprecated)
                 val studentDoc = db.collection("Student").document(rollNumber).get().await()
@@ -83,7 +104,8 @@ fun EventsListScreen(
             
             val eventsSnapshot = db.collection("NSS_Events_Attendence").get().await()
             
-            val eventLog = mutableListOf<EventDetail>()
+            val wingEventLog = mutableListOf<EventDetail>()
+            val openEventLog = mutableListOf<EventDetail>()
             var localAttendedCount = 0
             
             eventsSnapshot.documents.forEach { doc ->
@@ -93,35 +115,71 @@ fun EventsListScreen(
                     if (eventSemester == semester) {
                         val attended = event.attendees.any { it.rollNumber == rollNumber }
                         val eventName = extractEventNameFromId(event.id)
+                        
+                        // Determine if this is a wing event or open event
+                        val eventWings = event.wings
+                        val isDnc = eventWings.contains("Design and Curation Wing")
+                        val isUserWingEvent = eventWings.any { it in userWings }
+                        
                         if (attended) {
                             localAttendedCount++
-                            eventLog.add(
-                                EventDetail(
-                                    id = event.id,
-                                    name = eventName,
-                                    date = event.eventDate,
-                                    hours = event.hours,
-                                    isMandatory = event.isMandatory
-                                )
+                            val eventDetail = EventDetail(
+                                id = event.id,
+                                name = eventName,
+                                date = event.eventDate,
+                                hours = event.hours,
+                                isMandatory = event.isMandatory,
+                                wings = event.wings
                             )
-                        } else if (event.isMandatory && event.negativeHours > 0.0) {
-                            // Absent in a mandatory event: log negative hours
-                            eventLog.add(
-                                EventDetail(
+                            
+                            // Categorize: Open events first, then user's wing events
+                            val isOpenEvent = event.wings.containsAll(AttendanceEvent.ALL_WINGS)
+                            
+                            if (isOpenEvent) {
+                                openEventLog.add(eventDetail)
+                            } else if (isUserWingEvent) {
+                                wingEventLog.add(eventDetail)
+                            } else {
+                                // Fallback for pure DNC or other cases
+                                openEventLog.add(eventDetail)
+                            }
+                        } else if (!event.visibleOnlyToPresent && event.isMandatory && event.negativeHours > 0.0) {
+                            // Absent in a mandatory event: check if relevant to user
+                            if (isDnc || isUserWingEvent) {
+                                val eventDetail = EventDetail(
                                     id = event.id,
                                     name = eventName,
                                     date = event.eventDate,
                                     hours = -event.negativeHours,
-                                    isMandatory = true
+                                    isMandatory = true,
+                                    wings = event.wings
                                 )
-                            )
+                                
+                                // Categorize negative hours
+                                val isOpenEvent = event.wings.containsAll(AttendanceEvent.ALL_WINGS)
+                                
+                                if (isOpenEvent) {
+                                    openEventLog.add(eventDetail)
+                                } else if (isUserWingEvent) {
+                                    wingEventLog.add(eventDetail)
+                                } else {
+                                    openEventLog.add(eventDetail)
+                                }
+                            }
                         }
                     }
                 }
             }
             
             // Sort events by date (newest first)
-            events = eventLog.sortedByDescending { parseDate(it.date) }
+            wingEvents = wingEventLog.sortedByDescending { parseDate(it.date) }
+            openEvents = openEventLog.sortedByDescending { parseDate(it.date) }
+            events = (wingEventLog + openEventLog).sortedByDescending { parseDate(it.date) }
+            
+            // Calculate wing hours and open event hours
+            wingHours = wingEvents.sumOf { it.hours }
+            openEventHours = openEvents.sumOf { it.hours }
+            
             attendedCount = localAttendedCount
 
             // Header total from users (source of truth)
@@ -139,69 +197,6 @@ fun EventsListScreen(
     }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "Semester $semester Events",
-                        fontWeight = FontWeight.Bold
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    if (events.isNotEmpty() && !isGeneratingFile) {
-                        IconButton(
-                            onClick = {
-                                isGeneratingFile = true
-                                scope.launch {
-                                    try {
-                                        val generator = PDFGenerator(context)
-                                        val rows = events.map { Triple(it.name, it.date, it.hours.toInt()) }
-                                        val path = generator.generateStudentEventsList(studentName, rollNumber, semester, rows)
-                                        if (path != null) {
-                                            showFileMessage = "PDF saved to Downloads/NSS_Reports"
-                                        } else {
-                                            showFileMessage = "Failed to generate PDF report"
-                                        }
-                                    } catch (e: Exception) {
-                                        showFileMessage = e.message ?: "Failed to generate PDF report"
-                                    } finally {
-                                        isGeneratingFile = false
-                                    }
-                                }
-                            }
-                        ) {
-                            Icon(
-                                Icons.Default.Download,
-                                contentDescription = "Download PDF",
-                                tint = Color.White
-                            )
-                        }
-                    }
-                    if (isGeneratingFile) {
-                        Box(
-                            modifier = Modifier.padding(16.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                color = Color.White,
-                                strokeWidth = 2.dp
-                            )
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xff0d0302),
-                    titleContentColor = Color.White,
-                    navigationIconContentColor = Color.White
-                )
-            )
-        },
         containerColor = Color(0xff0d0302)
     ) { paddingValues ->
         // Show file generation messages
@@ -212,10 +207,25 @@ fun EventsListScreen(
             }
         }
         
-        Column(
+        // Pull to refresh state
+        val pullRefreshState = rememberPullToRefreshState()
+        
+        if (pullRefreshState.isRefreshing) {
+            LaunchedEffect(true) {
+                refreshKey++ // Trigger reload
+                pullRefreshState.endRefresh()
+            }
+        }
+
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                .nestedScroll(pullRefreshState.nestedScrollConnection)
+        ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
         ) {
             if (isLoading) {
                 Box(
@@ -273,44 +283,168 @@ fun EventsListScreen(
                     }
                 }
             } else {
-                // Header with total hours
-                val totalHours = headerTotal ?: events.sumOf { it.hours }
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF2196F3)),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = "Total Hours: $totalHours",
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xffffffff)
-                        )
-                        Text(
-                            text = "$attendedCount events attended",
-                            fontSize = 14.sp,
-                            color = Color(0xffffffff).copy(alpha = 0.7f)
-                        )
-                    }
+                val semesterOrdinal = when (semester) {
+                    1 -> "1st"
+                    2 -> "2nd"
+                    3 -> "3rd"
+                    else -> "${semester}th"
                 }
+                
+                // Header with Sem Summary
+                GradientHeader(
+                    title = "$semesterOrdinal Semester",
+                    icon = Icons.Default.DateRange,
+                    isTitleCentered = true,
+                    onBackClick = onBackClick,
+                    actions = {
+                        if (events.isNotEmpty() && !isGeneratingFile) {
+                            IconButton(
+                                onClick = {
+                                    isGeneratingFile = true
+                                    scope.launch {
+                                        try {
+                                            val generator = PDFGenerator(context)
 
-                // Events list
+                                            val wingRows = wingEvents.map { 
+                                                com.phad.chatapp.utils.StudentEventReportRow(
+                                                    it.name, 
+                                                    it.date, 
+                                                    it.hours, 
+                                                    if (it.wings.containsAll(AttendanceEvent.ALL_WINGS)) "Open Event" else it.wings.joinToString(", ")
+                                                ) 
+                                            }
+                                            val openRows = openEvents.map { 
+                                                com.phad.chatapp.utils.StudentEventReportRow(
+                                                    it.name, 
+                                                    it.date, 
+                                                    it.hours, 
+                                                    if (it.wings.containsAll(AttendanceEvent.ALL_WINGS)) "Open Event" else it.wings.joinToString(", ")
+                                                ) 
+                                            }
+                                            
+                                            val path = generator.generateStudentEventsList(
+                                                studentName, 
+                                                rollNumber, 
+                                                semester, 
+                                                wingRows, 
+                                                openRows, 
+                                                wingHours, 
+                                                openEventHours, 
+                                                attendedCount
+                                            )
+                                            if (path != null) {
+                                                showFileMessage = "PDF saved to Downloads/NSS_Reports"
+                                            } else {
+                                                showFileMessage = "Failed to generate PDF report"
+                                            }
+                                        } catch (e: Exception) {
+                                            showFileMessage = e.message ?: "Failed to generate PDF report"
+                                        } finally {
+                                            isGeneratingFile = false
+                                        }
+                                    }
+                                }
+                            ) {
+                                Icon(
+                                    Icons.Default.Download,
+                                    contentDescription = "Download PDF",
+                                    tint = Color.White
+                                )
+                            }
+                        } else if (isGeneratingFile) {
+                             Box(
+                                modifier = Modifier.size(48.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
+                            }
+                        } else {
+                           Spacer(modifier = Modifier.size(48.dp))
+                        }
+                    }
+                )
+
+                // Events list with sections
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(events) { event ->
-                        EventCard(event = event)
+                    // Wing Events Section
+                    if (wingEvents.isNotEmpty()) {
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Wing Events Attended",
+                                    color = Color.White,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Hours = $wingHours",
+                                    color = Color.White,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                        items(wingEvents) { event ->
+                            EventCard(event = event)
+                        }
+                    }
+                    
+                    // Spacer between sections
+                    if (wingEvents.isNotEmpty() && openEvents.isNotEmpty()) {
+                        item {
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
+                    }
+                    
+                    // Open Events Section
+                    if (openEvents.isNotEmpty()) {
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Open Events Attended",
+                                    color = Color.White,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Hours = $openEventHours",
+                                    color = Color.White,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                        items(openEvents) { event ->
+                            EventCard(event = event)
+                        }
                     }
                 }
             }
+        }
+            PullToRefreshContainer(
+                state = pullRefreshState,
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
         }
         
         // Show PDF message as overlay
@@ -351,9 +485,21 @@ fun EventCard(event: EventDetail) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Date on Left (DD MMM)
+            Text(
+                text = getFormattedDateDayMonth(event.date),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFFFA000),
+                modifier = Modifier
+                    .width(60.dp) // Fixed width for alignment
+            )
+            
+            Spacer(modifier = Modifier.width(12.dp))
+
+            // Name and Wings
             Column(
                 modifier = Modifier.weight(1f)
             ) {
@@ -363,13 +509,19 @@ fun EventCard(event: EventDetail) {
                     fontWeight = FontWeight.Bold,
                     color = Color(0xff0d0302)
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = event.date,
-                    fontSize = 14.sp,
-                    color = Color(0xff0d0302).copy(alpha = 0.7f)
-                )
+                
+                if (event.wings.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = if (event.wings.containsAll(AttendanceEvent.ALL_WINGS)) "Open Event" else event.wings.joinToString("\n"),
+                        fontSize = 12.sp,
+                        color = Color(0xff0d0302).copy(alpha = 0.6f),
+                        lineHeight = 16.sp
+                    )
+                }
             }
+            
+            Spacer(modifier = Modifier.width(8.dp))
             
             // Hours badge
             val badgeColor = if (event.hours < 0) Color(0xFFF57C00) else Color(0xFF4CAF50)
@@ -382,7 +534,7 @@ fun EventCard(event: EventDetail) {
                     .padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
                 Text(
-                    text = "${event.hours}h",
+                    text = "${com.phad.chatapp.utils.AttendanceEventUtils.formatHours(event.hours)}h",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFFFFFFFF)
@@ -405,6 +557,11 @@ private fun extractEventNameFromId(eventId: String): String {
     return eventId.replace("_", " ")
 }
 
+/**
+ * Determine semester from event date
+ * Semester 1: July 1 - December 10 (any year)
+ * Semester 2: December 11 - June 30 (any year)
+ */
 private fun getSemesterFromDate(eventDate: String): Int {
     try {
         val dateFormat = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.ENGLISH)
@@ -414,14 +571,18 @@ private fun getSemesterFromDate(eventDate: String): Int {
             calendar.time = date
             
             val month = calendar.get(java.util.Calendar.MONTH) + 1
-            val year = calendar.get(java.util.Calendar.YEAR)
+            val day = calendar.get(java.util.Calendar.DAY_OF_MONTH)
             
-            // Semester 1: July 2025 to December 2025
-            if (year == 2025 && month in 7..12) {
+            // Semester 1: July 1 - December 10
+            if (month in 7..11) {
+                return 1
+            } else if (month == 12 && day <= 10) {
                 return 1
             }
-            // Semester 2: January 2026 to May 2026
-            else if (year == 2026 && month in 1..5) {
+            // Semester 2: December 11 - June 30
+            else if (month == 12 && day >= 11) {
+                return 2
+            } else if (month in 1..6) {
                 return 2
             }
         }
@@ -437,5 +598,21 @@ private fun parseDate(dateString: String): Long {
         dateFormat.parse(dateString)?.time ?: 0L
     } catch (e: Exception) {
         0L
+    }
+}
+
+private fun getFormattedDateDayMonth(dateString: String): String {
+    return try {
+        // Input format: "dd MMM yyyy"
+        val inputFormat = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.ENGLISH)
+        val date = inputFormat.parse(dateString)
+        if (date != null) {
+            // Output format: "dd MMM"
+            val outputFormat = java.text.SimpleDateFormat("dd MMM", java.util.Locale.ENGLISH)
+            return outputFormat.format(date)
+        }
+        dateString.split(" ").take(2).joinToString(" ")
+    } catch (e: Exception) {
+        dateString.split(" ").take(2).joinToString(" ")
     }
 }

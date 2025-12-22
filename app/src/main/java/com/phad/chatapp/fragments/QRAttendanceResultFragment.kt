@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -106,20 +107,28 @@ fun QRAttendanceResultContent(
 ) {
     // Treat already-marked attendance as a neutral info state
     val isAlreadyMarked = message.contains("already", ignoreCase = true)
+    // Detect device duplicate (phone used multiple times)
+    val isDeviceDuplicate = message.contains("phone has been used", ignoreCase = true)
+    // Detect location error (user too far from event)
+    val isLocationError = message.contains("meters away", ignoreCase = true)
 
     val iconColor = when {
+        isDeviceDuplicate -> Color(0xFFFFC107) // Yellow warning color
         isAlreadyMarked -> Color(0xFF2196F3)
         isSuccess -> Color(0xFF4CAF50)
         else -> Color(0xFFF44336)
     }
     val icon: ImageVector = when {
+        isDeviceDuplicate -> Icons.Default.Warning
         isAlreadyMarked -> Icons.Default.Info
         isSuccess -> Icons.Default.CheckCircle
         else -> Icons.Default.Error
     }
     val title = when {
-        isAlreadyMarked -> "Already Marked"
+        isDeviceDuplicate -> "No Proxy Allowed 😊"
+        isAlreadyMarked -> "Chill Broooo 🥱"
         isSuccess -> "Attendance Marked!"
+        isLocationError -> "Don't be over smart 🤨"
         else -> "Error Occurred"
     }
 
@@ -180,6 +189,7 @@ fun QRAttendanceResultContent(
                     onClick = onDismiss,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = when {
+                            isDeviceDuplicate -> Color(0xFFFFC107) // Yellow for device duplicate
                             isAlreadyMarked -> Color(0xFF2196F3)
                             isSuccess -> Color(0xFF4CAF50)
                             else -> Color(0xFF2196F3)
@@ -196,29 +206,6 @@ fun QRAttendanceResultContent(
                         fontWeight = FontWeight.Medium,
                         color = Color.White
                     )
-                }
-                
-                if (!isSuccess && !isAlreadyMarked) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    
-                    // Try Again button for errors
-                    OutlinedButton(
-                        onClick = {
-                            // Navigate back to QR scan screen to try again
-                            onDismiss()
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text(
-                            text = "Try Again",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = Color(0xFF2196F3)
-                        )
-                    }
                 }
             }
         }

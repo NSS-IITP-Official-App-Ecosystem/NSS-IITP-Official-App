@@ -202,7 +202,7 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
     /**
      * Create a new attendance event
      */
-    fun createAttendanceEvent(name: String, description: String, location: String, eventDate: java.util.Date, openingTime: java.util.Date, closingTime: java.util.Date, hours: Double, isMandatory: Boolean = false, negativeHours: Double = 0.0) {
+    fun createAttendanceEvent(name: String, description: String, location: String, eventDate: java.util.Date, openingTime: java.util.Date, closingTime: java.util.Date, hours: Double, isMandatory: Boolean = false, negativeHours: Double = 0.0, wings: List<String> = emptyList(), visibleOnlyToPresent: Boolean = false) {
         viewModelScope.launch {
             try {
                 Log.d(TAG, "Creating attendance event: $name")
@@ -220,6 +220,7 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                 Log.d(TAG, "Creating event with:")
                 Log.d(TAG, "  Date string: $dateString")
                 Log.d(TAG, "  Time range: $timeRangeString")
+                Log.d(TAG, "  Wings: $wings")
 
                 val event = AttendanceEvent(
                     id = documentId,
@@ -230,12 +231,14 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                     negativeHours = negativeHours,
                     location = location.trim(),
                     description = description.trim(),
+                    wings = wings,
                     createdBy = _adminUiState.value.adminId,
                     creatorName = _adminUiState.value.adminName,
                     createdAt = com.google.firebase.Timestamp.now(),
                     attendees = emptyList(),
                     closedAt = null,
-                    _isLive = true // Explicitly set to true for new events
+                    _isLive = true, // Explicitly set to true for new events
+                    visibleOnlyToPresent = visibleOnlyToPresent
                 )
 
                 val result = repository.createAttendanceEvent(event)
@@ -327,7 +330,7 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
     /**
      * Update an existing attendance event
      */
-    fun updateAttendanceEvent(name: String, description: String, location: String, eventDate: java.util.Date, openingTime: java.util.Date, closingTime: java.util.Date, hours: Double, isMandatory: Boolean, negativeHours: Double, eventId: String) {
+    fun updateAttendanceEvent(name: String, description: String, location: String, eventDate: java.util.Date, openingTime: java.util.Date, closingTime: java.util.Date, hours: Double, isMandatory: Boolean, negativeHours: Double, wings: List<String>, visibleOnlyToPresent: Boolean, eventId: String) {
         viewModelScope.launch {
             try {
                 Log.d(TAG, "Updating attendance event: $name (ID: $eventId)")
@@ -365,7 +368,9 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                     isMandatory = isMandatory,
                     negativeHours = negativeHours,
                     location = location.trim(),
-                    description = description.trim()
+                    description = description.trim(),
+                    wings = wings,
+                    visibleOnlyToPresent = visibleOnlyToPresent
                 )
 
                 val result = if (needsRecreation) {
@@ -958,20 +963,30 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                 if (eventLat != null && eventLng != null) {
                     // Event has location set - verify proximity
                     val eventLocation = QRSecurityValidator.getInstance().createLocation(eventLat, eventLng)
+                    
+                    // DEBUG: Log location details
+                    Log.d(TAG, "=== LOCATION VALIDATION DEBUG ===")
+                    Log.d(TAG, "Student Location: lat=${scanLocation.latitude}, lng=${scanLocation.longitude}, accuracy=±${scanLocation.accuracy}m")
+                    Log.d(TAG, "Event Location: lat=${eventLat}, lng=${eventLng}")
+                    Log.d(TAG, "Max Allowed Distance: 100m")
+                    
                     val locationValidation = QRSecurityValidator.getInstance().validateLocation(
                         scanLocation = scanLocation,
                         eventLocation = eventLocation,
-                        maxRadiusMeters = 3f
+                        maxRadiusMeters = 100f // Changed from 3f to 100f for indoor GPS accuracy
                     )
                     
                     if (!locationValidation.isValid) {
-                        Log.w(TAG, "Location verification failed: ${locationValidation.message}")
+                        Log.w(TAG, "❌ Location verification failed: ${locationValidation.message}")
+                        Log.w(TAG, "Location validation code: ${locationValidation.code}")
                         _studentUiState.value = _studentUiState.value.copy(
                             isProcessing = false,
                             scanResult = ScanResult.Error(locationValidation.message)
                         )
                         return
                     }
+                    
+                    Log.d(TAG, "✅ Location validation passed")
                     
                     Log.d(TAG, "✅ Location verification passed")
                 } else {
@@ -1055,47 +1070,59 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
             Log.d(TAG, "Created AttendeeRecord: rollNumber=${attendee.rollNumber}, studentName=${attendee.name}, deviceId=${attendee.deviceId}")
             Log.d(TAG, "AttendeeRecord validation: isDataValid=${attendee.isDataValid()}")
 
-            Log.d(TAG, "Calling backend markAttendance with signature challenge...")
+            Log.d(TAG, "Marking attendance directly to Firestore...")
             try {
-                val rollUpper = _studentUiState.value.studentId.uppercase()
-                val nonce = com.phad.chatapp.network.BackendApi.getAttendanceChallenge(rollUpper, qrData.eventId)
-                val sig = com.phad.chatapp.security.SecurityKeyManager.signBase64(nonce)
-                val attendeeJson = org.json.JSONObject().apply {
-                    put("roll_number", attendee.rollNumber)
-                    put("name", attendee.name)
-                    put("is_manual_entry", attendee.isManualEntry)
-                    put("device_id", attendee.deviceId)
-                    put("scanned_from", org.json.JSONObject().apply {
-                        put("admin_roll_number", attendee.scannedFrom.adminRollNumber)
-                        put("admin_name", attendee.scannedFrom.adminName)
-                    })
-                    attendee.scanLocation?.let { gp ->
-                        put("scan_location", org.json.JSONObject().apply {
-                            put("latitude", gp.latitude)
-                            put("longitude", gp.longitude)
-                        })
-                    }
-                }
-                com.phad.chatapp.network.BackendApi.markAttendance(rollUpper, qrData.eventId, attendeeJson, sig)
-                val result = Result.success(Unit)
-                Log.d(TAG, "Backend attendance marked successfully")
+                // Add attendee directly to Firestore (no Cloud Functions needed)
+                val result = repository.addAttendeeToEvent(qrData.eventId, attendee)
+                
                 if (result.isSuccess) {
-                    // Avoid additional reads for event name; use cached selected event if present or generic text
+                    Log.d(TAG, "✅ Attendance marked successfully in Firestore")
+                    
+                    // Get event name for success message
                     val eventName = _adminUiState.value.selectedEvent?.getEventName() ?: "the event"
+                    
                     _studentUiState.value = _studentUiState.value.copy(
                         isProcessing = false,
                         scanResult = ScanResult.Success("Attendance marked successfully for $eventName")
                     )
+                    
+                    // Update attendance stats in session
                     try {
                         AttendanceStatsUpdater.updateAttendanceStatsInSession(application)
                         Log.d(TAG, "✅ Attendance stats updated in session")
                     } catch (e: Exception) {
                         Log.w(TAG, "⚠️ Failed to update attendance stats in session: ${e.message}")
                     }
+                    
                     Log.d(TAG, "✅ Attendance marked successfully for ${_studentUiState.value.studentId}")
+                } else {
+                    // Firestore write failed
+                    val error = result.exceptionOrNull()
+                    Log.e(TAG, "=== FIRESTORE ATTENDANCE MARKING FAILED ===")
+                    Log.e(TAG, "Error Type: ${error?.javaClass?.simpleName}")
+                    Log.e(TAG, "Error Message: ${error?.message}")
+                    Log.e(TAG, "Student ID: ${_studentUiState.value.studentId}")
+                    Log.e(TAG, "Event ID: ${qrData.eventId}")
+                    Log.e(TAG, "Session ID: ${qrData.sessionId}")
+                    if (error != null) {
+                        Log.e(TAG, "Stack Trace:", error)
+                    }
+                    
+                    _studentUiState.value = _studentUiState.value.copy(
+                        isProcessing = false,
+                        scanResult = ScanResult.Error(error?.message ?: "Failed to mark attendance")
+                    )
+                    return
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Backend markAttendance failed", e)
+                Log.e(TAG, "=== EXCEPTION DURING ATTENDANCE MARKING ===")
+                Log.e(TAG, "Error Type: ${e.javaClass.simpleName}")
+                Log.e(TAG, "Error Message: ${e.message}")
+                Log.e(TAG, "Student ID: ${_studentUiState.value.studentId}")
+                Log.e(TAG, "Event ID: ${qrData.eventId}")
+                Log.e(TAG, "Session ID: ${qrData.sessionId}")
+                Log.e(TAG, "Stack Trace:", e)
+                
                 _studentUiState.value = _studentUiState.value.copy(
                     isProcessing = false,
                     scanResult = ScanResult.Error(e.message ?: "Failed to mark attendance")
@@ -1772,7 +1799,7 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                                 Log.d(TAG, "Found timestamp string: $timestampValue")
                                 if (timestampValue.isNotEmpty()) {
                                     val dateFormat = java.text.SimpleDateFormat("dd MMMM yyyy 'at' HH:mm:ss 'UTC+5:30'", java.util.Locale.ENGLISH)
-                                    val date = dateFormat.parse(timestampValue)
+                                    val date = dateFormat.parse(timestampValue) ?: java.util.Date()
                                     com.google.firebase.Timestamp(date)
                                 } else {
                                     com.google.firebase.Timestamp.now()

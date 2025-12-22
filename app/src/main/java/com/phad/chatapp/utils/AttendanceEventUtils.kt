@@ -604,4 +604,16 @@ object AttendanceEventUtils {
             null
         }
     }
+
+    /**
+     * Format hours to display as integer if it's a whole number, otherwise keep decimal
+     * e.g., 4.0 -> "4", 3.5 -> "3.5"
+     */
+    fun formatHours(hours: Double): String {
+        return if (hours % 1.0 == 0.0) {
+            hours.toInt().toString()
+        } else {
+            hours.toString()
+        }
+    }
 }

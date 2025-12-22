@@ -41,7 +41,12 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,6 +65,7 @@ import com.phad.chatapp.utils.SessionManager
 import com.phad.chatapp.viewmodels.QRAttendanceViewModel
 import com.phad.chatapp.viewmodels.QRAttendanceViewModelFactory
 import kotlinx.coroutines.launch
+import com.phad.chatapp.ui.components.GradientHeader
 
 /**
  * NSS Calendar screen (app module) replacing the black screen on calendar tab.
@@ -80,6 +86,7 @@ class NssCalendarFragment : Fragment() {
         viewModel = androidx.lifecycle.ViewModelProvider(this, factory)[QRAttendanceViewModel::class.java]
     }
 
+    @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -95,13 +102,24 @@ class NssCalendarFragment : Fragment() {
                 var selectedDate by remember { mutableStateOf(LocalDate.now()) }
                 var showDayEventsDialog by remember { mutableStateOf(false) }
                 var dayEvents by remember { mutableStateOf<List<AttendanceEvent>>(emptyList()) }
+
                 var dayTitle by remember { mutableStateOf("") }
+                var userWings by remember { mutableStateOf<List<String>>(emptyList()) }
+                val currentUserRollNumber = sessionManager.fetchUserId()
+                val isAdmin = sessionManager.fetchUserType().equals("Admin", ignoreCase = true)
 
 
                 // Load events on first composition and when dialog dismiss triggers refresh
                 LaunchedEffect(Unit, adminUi.createEventSuccess) {
                     isLoading = true
                     errorMessage = null
+                    
+                    // Fetch user wings if not admin
+                    if (!isAdmin && currentUserRollNumber.isNotBlank()) {
+                         val wingsResult = repository.getUserWings(currentUserRollNumber)
+                         userWings = wingsResult.getOrNull() ?: emptyList()
+                    }
+
                     // After successful creation, force refresh; otherwise use cache
                     val all = repository.getAllEvents(forceRefresh = adminUi.createEventSuccess)
                     allEvents = all.getOrNull().orEmpty()
@@ -109,98 +127,76 @@ class NssCalendarFragment : Fragment() {
                     isLoading = false
                 }
 
-                val isAdmin = sessionManager.fetchUserType().equals("Admin", ignoreCase = true)
+                // Filter events based on user wings
+                val filteredEvents = remember(allEvents, userWings, isAdmin) {
+                    if (isAdmin) {
+                        allEvents
+                    } else {
+                        allEvents.filter { event ->
+                            // 4. If visibleOnlyToPresent is true, ONLY show if user is present
+                            
+                            val isPresent = event.hasStudentAttended(currentUserRollNumber)
+                            
+                            if (event.visibleOnlyToPresent) {
+                                isPresent
+                            } else {
+                                val hasMatchingWing = event.wings.any { it in userWings }
+                                val isDNCEvent = event.wings.contains("Design and Curation Wing")
+                                
+                                hasMatchingWing || isDNCEvent || isPresent
+                            }
+                        }
+                    }
+                }
 
                 Scaffold(
                 ) { padding ->
-                    Column(
+                    // Pull to refresh state
+                    val pullRefreshState = rememberPullToRefreshState()
+                    
+                    if (pullRefreshState.isRefreshing) {
+                        LaunchedEffect(true) {
+                            isLoading = true
+                            val all = repository.getAllEvents(forceRefresh = true)
+                            allEvents = all.getOrNull().orEmpty()
+                            errorMessage = all.exceptionOrNull()?.message
+                            isLoading = false
+                            pullRefreshState.endRefresh()
+                        }
+                    }
+
+                    Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(
-                                Brush.verticalGradient(
-                                    colors = listOf(
-                                        Color(0xFFF8F9FA),
-                                        Color(0xFFE9ECEF)
+                            .padding(bottom = padding.calculateBottomPadding())
+                            .nestedScroll(pullRefreshState.nestedScrollConnection)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color(0xFFF8F9FA),
+                                            Color(0xFFE9ECEF)
+                                        )
                                     )
                                 )
-                            )
-                            .padding(padding)
-                            .padding(16.dp)
-                            .verticalScroll(rememberScrollState())
-                    ) {
-                        // Header Design - Title only
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 8.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFF2196F3)),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
-                            shape = RoundedCornerShape(16.dp)
+                                // Removed padding(16.dp) to extend header width
+                                .verticalScroll(rememberScrollState())
                         ) {
-                            // Top row with back button, title, and refresh
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(20.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                IconButton(
-                                    onClick = { findNavController().navigateUp() },
-                                    modifier = Modifier.size(40.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                        contentDescription = "Back",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                }
+                        // Header Design - Title only
+                        GradientHeader(
+                            title = "Event Calendar",
+                            icon = Icons.Default.CalendarMonth,
+                            onBackClick = null,
+                            isTitleCentered = true
+                            // Removed refresh action
+                        )
 
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f),
-                                    horizontalArrangement = Arrangement.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.CalendarMonth,
-                                        contentDescription = "Calendar",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(28.dp)
-                                    )
-                                    Spacer(Modifier.width(12.dp))
-                                    Text(
-                                        text = "Event Calendar",
-                                        color = Color.White,
-                                        fontSize = 22.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-
-                                IconButton(
-                                onClick = {
-                                    // Manual refresh (bypass cache by resetting timestamp)
-                                    lifecycleScope.launch {
-                                        isLoading = true
-                                        val all = repository.getAllEvents(forceRefresh = true)
-                                        allEvents = all.getOrNull().orEmpty()
-                                        errorMessage = all.exceptionOrNull()?.message
-                                        isLoading = false
-                                    }
-                                },
-                                    modifier = Modifier.size(40.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Default.Refresh,
-                                        contentDescription = "Refresh",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(Modifier.height(16.dp))
+                        // Add padding for content below header since we removed parent padding
+                        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            Spacer(Modifier.height(16.dp))
 
                         // Month navigation row - without card wrapper
                         Row(
@@ -275,14 +271,39 @@ class NssCalendarFragment : Fragment() {
                                 // Calendar grid
                                 CalendarGrid(
                                     month = currentMonth,
-                                    events = allEvents,
+                                    events = filteredEvents,
                                     onDayClick = { date, eventsOnDay ->
                                         selectedDate = date
                                         if (eventsOnDay.isNotEmpty()) {
                                             // Show dialog with events for the selected day
-                                            dayEvents = eventsOnDay
-                                            dayTitle = "${date.dayOfMonth} ${date.month.getDisplayName(TextStyle.SHORT, Locale.getDefault())} ${date.year}"
-                                            showDayEventsDialog = true
+                                            // Filter eventsOnDay based on strict visibility rules before showing dialog
+                                            val filteredDayEvents = eventsOnDay.filter { event ->
+                                                // Strict visibility check: "Visible only to Attendees" overrides all other logic
+                                                if (event.visibleOnlyToPresent) {
+                                                    // If not admin AND not attended AND visibility restricted -> SKIP
+                                                    !(!isAdmin && !event.hasStudentAttended(currentUserRollNumber))
+                                                } else {
+                                                    // Standard Wing-based filtering for events NOT restricted strictly to attendees
+                                                    if (!isAdmin) {
+                                                        // Use captured userWings from onCreateView scope
+                                                        val isRelevant = event.wings.isEmpty() || // Open logic (if no wings specified)
+                                                                        event.wings.containsAll(AttendanceEvent.ALL_WINGS) || // "Open Event"
+                                                                        event.wings.any { it in userWings } || // User's wing
+                                                                        event.wings.contains("Design and Curation Wing") || // DNC events visible to all
+                                                                        event.hasStudentAttended(currentUserRollNumber) // Actually attended
+
+                                                        isRelevant
+                                                    } else {
+                                                        true // Admins see all events
+                                                    }
+                                                }
+                                            }
+
+                                            if (filteredDayEvents.isNotEmpty()) {
+                                                dayEvents = filteredDayEvents
+                                                dayTitle = "${date.dayOfMonth} ${date.month.getDisplayName(TextStyle.SHORT, Locale.getDefault())} ${date.year}"
+                                                showDayEventsDialog = true
+                                            }
                                         }
                                         // Empty days are now non-interactive - no action taken
                                     }
@@ -291,7 +312,7 @@ class NssCalendarFragment : Fragment() {
                                 val now = YearMonth.now()
                                 when {
                                     currentMonth.isAfter(now) -> {
-                                        val upcomingEvent = findNextUpcomingEvent(allEvents, currentMonth)
+                                        val upcomingEvent = findNextUpcomingEvent(filteredEvents, currentMonth)
                                         if (upcomingEvent != null) {
                                             UpcomingEventCard(event = upcomingEvent)
                                         } else {
@@ -299,10 +320,10 @@ class NssCalendarFragment : Fragment() {
                                         }
                                     }
                                     currentMonth.isBefore(now) -> {
-                                        EventCountCard(events = allEvents, month = currentMonth, isAdmin = isAdmin, currentUserRollNumber = sessionManager.fetchUserId())
+                                        EventCountCard(events = filteredEvents, month = currentMonth, isAdmin = isAdmin, currentUserRollNumber = sessionManager.fetchUserId())
                                     }
                                     else -> {
-                                        val upcomingEvent = findNextUpcomingEvent(allEvents, currentMonth)
+                                        val upcomingEvent = findNextUpcomingEvent(filteredEvents, currentMonth)
                                         if (upcomingEvent != null) {
                                             UpcomingEventCard(event = upcomingEvent)
                                         }
@@ -328,16 +349,23 @@ class NssCalendarFragment : Fragment() {
 
                         // Day-of-week header and grid composable definitions below
 
-                    }
-                }
+                        } // End content padding column
+                    } // End main column
+                    
+                    PullToRefreshContainer(
+                        state = pullRefreshState,
+                        modifier = Modifier.align(Alignment.TopCenter)
+                    )
+                    } // End Box
+                } // End Scaffold
 
                 // Reuse existing dialog from QR Attendance for creating new events
                 if (adminUi.showCreateEventDialog) {
                     val preselected = java.util.Date.from(selectedDate.atStartOfDay(ZoneId.systemDefault()).toInstant())
                     CreateEventDialog(
                         isCreating = adminUi.isCreatingEvent,
-                        onCreateEvent = { name, desc, location, date, open, close, hours, isMandatory, negativeHours ->
-                            viewModel.createAttendanceEvent(name, desc, location, date, open, close, hours, isMandatory, negativeHours)
+                        onCreateEvent = { name, desc, location, date, open, close, hours, isMandatory, negativeHours, wings, visibleOnlyToPresent ->
+                            viewModel.createAttendanceEvent(name, desc, location, date, open, close, hours, isMandatory, negativeHours, wings, visibleOnlyToPresent)
                         },
                         onDismiss = { viewModel.hideCreateEventDialog() },
                         errorMessage = adminUi.errorMessage,
@@ -573,7 +601,7 @@ private fun EventDetailsCard(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (event.location.isNotBlank()) event.location else "Location not specified",
+                        text = if (event.location.isNotBlank()) event.location else "Not specified",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
                         color = if (event.location.isNotBlank()) Color(0xFF333333) else Color.Gray
@@ -594,15 +622,38 @@ private fun EventDetailsCard(
                     Text(
                         text = if (event.hours > 0) {
                             if (event.isMandatory && event.negativeHours > 0) {
-                                "Hours: ${event.hours} / -${event.negativeHours}"
+                                "${com.phad.chatapp.utils.AttendanceEventUtils.formatHours(event.hours)} / -${com.phad.chatapp.utils.AttendanceEventUtils.formatHours(event.negativeHours)}"
                             } else {
-                                "Hours: ${event.hours}"
+                                "${com.phad.chatapp.utils.AttendanceEventUtils.formatHours(event.hours)}"
                             }
-                        } else "Hours not specified",
+                        } else "Not specified",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
                         color = if (event.hours > 0) Color(0xFF333333) else Color.Gray
                     )
+                }
+
+
+
+                // Wings information
+                if (event.wings.isNotEmpty()) {
+                    Row(
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Category, // Using Category icon for Wings
+                            contentDescription = "Wings",
+                            tint = Color(0xFF673AB7), // Deep Purple
+                            modifier = Modifier.size(18.dp).padding(top = 2.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = event.getDisplayWings(),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFF333333)
+                        )
+                    }
                 }
 
                 // Attendees count (for admin) or attendance status (for non-admin) on its own line
@@ -1187,57 +1238,24 @@ private fun UpcomingEventCard(event: AttendanceEvent) {
 
                 // Event details in a 2-column grid
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    // Column 1: Date and Location
-                    Column(horizontalAlignment = Alignment.Start) {
+                    // Column 1: Date and Hours (40%)
+                    Column(
+                        horizontalAlignment = Alignment.Start,
+                        modifier = Modifier.weight(0.4f)
+                    ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Default.DateRange,
                                 contentDescription = "Date",
                                 tint = Color(0xFF4CAF50),
-                                modifier = Modifier.size(20.dp) // Increased icon size
+                                modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = event.getFormattedEventDate(),
-                                fontSize = 16.sp, // Increased font size
-                                fontWeight = FontWeight.Medium,
-                                color = Color(0xFF333333)
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.LocationOn,
-                                contentDescription = "Location",
-                                tint = Color(0xFFE91E63),
-                                modifier = Modifier.size(20.dp) // Increased icon size
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = if (event.location.isNotBlank()) event.location else "Not specified",
-                                fontSize = 16.sp, // Increased font size
-                                fontWeight = FontWeight.Medium,
-                                color = if (event.location.isNotBlank()) Color(0xFF333333) else Color.Gray // Gray out if not specified
-                            )
-                        }
-                    }
-
-                    // Column 2: Time and Hours
-                    Column(horizontalAlignment = Alignment.Start) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.AccessTime,
-                                contentDescription = "Time",
-                                tint = Color(0xFF2196F3),
-                                modifier = Modifier.size(20.dp) // Increased icon size
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = event.getFormattedTimeRange(),
-                                fontSize = 16.sp, // Increased font size
+                                fontSize = 16.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = Color(0xFF333333)
                             )
@@ -1248,20 +1266,88 @@ private fun UpcomingEventCard(event: AttendanceEvent) {
                                 imageVector = Icons.Default.Star,
                                 contentDescription = "Hours",
                                 tint = Color(0xFFFFC107),
-                                modifier = Modifier.size(20.dp) // Increased icon size
+                                modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = if (event.hours > 0) {
                                     if (event.isMandatory && event.negativeHours > 0) {
-                                        "Hours: ${event.hours} / -${event.negativeHours}"
+                                        "${com.phad.chatapp.utils.AttendanceEventUtils.formatHours(event.hours)} / -${com.phad.chatapp.utils.AttendanceEventUtils.formatHours(event.negativeHours)}"
                                     } else {
-                                        "Hours: ${event.hours}"
+                                        com.phad.chatapp.utils.AttendanceEventUtils.formatHours(event.hours)
                                     }
-                                } else "Hours not specified",
-                                fontSize = 16.sp, // Increased font size
+                                } else "Not specified",
+                                fontSize = 16.sp,
                                 fontWeight = FontWeight.Medium,
-                                color = if (event.hours > 0) Color(0xFF333333) else Color.Gray // Gray out if not specified
+                                color = if (event.hours > 0) Color(0xFF333333) else Color.Gray
+                            )
+                        }
+                    }
+
+                    // Column 2: Time and Location (60%)
+                    Column(
+                        horizontalAlignment = Alignment.Start,
+                        modifier = Modifier.weight(0.6f)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.AccessTime,
+                                contentDescription = "Time",
+                                tint = Color(0xFF2196F3),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = event.getFormattedTimeRange(),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color(0xFF333333)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.LocationOn,
+                                contentDescription = "Location",
+                                tint = Color(0xFFE91E63),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (event.location.isNotBlank()) event.location else "Not specified",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = if (event.location.isNotBlank()) Color(0xFF333333) else Color.Gray
+                            )
+                        }
+                    }
+                }
+
+                // Wings Information - Vertical List
+                if (event.wings.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(16.dp)) 
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically, 
+                        horizontalArrangement = Arrangement.Start
+                    ) {
+                        // Wings Section
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically 
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Category,
+                                contentDescription = "Wing",
+                                tint = Color(0xFF673AB7), 
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            
+                            Text(
+                                text = event.getDisplayWings(),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color(0xFF333333)
                             )
                         }
                     }
@@ -1326,34 +1412,90 @@ private fun EventCountCard(events: List<AttendanceEvent>, month: YearMonth, isAd
                     modifier = Modifier.padding(20.dp)
                 ) {
                     eventsInMonth.forEach { event ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                        val attended = event.hasStudentAttended(currentUserRollNumber)
+                        val backgroundColor = if (!isAdmin) {
+                            when {
+                                attended -> Color(0xFFE8F5E9) // Light Green
+                                event.isMandatory && !attended -> Color(0xFFFFEBEE) // Light Red
+                                else -> Color.Transparent
+                            }
+                        } else Color.Transparent
+
+                        Surface(
+                            color = backgroundColor,
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(
-                                text = event.getEventName(),
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = Color.Black,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = event.getEventDateAsDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate().dayOfMonth.toString() + " " + event.getEventDateAsDate().toInstant().atZone(ZoneId.systemDefault()).toLocalDate().month.getDisplayName(TextStyle.SHORT, Locale.getDefault()),
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Normal,
-                                color = Color.Gray
-                            )
-                        }
-                        if (!isAdmin) {
-                            val attended = event.hasStudentAttended(currentUserRollNumber)
-                            Text(
-                                text = if (attended) "Present" else "Absent",
-                                fontSize = 12.sp,
-                                color = if (attended) Color(0xFF4CAF50) else Color(0xFFF44336),
-                                fontWeight = FontWeight.Medium
-                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(8.dp), // Add padding inside the colored row
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Column 1: Date (20%) - No Year
+                                val fullDate = event.getFormattedEventDate()
+                                val dateNoYear = if (fullDate.split(" ").size >= 3) {
+                                    fullDate.substringBeforeLast(" ")
+                                } else {
+                                    fullDate
+                                }
+
+                                Text(
+                                    text = dateNoYear,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFFFA000),
+                                    modifier = Modifier.weight(0.25f)
+                                )
+
+                                // Column 2: Name (40%)
+                                Text(
+                                    text = event.getEventName(),
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color.Black,
+                                    modifier = Modifier.weight(0.4f)
+                                )
+
+                                // Column 3: Wing (35%)
+                                Column(
+                                    modifier = Modifier.weight(0.35f),
+                                    horizontalAlignment = Alignment.End
+                                ) {
+                                    if (event.wings.isNotEmpty()) {
+                                        if (event.wings.containsAll(com.phad.chatapp.models.AttendanceEvent.ALL_WINGS)) {
+                                            Text(
+                                                text = "Open Event",
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Normal,
+                                                color = Color.Gray,
+                                                maxLines = 1,
+                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                            )
+                                        } else {
+                                            event.wings.forEach { wing ->
+                                                Text(
+                                                    text = wing,
+                                                    fontSize = 14.sp,
+                                                    fontWeight = FontWeight.Normal,
+                                                    color = Color.Gray,
+                                                    maxLines = 1,
+                                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                                    textAlign = TextAlign.End
+                                                )
+                                            }
+                                        }
+                                    } else {
+                                        Text(
+                                            text = "No Wing",
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Normal,
+                                            color = Color.Gray,
+                                            textAlign = TextAlign.End
+                                        )
+                                    }
+                                }
+                            }
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                     }
