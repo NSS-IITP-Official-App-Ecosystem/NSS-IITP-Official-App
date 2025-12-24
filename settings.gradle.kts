@@ -25,5 +25,3 @@ dependencyResolutionManagement {
 
 rootProject.name = "ChatApp"
 include(":app")
-include(":calendar")
-include(":scheduling")

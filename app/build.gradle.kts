@@ -108,9 +108,6 @@ dependencies {
     implementation(libs.androidx.constraintlayout)
     implementation("androidx.fragment:fragment-ktx:1.6.2")
 
-    // Calendar Feature Module
-    implementation(project(":calendar"))
-    
     // Core library desugaring for Java 8+ features on older Android versions
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 
@@ -175,9 +172,6 @@ dependencies {
     // HTTP Client and JSON serialization
     implementation("com.squareup.okhttp3:okhttp:4.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.0")
-
-    // Add scheduling module dependency
-    implementation(project(":scheduling"))
 
     // Jetpack Compose dependencies
     implementation("androidx.activity:activity-compose:1.8.2")

@@ -423,22 +423,6 @@ class MainActivity : AppCompatActivity() {
             }
     }
 
-    // Method to open the Calendar module
-    fun openCalendar() {
-        try {
-            // Try to load the CalendarFragment from the calendar module
-            val calendarFragmentClass = Class.forName("com.phad.chatapp.features.calendar.ui.CalendarFragment")
-            val calendarFragment = calendarFragmentClass.getMethod("newInstance").invoke(null) as Fragment
-            
-            // Replace the current fragment with the calendar fragment
-            navController.navigate(R.id.calendarFragment)
-        } catch (e: Exception) {
-            // If calendar module is not available, show a toast
-            Toast.makeText(this, "Calendar feature is not available", Toast.LENGTH_SHORT).show()
-            Log.e(TAG, "Error opening calendar: ${e.message}")
-        }
-    }
-
     /**
      * Set up custom navigation buttons
      */
@@ -446,7 +430,7 @@ class MainActivity : AppCompatActivity() {
         // Find all navigation buttons
         val btnHome = findViewById<ImageButton>(R.id.btn_home)
         val btnChat = findViewById<ImageButton>(R.id.btn_chat)
-        // val btnCalendar = findViewById<ImageButton>(R.id.btn_calendar) // Calendar button hidden
+        val btnCalendar = findViewById<ImageButton>(R.id.btn_calendar)
         val btnSchedule = findViewById<ImageButton>(R.id.btn_schedule)
         val btnProfile = findViewById<ImageButton>(R.id.btn_profile)
 
@@ -476,11 +460,14 @@ class MainActivity : AppCompatActivity() {
             btnChat.setColorFilter(ContextCompat.getColor(this, R.color.blue))
         }
         
-        // btnCalendar.setOnClickListener { // Calendar button hidden
-        //     navController.navigate(R.id.calendarFragment)
-        //     resetNavButtonColors()
-        //     btnCalendar.setColorFilter(ContextCompat.getColor(this, R.color.blue))
-        // }
+        btnCalendar.setOnClickListener {
+            navController.navigate(R.id.calendarFragment)
+            resetNavButtonColors()
+            btnCalendar.setColorFilter(ContextCompat.getColor(this, R.color.blue))
+        }
+
+        // Explicitly show calendar button as it defaults to GONE in XML
+        btnCalendar.visibility = View.VISIBLE
         
         btnSchedule.setOnClickListener {
             navController.navigate(R.id.schedulingFragment)
@@ -503,7 +490,7 @@ class MainActivity : AppCompatActivity() {
     private fun resetNavButtonColors() {
         findViewById<ImageButton>(R.id.btn_home).clearColorFilter()
         findViewById<ImageButton>(R.id.btn_chat).clearColorFilter()
-        // findViewById<ImageButton>(R.id.btn_calendar).clearColorFilter() // Calendar button hidden
+        findViewById<ImageButton>(R.id.btn_calendar).clearColorFilter()
         findViewById<ImageButton>(R.id.btn_schedule).clearColorFilter()
         findViewById<ImageButton>(R.id.btn_profile).clearColorFilter()
     }

@@ -188,6 +188,22 @@
             android:exported="false"
             android:theme="@style/Theme.ChatApp" />
 
+        <!-- Calendar launcher activity for testing -->
+        <activity
+            android:name=".features.calendar.CalendarLauncherActivity"
+            android:exported="true" />
+
+        <!-- Calendar module activity -->
+        <activity
+            android:name=".features.calendar.CalendarActivity"
+            android:exported="false" />
+
+        <!-- Test activity for scheduling development -->
+        <activity
+            android:name=".features.scheduling.test.TestActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AppCompat.NoActionBar" />
+
         <!-- Add this inside the application tag -->
         <provider
             android:name="androidx.core.content.FileProvider"
