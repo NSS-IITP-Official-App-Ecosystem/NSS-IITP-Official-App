@@ -13,7 +13,7 @@
 
     <fragment
         android:id="@+id/chatFragment"
-        android:name="com.phad.chatapp.ChatFragment"
+        android:name="com.phad.chatapp.fragments.ChatFragment"
         android:label="Chat"
         tools:layout="@layout/fragment_chat" />
 
@@ -33,101 +33,9 @@
         android:id="@+id/profileFragment"
         android:name="com.phad.chatapp.fragments.ProfileFragment"
         android:label="Profile"
-        tools:layout="@layout/fragment_profile">
-        <action
-            android:id="@+id/action_profileFragment_to_librarySectionsFragment"
-            app:destination="@id/librarySectionsFragment" />
-    </fragment>
+        tools:layout="@layout/fragment_profile" />
 
-    <!-- Library Navigation -->
-    <fragment
-        android:id="@+id/librarySectionsFragment"
-        android:name="com.phad.chatapp.fragments.LibrarySectionsFragment"
-        android:label="Library Sections"
-        tools:layout="@layout/fragment_library_sections">
-        <action
-            android:id="@+id/action_librarySectionsFragment_to_librarySubCategoriesFragment"
-            app:destination="@id/librarySubCategoriesFragment" />
-    </fragment>
 
-    <fragment
-        android:id="@+id/librarySubCategoriesFragment"
-        android:name="com.phad.chatapp.fragments.LibrarySubCategoriesFragment"
-        android:label="Library Subcategories"
-        tools:layout="@layout/fragment_library_sub_categories">
-        <argument
-            android:name="sectionId"
-            app:argType="string" />
-        <action
-            android:id="@+id/action_librarySubCategoriesFragment_to_libraryItemListFragment"
-            app:destination="@id/libraryItemListFragment" />
-    </fragment>
-
-    <fragment
-        android:id="@+id/libraryItemListFragment"
-        android:name="com.phad.chatapp.fragments.LibraryItemListFragment"
-        android:label="Library Items"
-        tools:layout="@layout/fragment_library_item_list">
-        <argument
-            android:name="subCategoryId"
-            app:argType="string" />
-        <action
-            android:id="@+id/action_libraryItemListFragment_to_libraryFilesFragment"
-            app:destination="@id/libraryFilesFragment" />
-        <action
-            android:id="@+id/action_libraryItemListFragment_to_libraryItemListFragment"
-            app:destination="@id/libraryItemListFragment" />
-    </fragment>
-
-    <fragment
-        android:id="@+id/libraryFilesFragment"
-        android:name="com.phad.chatapp.fragments.LibraryFilesFragment"
-        android:label="Library Files"
-        tools:layout="@layout/fragment_library_files">
-        <argument
-            android:name="filesCollectionPath"
-            app:argType="string" />
-    </fragment>
-
-    <fragment
-        android:id="@+id/attendanceManagerFragment"
-        android:name="com.phad.chatapp.fragments.AttendanceManagerFragment"
-        android:label="Attendance Manager"
-        tools:layout="@layout/fragment_attendance_manager">
-
-        <action
-            android:id="@+id/action_attendanceManagerFragment_to_pendingAttendanceListFragment"
-            app:destination="@id/pendingAttendanceListFragment" />
-    </fragment>
-
-    <fragment
-        android:id="@+id/pendingAttendanceListFragment"
-        android:name="com.phad.chatapp.fragments.PendingAttendanceListFragment"
-        android:label="Pending Attendances"
-        tools:layout="@layout/fragment_pending_attendance_list">
-
-        <argument
-            android:name="eventName"
-            app:argType="string" />
-
-        <action
-            android:id="@+id/action_pendingAttendanceListFragment_to_pendingAttendanceDetailFragment"
-            app:destination="@id/pendingAttendanceDetailFragment" />
-    </fragment>
-
-    <fragment
-        android:id="@+id/pendingAttendanceDetailFragment"
-        android:name="com.phad.chatapp.fragments.PendingAttendanceDetailFragment"
-        android:label="Attendance Details"
-        tools:layout="@layout/fragment_pending_attendance_detail">
-
-        <argument
-            android:name="submission"
-            app:argType="com.phad.chatapp.models.AttendanceSubmission" />
-        <action
-            android:id="@+id/action_pendingAttendanceDetailFragment_to_fullScreenImageFragment"
-            app:destination="@id/fullScreenImageFragment" />
-    </fragment>
 
     <fragment
         android:id="@+id/addGroupFragment"
@@ -141,31 +49,9 @@
         android:label="Remove Group"
         tools:layout="@layout/fragment_remove_group" />
 
-    <fragment
-        android:id="@+id/adminAttendanceApprovalFragment"
-        android:name="com.phad.chatapp.fragments.AdminAttendanceApprovalFragment"
-        android:label="Attendance Approval"
-        tools:layout="@layout/fragment_admin_attendance_approval" />
-
-    <fragment
-        android:id="@+id/studentDataFragment"
-        android:name="com.phad.chatapp.StudentDataActivity"
-        android:label="Student Data"
-        tools:layout="@layout/activity_student_data" />
-
-    <fragment
-        android:id="@+id/groupChatFragment"
-        android:name="com.phad.chatapp.GroupChatFragment"
-        android:label="Group Chat"
-        tools:layout="@layout/fragment_group_chat">
-        <argument
-            android:name="groupId"
-            app:argType="string" />
-    </fragment>
-
     <activity
         android:id="@+id/chatActivity"
-        android:name="com.phad.chatapp.ChatActivity"
+        android:name="com.phad.chatapp.activities.ChatActivity"
         android:label="Chat"
         tools:layout="@layout/activity_chat">
         <argument

@@ -884,7 +884,8 @@ fun EventSelectionScreen(
                         Text(
                             text = "No Events Found",
                             fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium
+                            fontWeight = FontWeight.Medium,
+                            textAlign = TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(

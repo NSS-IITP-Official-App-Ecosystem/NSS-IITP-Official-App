@@ -28,7 +28,6 @@ data class Group(
     var pendingAdd: List<String> = emptyList(),
     var pendingRemove: List<String> = emptyList()
 ) {
-    // Property to be consistent with CommunitiesAdapter
     @get:Exclude
     var groupId: String
         get() = id

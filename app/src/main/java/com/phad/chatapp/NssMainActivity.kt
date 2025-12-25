@@ -20,6 +20,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.phad.chatapp.utils.SessionManager
 import com.phad.chatapp.utils.NotificationHelper
 import android.content.Intent
+import com.phad.chatapp.activities.LoginActivity
 
 class NssMainActivity : AppCompatActivity() {
     private val TAG = "NssMainActivity"
@@ -58,6 +59,67 @@ class NssMainActivity : AppCompatActivity() {
 
         // Set up navigation destination change listener
         setupNavigationListener()
+        
+        // Setup Update Popup
+        setupUpdatePopup()
+    }
+
+    private fun setupUpdatePopup() {
+        val composeView = findViewById<androidx.compose.ui.platform.ComposeView>(R.id.compose_update_overlay)
+        val mainContent = findViewById<View>(R.id.nav_host_fragment)?.parent as? View 
+            ?: findViewById<View>(R.id.main) // Fallback to root
+        val bottomNav = findViewById<View>(R.id.bottom_nav_container)
+
+        // State to hold current status
+        val updateStatusState = androidx.compose.runtime.mutableStateOf(com.phad.chatapp.utils.InAppUpdateManager.UpdateStatus.NONE)
+        
+        composeView.setContent {
+            val status = androidx.compose.runtime.remember { updateStatusState }
+            if (status.value != com.phad.chatapp.utils.InAppUpdateManager.UpdateStatus.NONE) {
+                // Ensure it's effectively on top
+                composeView.visibility = View.VISIBLE
+                composeView.bringToFront()
+                
+                // Apply Blur Effect to the underlying content (API 31+)
+                if (Build.VERSION.SDK_INT >= 31) {
+                    val blurEffect = android.graphics.RenderEffect.createBlurEffect(
+                        10f, 10f, android.graphics.Shader.TileMode.CLAMP
+                    )
+                    mainContent.setRenderEffect(blurEffect)
+                    bottomNav?.setRenderEffect(blurEffect)
+                }
+
+                com.phad.chatapp.ui.components.UpdateOverlay(
+                    updateStatus = status.value,
+                    onDismissRequest = {
+                        // For optional updates, allow distinct dismissal
+                        status.value = com.phad.chatapp.utils.InAppUpdateManager.UpdateStatus.NONE
+                        composeView.visibility = View.GONE
+                        
+                        // Remove Blur
+                        if (Build.VERSION.SDK_INT >= 31) {
+                            mainContent.setRenderEffect(null)
+                            bottomNav?.setRenderEffect(null)
+                        }
+                    }
+                )
+            } else {
+                composeView.visibility = View.GONE
+                // Ensure blur is removed if state changes externally
+                 if (Build.VERSION.SDK_INT >= 31) {
+                    mainContent.setRenderEffect(null)
+                    bottomNav?.setRenderEffect(null)
+                }
+            }
+        }
+        
+        
+        // Trigger check
+        com.phad.chatapp.utils.InAppUpdateManager.checkForUpdates(this) { status ->
+            runOnUiThread {
+                updateStatusState.value = status
+            }
+        }
     }
 
     private fun setupWindowInsets() {

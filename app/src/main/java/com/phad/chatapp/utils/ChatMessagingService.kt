@@ -1,5 +1,9 @@
 package com.phad.chatapp.utils
 
+import com.phad.chatapp.activities.GroupChatActivity
+
+import com.phad.chatapp.activities.ChatActivity
+
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -12,8 +16,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
-import com.phad.chatapp.ChatActivity
-import com.phad.chatapp.GroupChatActivity
+// Imports removed
 import com.phad.chatapp.R
 import com.google.firebase.firestore.FirebaseFirestore
 import java.util.regex.Pattern

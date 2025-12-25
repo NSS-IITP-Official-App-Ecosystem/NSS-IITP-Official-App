@@ -1,5 +1,7 @@
 package com.phad.chatapp.fragments
 
+import com.phad.chatapp.activities.ChatActivity
+
 import android.app.Activity
 import android.app.Dialog
 import android.content.Intent
@@ -29,7 +31,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import kotlinx.coroutines.tasks.await
-import com.phad.chatapp.ChatActivity
+
 import com.phad.chatapp.MainActivity
 import com.phad.chatapp.R
 import com.phad.chatapp.utils.DriveServiceHelper
@@ -791,11 +793,4 @@ class HomeFragment : Fragment() {
         createUpdateDialog = null
     }
 
-    private fun navigateToAttendanceManager() {
-        findNavController().navigate(R.id.attendanceManagerFragment)
-    }
-
-    private fun navigateToAttendanceApproval() {
-        findNavController().navigate(R.id.adminAttendanceApprovalFragment)
-    }
 } 

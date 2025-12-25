@@ -1,14 +1,13 @@
 package com.phad.chatapp
 
 import android.content.Intent
+import com.phad.chatapp.activities.LoginActivity
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import androidx.appcompat.app.AppCompatActivity
 import com.phad.chatapp.databinding.ActivitySplashBinding
-import com.phad.chatapp.ui.dialogs.ForceUpdateDialogFragment
-import com.phad.chatapp.utils.PlayStoreUpdateChecker
 import com.google.android.exoplayer2.ExoPlayer
 import com.google.android.exoplayer2.MediaItem
 import com.google.android.exoplayer2.Player
@@ -23,7 +22,6 @@ class SplashActivity : AppCompatActivity() {
 	private var updateCheckComplete = false
 	private var videoEnded = false
 	private var isCheckingUpdate = false
-	private var forceUpdateDialog: ForceUpdateDialogFragment? = null
 
 	override fun onCreate(savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
@@ -126,59 +124,25 @@ class SplashActivity : AppCompatActivity() {
 	}
 
 	private fun checkForUpdates() {
-		if (isCheckingUpdate || isFinishing) {
-			return
-		}
-		isCheckingUpdate = true
-
-		PlayStoreUpdateChecker.checkForImmediateUpdate(this) { result ->
-			runOnUiThread {
-				isCheckingUpdate = false
-				updateCheckComplete = true
-				when (result) {
-					PlayStoreUpdateChecker.Result.UpdateAvailable -> {
-						canNavigate = false
-						showForceUpdateDialog()
-					}
-					PlayStoreUpdateChecker.Result.NoUpdate -> {
-						canNavigate = true
-						dismissForceUpdateDialog()
-						tryNavigate()
-					}
-					is PlayStoreUpdateChecker.Result.Failure -> {
-						canNavigate = true
-						dismissForceUpdateDialog()
-						tryNavigate()
-					}
-				}
-			}
-		}
+        // No-op: Logic moved to NssMainActivity
+        tryNavigate()
 	}
 
 	private fun tryNavigate() {
-		// Only navigate if both conditions are met:
-		// 1. Update check is complete AND no update is required (canNavigate = true)
-		// 2. Video has ended or timeout occurred
-		if (updateCheckComplete && canNavigate && videoEnded && !isFinishing) {
+		// Only navigate if video has ended or timeout occurred
+		if (videoEnded && !isFinishing) {
 			navigateToNextScreen()
 		}
 	}
 
 	private fun showForceUpdateDialog(message: String? = null) {
-		val existing = forceUpdateDialog
-		if (existing?.isAdded == true) {
-			return
-		}
-
-		forceUpdateDialog = ForceUpdateDialogFragment.newInstance(message).also { dialog ->
-			dialog.show(supportFragmentManager, ForceUpdateDialogFragment.TAG)
-		}
+        // No-op
 	}
 
 	private fun dismissForceUpdateDialog() {
-		forceUpdateDialog?.dismissAllowingStateLoss()
-		forceUpdateDialog = null
+        // No-op
 	}
+
 
 	private fun navigateToNextScreen() {
 		val isLoggedIn = /* TODO: Replace with actual login check */ false

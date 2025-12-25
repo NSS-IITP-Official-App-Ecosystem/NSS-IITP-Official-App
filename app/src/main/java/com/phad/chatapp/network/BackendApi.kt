@@ -57,40 +57,9 @@ object BackendApi {
         }
     }
 
-    suspend fun getAttendanceChallenge(rollNumber: String, eventId: String): String {
-        val body = JSONObject().put("rollNumber", rollNumber).put("eventId", eventId).toString().toRequestBody(json)
-        val req = Request.Builder()
-            .url("$BASE_URL/getAttendanceChallenge")
-            .post(body)
-            .addHeader("Authorization", authHeader())
-            .build()
-        client.newCall(req).execute().use { resp ->
-            val respBody = resp.body?.string() ?: "{}"
-            if (!resp.isSuccessful) throw IllegalStateException("Attendance challenge failed: ${resp.code} $respBody")
-            val obj = JSONObject(respBody)
-            return obj.getString("nonce")
-        }
-    }
 
-    suspend fun markAttendance(rollNumber: String, eventId: String, attendeeJson: JSONObject, signatureBase64: String) {
-        val payload = JSONObject()
-            .put("rollNumber", rollNumber)
-            .put("eventId", eventId)
-            .put("signatureBase64", signatureBase64)
-            .put("attendee", attendeeJson)
-            .toString().toRequestBody(json)
-        val req = Request.Builder()
-            .url("$BASE_URL/markAttendance")
-            .post(payload)
-            .addHeader("Authorization", authHeader())
-            .build()
-        client.newCall(req).execute().use { resp ->
-            val body = resp.body?.string()
-            if (!resp.isSuccessful) {
-                throw IllegalStateException("markAttendance failed: ${resp.code} $body")
-            }
-        }
-    }
+
+
 }
 
 

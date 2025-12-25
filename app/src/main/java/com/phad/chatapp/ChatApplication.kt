@@ -12,7 +12,6 @@ import com.google.firebase.messaging.FirebaseMessaging
 import com.phad.chatapp.repositories.GroupRepository
 import com.phad.chatapp.utils.SessionManager
 import com.phad.chatapp.utils.MultiDatabaseHelper
-import com.phad.chatapp.utils.CloudinaryConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -41,9 +40,6 @@ class ChatApplication : Application() {
         
         // Apply dark mode based on system setting
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
-        
-        // Initialize Cloudinary
-        initializeCloudinary()
         
         // Initialize Firebase
         try {
@@ -101,22 +97,6 @@ class ChatApplication : Application() {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize Firebase", e)
-        }
-    }
-    
-    /**
-     * Initialize Cloudinary for image uploads
-     */
-    private fun initializeCloudinary() {
-        try {
-            val success = CloudinaryConfig.init(this)
-            if (success) {
-                Log.d(TAG, "Cloudinary initialized successfully")
-            } else {
-                Log.e(TAG, "Failed to initialize Cloudinary")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error initializing Cloudinary", e)
         }
     }
     

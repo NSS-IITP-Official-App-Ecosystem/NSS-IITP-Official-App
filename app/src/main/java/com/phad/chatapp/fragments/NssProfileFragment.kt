@@ -1,5 +1,9 @@
 package com.phad.chatapp.fragments
 
+import com.phad.chatapp.activities.EventsListActivity
+
+import com.phad.chatapp.activities.LoginActivity
+
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
@@ -16,9 +20,9 @@ import androidx.navigation.fragment.findNavController
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FieldValue
-import com.phad.chatapp.LoginActivity
+// Imports removed
 import com.phad.chatapp.R
-import com.phad.chatapp.EventsListActivity
+// Import removed
 import com.phad.chatapp.ui.profile.ProfileScreen
 import com.phad.chatapp.ui.profile.ProfileUiState
 import com.phad.chatapp.utils.SessionManager
@@ -61,9 +65,6 @@ class NssProfileFragment : Fragment() {
                     onLogoutClick = { logout() },
                     onRefreshClick = {
                         refreshAttendanceStats()
-                    },
-                    onLibraryClick = {
-                        findNavController().navigate(R.id.action_nssProfileFragment_to_nssLibraryItemListFragment)
                     },
                     onChatClick = {},
                     onScheduleClick = {},

@@ -70,14 +70,14 @@
         </activity>
         <!-- Login Activity -->
         <activity
-            android:name=".LoginActivity"
+            android:name=".activities.LoginActivity"
             android:exported="true"
             android:theme="@style/Theme.ChatApp"
             android:windowSoftInputMode="adjustResize" />
         
         <!-- Login Form Activity -->
         <activity
-            android:name=".LoginFormActivity"
+            android:name=".activities.LoginFormActivity"
             android:windowSoftInputMode="adjustResize"
             android:exported="false"
             android:theme="@style/Theme.ChatApp"/>
@@ -90,36 +90,23 @@
             
         <!-- Group Chat Activity -->
         <activity
-            android:name=".GroupChatActivity"
+            android:name=".activities.GroupChatActivity"
             android:exported="false"
             android:theme="@style/Theme.ChatApp"
             android:windowSoftInputMode="adjustResize" />
             
         <!-- Manage Participants Activity -->
         <activity
-            android:name=".ManageParticipantsActivity"
+            android:name=".activities.ManageParticipantsActivity"
             android:exported="false"
             android:theme="@style/Theme.ChatApp"
             android:windowSoftInputMode="adjustResize" />
 
         <!-- Chat Activity -->
         <activity
-            android:name=".ChatActivity"
+            android:name=".activities.ChatActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
-
-        <!-- Add the StudentDataActivity before the closing application tag -->
-        <activity
-            android:name=".StudentDataActivity"
-            android:exported="false"
-            android:label="TWApp Student Data" />
-            
-        <!-- User Migration Activity -->
-        <activity
-            android:name=".UserMigrationActivity"
-            android:exported="false"
-            android:label="TWApp User Migration" />
-
         <!-- Image View Activity -->
         <activity
             android:name=".activities.ImageViewActivity"
@@ -131,12 +118,6 @@
             android:name=".activities.UpdateDetailActivity"
             android:exported="false"
             android:theme="@style/Theme.ChatApp" />
-            
-        <!-- Audio Player Activity -->
-        <activity
-            android:name=".activities.AudioPlayerActivity"
-            android:exported="false"
-            android:theme="@style/Theme.ChatApp.Fullscreen" />
 
         <!-- Manage Permissions Activity -->
         <activity
@@ -145,12 +126,7 @@
             android:theme="@style/Theme.ChatApp"
             android:windowSoftInputMode="adjustResize" />
 
-        <!-- Create Update Activity -->
-        <activity
-            android:name=".ui.CreateUpdateActivity"
-            android:exported="false"
-            android:theme="@style/Theme.ChatApp"
-            android:windowSoftInputMode="adjustResize" />
+
 
         <!-- Event History Activity -->
         <activity
@@ -184,25 +160,13 @@
 
         <!-- Events List Activity -->
         <activity
-            android:name=".EventsListActivity"
+            android:name=".activities.EventsListActivity"
             android:exported="false"
             android:theme="@style/Theme.ChatApp" />
 
-        <!-- Calendar launcher activity for testing -->
-        <activity
-            android:name=".features.calendar.CalendarLauncherActivity"
-            android:exported="true" />
 
-        <!-- Calendar module activity -->
-        <activity
-            android:name=".features.calendar.CalendarActivity"
-            android:exported="false" />
 
-        <!-- Test activity for scheduling development -->
-        <activity
-            android:name=".features.scheduling.test.TestActivity"
-            android:exported="false"
-            android:theme="@style/Theme.AppCompat.NoActionBar" />
+
 
         <!-- Add this inside the application tag -->
         <provider

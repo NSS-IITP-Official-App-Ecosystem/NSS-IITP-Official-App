@@ -20,6 +20,8 @@ local.properties
 google-services.json
 *firebase-adminsdk*.json
 service-account-key.json
+serviceAccountKey.json
+chatapp-*.json
 
 # Generated files
 bin/
@@ -57,3 +59,42 @@ package-lock.json
 "*/build/"
 ".gradle/"
 "*.class"
+
+# Build and error logs
+build_log*.txt
+build_output*.txt
+gradle_build_error_log.txt
+migration_log.txt
+
+# Python development scripts (root directory only)
+/*_uploader.py
+/*_to_firestore.py
+/import_*.py
+/create_firebase_accounts.py
+/excel_to_firestore.py
+/upload_*.py
+/*.pyc
+
+# Data exports and temporary files
+data_export/
+*.xlsx
+faqs_raw.*
+*_backup.txt
+database_*.txt
+database_*.md
+
+# Temporary development files
+firebase-rules.txt
+firestore_setup.js
+privacy_policy/
+face_recognition_server/
+firebase-functions/
+logo*/
+v271/
+v272/
+v273/
+scripts/__pycache__/
+
+# Development artifacts
+*.svg
+run_auth_creator.bat

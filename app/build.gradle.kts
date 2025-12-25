@@ -13,7 +13,7 @@ android {
 
     defaultConfig {
         applicationId = "com.phad.chatapp"
-        minSdk = 24
+        minSdk = 26
         targetSdk = 35
         versionCode = 35
         versionName = "1.0.9"
@@ -24,6 +24,8 @@ android {
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
         }
+        
+        multiDexEnabled = true
     }
 
     buildTypes {
@@ -111,15 +113,6 @@ dependencies {
     // Core library desugaring for Java 8+ features on older Android versions
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 
-    // Cloudinary for image uploads - updated configuration
-    implementation("com.cloudinary:cloudinary-android:2.3.1") {
-        exclude(group = "com.facebook.fresco")
-        exclude(group = "com.facebook.soloader")
-    }
-    implementation("com.cloudinary:cloudinary-core:1.34.0") {
-        exclude(group = "com.facebook.fresco")
-        exclude(group = "com.facebook.soloader")
-    }
 
     // UI Components
     implementation("de.hdodenhof:circleimageview:3.1.0")
@@ -143,6 +136,7 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:32.8.0"))
     
     // Declare Firebase dependencies without versions (managed by BOM)
+    implementation("com.google.firebase:firebase-config")
     implementation("com.google.firebase:firebase-firestore")
     implementation("com.google.firebase:firebase-analytics")
     implementation("com.google.firebase:firebase-auth")
@@ -246,6 +240,12 @@ dependencies {
     // PDF generation dependencies
     implementation("com.itextpdf:itext7-core:7.2.5")
     implementation("com.itextpdf:html2pdf:4.0.5")
+
+    // Apache POI for Excel generation - using 4.1.2 for better Android compatibility (minSdk 26)
+    implementation("org.apache.poi:poi:4.1.2")
+    implementation("org.apache.poi:poi-ooxml:4.1.2")
+    implementation("com.fasterxml:aalto-xml:1.2.2") // StAX implementation needed for POI on Android
+    implementation("javax.xml.stream:stax-api:1.0-2") // StAX API for XMLStreamReader
     
     // Remove explicit SoLoader dependency; not needed and may introduce misaligned native libs
 }

@@ -1,5 +1,9 @@
 package com.phad.chatapp.adapters
 
+import com.phad.chatapp.activities.GroupChatActivity
+
+import com.phad.chatapp.activities.ChatActivity
+
 import android.content.Context
 import android.content.Intent
 import android.view.LayoutInflater
@@ -7,8 +11,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
-import com.phad.chatapp.ChatActivity
-import com.phad.chatapp.GroupChatActivity
+// Imports removed
 import com.phad.chatapp.R
 import com.phad.chatapp.models.UnreadMessage
 import com.phad.chatapp.utils.SessionManager

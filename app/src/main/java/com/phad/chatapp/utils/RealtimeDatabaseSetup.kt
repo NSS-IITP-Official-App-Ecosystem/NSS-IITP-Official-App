@@ -5,7 +5,6 @@ import android.util.Log
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.DatabaseReference
 import com.phad.chatapp.models.Admin
-import com.phad.chatapp.models.Student
 
 /**
  * Utility class for Firebase Realtime Database setup and operations

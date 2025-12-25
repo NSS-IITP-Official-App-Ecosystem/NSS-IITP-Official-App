@@ -13,7 +13,7 @@
 
     <fragment
         android:id="@+id/chatFragment"
-        android:name="com.phad.chatapp.ChatFragment"
+        android:name="com.phad.chatapp.fragments.ChatFragment"
         android:label="Chat"
         tools:layout="@layout/fragment_chat" />
 
@@ -34,66 +34,6 @@
         android:name="com.phad.chatapp.fragments.ProfileFragment"
         android:label="Profile"
         tools:layout="@layout/fragment_profile">
-        
-        <action
-            android:id="@+id/action_profileFragment_to_libraryItemListFragment"
-            app:destination="@id/libraryItemListFragment" />
-    </fragment>
-
-    <fragment
-        android:id="@+id/libraryItemListFragment"
-        android:name="com.phad.chatapp.fragments.LibraryItemListFragment"
-        android:label="Library"
-        tools:layout="@layout/fragment_library_item_list">
-        <argument
-            android:name="collectionPath"
-            android:defaultValue="librarySections"
-            app:argType="string" />
-        <argument
-            android:name="isSubcategory"
-            android:defaultValue="false"
-            app:argType="boolean" />
-        <action
-            android:id="@+id/action_libraryItemListFragment_self"
-            app:destination="@id/libraryItemListFragment" />
-    </fragment>
-
-    <fragment
-        android:id="@+id/attendanceManagerFragment"
-        android:name="com.phad.chatapp.fragments.AttendanceManagerFragment"
-        android:label="Attendance Manager"
-        tools:layout="@layout/fragment_attendance_manager">
-        <action
-            android:id="@+id/action_attendanceManagerFragment_to_pendingAttendanceListFragment"
-            app:destination="@id/pendingAttendanceListFragment" />
-    </fragment>
-
-    <fragment
-        android:id="@+id/adminAttendanceApprovalFragment"
-        android:name="com.phad.chatapp.fragments.AdminAttendanceApprovalFragment"
-        android:label="Attendance Approval"
-        tools:layout="@layout/fragment_admin_attendance_approval" />
-
-    <!-- Interview fragment removed -->
-
-    <fragment
-        android:id="@+id/pendingAttendanceListFragment"
-        android:name="com.phad.chatapp.fragments.PendingAttendanceListFragment"
-        android:label="Pending Attendance"
-        tools:layout="@layout/fragment_pending_attendance_list">
-        <action
-            android:id="@+id/action_pendingAttendanceListFragment_to_pendingAttendanceDetailFragment"
-            app:destination="@id/pendingAttendanceDetailFragment" />
-    </fragment>
-
-    <fragment
-        android:id="@+id/pendingAttendanceDetailFragment"
-        android:name="com.phad.chatapp.fragments.PendingAttendanceDetailFragment"
-        android:label="Pending Attendance Detail"
-        tools:layout="@layout/fragment_pending_attendance_detail" >
-        <action
-            android:id="@+id/action_pendingAttendanceDetailFragment_to_fullScreenImageFragment"
-            app:destination="@id/fullScreenImageFragment" />
     </fragment>
 
     <fragment

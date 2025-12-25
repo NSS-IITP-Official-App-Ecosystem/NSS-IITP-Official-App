@@ -7,7 +7,6 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.phad.chatapp.models.Admin
-import com.phad.chatapp.models.Student
 import java.io.File
 
 /**

@@ -1,5 +1,9 @@
 package com.phad.chatapp.adapters
 
+import com.phad.chatapp.activities.GroupChatActivity
+
+import com.phad.chatapp.activities.ChatActivity
+
 import android.content.Intent
 import android.graphics.Typeface
 import android.util.Log
@@ -11,7 +15,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
-import com.phad.chatapp.GroupChatActivity
+// Import removed
 import com.phad.chatapp.R
 import com.phad.chatapp.models.Group
 import com.phad.chatapp.repositories.GroupRepository

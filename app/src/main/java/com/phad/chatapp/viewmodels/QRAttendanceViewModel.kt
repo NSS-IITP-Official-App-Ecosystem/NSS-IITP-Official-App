@@ -16,11 +16,10 @@ import com.phad.chatapp.models.QRAttendanceData
 import com.phad.chatapp.repositories.AttendanceQRRepository
 import com.phad.chatapp.services.QRAttendanceService
 import com.phad.chatapp.services.QRValidationResult
-import com.phad.chatapp.utils.QRAttendanceDebugUtils
 import com.phad.chatapp.utils.SessionManager
 import com.phad.chatapp.utils.DeviceIdentificationUtils
 import com.phad.chatapp.utils.DuplicateType
-import com.phad.chatapp.utils.DeviceDuplicateTestUtils
+
 import com.phad.chatapp.utils.PDFGenerator
 import com.phad.chatapp.utils.AttendanceStatsUpdater
 import com.phad.chatapp.utils.QRSecurityValidator
@@ -1220,37 +1219,7 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
         Log.d(TAG, "QRAttendanceViewModel cleared")
     }
 
-    /**
-     * Debug method to test QR attendance flow
-     */
-    fun debugTestQRFlow() {
-        viewModelScope.launch {
-            try {
-                Log.d(TAG, "Starting QR attendance debug test...")
 
-                val testSessionId = "debug_session_${System.currentTimeMillis()}"
-                val testEventId = "debug_event_${System.currentTimeMillis()}"
-                val adminId = _adminUiState.value.adminId
-                val studentId = _studentUiState.value.studentId
-
-                val result = QRAttendanceDebugUtils.testQRFlow(
-                    sessionId = testSessionId,
-                    eventId = testEventId,
-                    adminId = adminId,
-                    studentId = studentId,
-                    qrService = qrService
-                )
-
-                Log.d(TAG, "Debug test completed - Success: ${result.success}")
-                if (!result.success) {
-                    Log.e(TAG, "Debug test failed:\n${result.report}")
-                }
-
-            } catch (e: Exception) {
-                Log.e(TAG, "Debug test exception", e)
-            }
-        }
-    }
     
     /**
      * Debug method to check session cache status
@@ -1508,37 +1477,7 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
         }
     }
 
-    /**
-     * Test device-based duplicate prevention system
-     * This method can be called for debugging and validation purposes
-     */
-    fun testDeviceDuplicatePrevention() {
-        viewModelScope.launch {
-            try {
-                Log.d(TAG, "Starting device duplicate prevention test...")
 
-                val testResult = DeviceDuplicateTestUtils.runAllTests(application)
-
-                if (testResult.success) {
-                    Log.d(TAG, "✓ All device duplicate prevention tests PASSED")
-                    _adminUiState.value = _adminUiState.value.copy(
-                        errorMessage = "Device duplicate prevention tests PASSED"
-                    )
-                } else {
-                    Log.e(TAG, "✗ Some device duplicate prevention tests FAILED")
-                    _adminUiState.value = _adminUiState.value.copy(
-                        errorMessage = "Device duplicate prevention tests FAILED - Check logs for details"
-                    )
-                }
-
-            } catch (e: Exception) {
-                Log.e(TAG, "Error running device duplicate prevention tests", e)
-                _adminUiState.value = _adminUiState.value.copy(
-                    errorMessage = "Test execution failed: ${e.message}"
-                )
-            }
-        }
-    }
 
     /**
      * Clean up redundant fields from all events in the database

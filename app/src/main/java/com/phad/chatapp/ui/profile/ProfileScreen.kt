@@ -107,7 +107,6 @@ fun ProfileScreen(
     state: ProfileUiState,
     onLogoutClick: () -> Unit,
     onRefreshClick: () -> Unit,
-    onLibraryClick: () -> Unit,
     onChatClick: () -> Unit,
     onScheduleClick: () -> Unit,
     // New admin-only export button
@@ -256,7 +255,6 @@ fun ProfileScreen(
                                 expanded = showMenu,
                                 onDismiss = { showMenu = false },
                                 onSwitchUser = onSwitchInterfaceClick,
-                                onLibrary = onLibraryClick,
                                 onRefresh = onRefreshClick,
                                 onExportAttendance = onExportAttendanceClick,
                                 onEventHistory = onEventHistoryClick,
@@ -748,7 +746,6 @@ fun ProfileMenu(
     expanded: Boolean,
     onDismiss: () -> Unit,
     onSwitchUser: () -> Unit,
-    onLibrary: () -> Unit,
     onRefresh: () -> Unit,
     onExportAttendance: () -> Unit,
     onEventHistory: () -> Unit,
@@ -765,26 +762,6 @@ fun ProfileMenu(
         modifier = modifier.width(224.dp) // Fixed width like in the reference design
     ) {
         // Note: Switch User moved to header as a standalone icon
-
-        // Library - only for teaching wing users in Teaching Wing interface
-        if (isTeachingWing && currentInterface == "Teaching Wing") {
-            DropdownMenuItem(
-                text = { Text("Library", color = Color(0xFF444343)) },
-                onClick = {
-                    onLibrary()
-                    onDismiss()
-                },
-                leadingIcon = {
-                    Icon(
-                        painter = painterResource(id = R.drawable.ic_book),
-                        contentDescription = null,
-                        tint = Color(0xFF444343)
-                    )
-                }
-            )
-        }
-
-
 
         // Export Attendance Matrix - only for admins
         if (isAdmin) {
@@ -803,6 +780,7 @@ fun ProfileMenu(
                 }
             )
         }
+
 
         // Event History - only for admins
         if (isAdmin) {
@@ -863,7 +841,6 @@ private fun ProfilePreview() {
             state = ProfileUiState(name = "Loading...", location = "N/A"),
             onLogoutClick = {},
             onRefreshClick = {},
-            onLibraryClick = {},
             onChatClick = {},
             onScheduleClick = {},
             onSwitchInterfaceClick = {},

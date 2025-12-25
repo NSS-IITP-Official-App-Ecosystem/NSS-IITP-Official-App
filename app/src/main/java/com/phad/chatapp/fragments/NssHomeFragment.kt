@@ -1,5 +1,7 @@
 package com.phad.chatapp.fragments
 
+import com.phad.chatapp.activities.ChatActivity
+
 import android.app.Activity
 import android.app.Dialog
 import android.content.Intent
@@ -30,7 +32,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import kotlinx.coroutines.tasks.await
-import com.phad.chatapp.ChatActivity
+
 import com.phad.chatapp.MainActivity
 import com.phad.chatapp.R
 import com.phad.chatapp.utils.DriveServiceHelper
@@ -266,11 +268,6 @@ class NssHomeFragment : Fragment() {
                 Log.e(TAG, "Error loading updates", e)
                 Toast.makeText(context, "Failed to load updates.", Toast.LENGTH_SHORT).show()
             }
-    }
-
-    private fun navigateToAttendanceManager() {
-        val intent = Intent(requireContext(), com.phad.chatapp.fragments.NssAttendanceManagerFragment::class.java)
-        startActivity(intent)
     }
 
     private fun navigateToQRAttendance() {

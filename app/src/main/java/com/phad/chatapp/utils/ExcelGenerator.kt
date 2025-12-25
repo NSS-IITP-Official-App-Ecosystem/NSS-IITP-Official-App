@@ -2,29 +2,53 @@ package com.phad.chatapp.utils
 
 import android.content.Context
 import android.util.Log
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import com.phad.chatapp.models.AttendanceEvent
 import com.phad.chatapp.models.AttendeeRecord
 import com.phad.chatapp.models.User
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
+import org.apache.poi.ss.usermodel.FillPatternType
+import org.apache.poi.ss.usermodel.IndexedColors
+import org.apache.poi.xssf.usermodel.XSSFWorkbook
 import java.io.File
+import java.io.FileOutputStream
 import java.io.FileWriter
 import java.text.SimpleDateFormat
 import java.util.*
 
 /**
- * Utility class for generating Excel-compatible CSV reports for NSS attendance events
+ * Utility class for generating Excel reports for NSS attendance events
  */
 class ExcelGenerator(private val context: Context) {
     
     companion object {
         private const val TAG = "ExcelGenerator"
+        
+        // Wing Constants
+        private const val DNC_WING = "Design and Curation Wing"
+        private val SPECIFIC_WINGS = listOf(
+            "Chetna Wing",
+            "Environmental Wing",
+            "Prayatna Wing",
+            "Rural Development Wing",
+            "Teaching and Technical Wing"
+        )
     }
     
+    // Enum to determine where hours are claimed
+    private enum class ClaimSource {
+        OPEN_SHEET,
+        WING_SHEET
+    }
+
+    private data class ClaimResult(
+        val source: ClaimSource,
+        val wingName: String? = null // only if WING_SHEET
+    )
+
     /**
-     * Generate an Attendance Matrix CSV file with columns: Name, Roll, Wing, Total Hours, and all Event Names.
-     * For each student row, place event hours if present, blank if absent.
+     * Generate an Attendance Matrix Excel (.xlsx) file with multiple sheets.
      */
     suspend fun generateAttendanceMatrixReport(
         students: List<User>,
@@ -34,9 +58,8 @@ class ExcelGenerator(private val context: Context) {
     ): String? = withContext(Dispatchers.IO) {
         try {
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-            val filename = "NSS_Attendance_Matrix_${timestamp}.csv"
+            val filename = "NSS_Attendance_Matrix_$timestamp.xlsx"
 
-            // Use Downloads directory instead of cache
             val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
             val excelDir = File(downloadsDir, "NSS_Reports")
             if (!excelDir.exists()) {
@@ -47,67 +70,232 @@ class ExcelGenerator(private val context: Context) {
                 }
             }
             val excelFile = File(excelDir, filename)
+            val workbook = XSSFWorkbook()
 
-            val writer = FileWriter(excelFile)
+            // 1. Prepare Data Helpers
+            // Identify events for Sheet 1 (Open + DNC)
+            val sheet1Events = events.filter { event ->
+                event.getDisplayWings() == "Open Event" || event.wings.contains(DNC_WING)
+            }.sortedBy { it.getEventDateAsDate() }
+
+            // Logic to check claim source
+            fun getClaimResult(studentWings: List<String>, event: AttendanceEvent): ClaimResult {
+                // If explicitly open event, it's OPEN_SHEET
+                if (event.getDisplayWings() == "Open Event") {
+                    return ClaimResult(ClaimSource.OPEN_SHEET)
+                }
+                
+                // Check if student belongs to any of the event's wings (excluding DNC)
+                val relevantEventWings = event.wings.filter { it != DNC_WING }
+                val intersection = studentWings.intersect(relevantEventWings.toSet()).sorted()
+                
+                return if (intersection.isNotEmpty()) {
+                    // Priority to the first alphabetical wing
+                    ClaimResult(ClaimSource.WING_SHEET, intersection.first())
+                } else {
+                    // Fallback to Open Sheet
+                    ClaimResult(ClaimSource.OPEN_SHEET)
+                }
+            }
             
-            // Write title
-            writer.write("NSS Attendance Matrix\n")
-            writer.write("Events: ${events.size} | Students: ${students.size}\n")
-            writer.write("\n")
-
-            // Write headers
-            val headers = mutableListOf("Name", "Roll", "Wing", "Total Hours")
-            headers.addAll(events.map { it.getEventName() })
-            writer.write(headers.joinToString(","))
-            writer.write("\n")
-
-            // Write data rows
-            students.forEach { student ->
+            // Calculate Wing Hours vs Open Hours for specific student
+            fun calculateSplitHours(student: User): Pair<Double, Double> {
+                var wingHours = 0.0
+                var openHours = 0.0
                 val roll = student.rollNumber.ifEmpty { student.id }
-                val wing = if (student.wings.isNotEmpty()) student.wings.joinToString(",") else ""
-                val totalHours = totalHoursPerStudent[roll] ?: 0
+                val attendedEvents = perStudentEventHours[roll] ?: return Pair(0.0, 0.0)
 
-                val row = mutableListOf(
-                    escapeCsvValue(student.name),
-                    escapeCsvValue(roll),
-                    escapeCsvValue(wing),
-                    totalHours.toString()
-                )
-
-                // Event columns
-                val perEvent = perStudentEventHours[roll] ?: perStudentEventHours[student.rollNumber] ?: emptyMap()
-                events.forEach { event ->
-                    val hours = perEvent[event.id]
-                    if (hours != null) {
-                        row.add(hours.toString())
-                    } else {
-                        row.add("") // Show empty for events where student is absent
+                attendedEvents.forEach { (eventId, hours) ->
+                    val event = events.find { it.id == eventId }
+                    if (event != null) {
+                        val claim = getClaimResult(student.wings, event)
+                        if (claim.source == ClaimSource.WING_SHEET) {
+                            wingHours += hours
+                        } else {
+                            openHours += hours
+                        }
                     }
                 }
-
-                writer.write(row.joinToString(","))
-                writer.write("\n")
+                return Pair(wingHours, openHours)
+            }
+            
+            // Get extra events (cross-wing events) for a student
+            fun getExtraEvents(student: User): String {
+                val roll = student.rollNumber.ifEmpty { student.id }
+                val attendedEvents = perStudentEventHours[roll] ?: return ""
+                val extraEventsList = mutableListOf<String>()
+                
+                attendedEvents.forEach { (eventId, hours) ->
+                    val event = events.find { it.id == eventId }
+                    if (event != null) {
+                        // Check if this is a cross-wing event (student not in event's wings)
+                        val eventWings = event.wings.filter { it != DNC_WING }
+                        val hasNoMatchingWing = student.wings.intersect(eventWings.toSet()).isEmpty()
+                        
+                        // If event has specific wings AND student doesn't belong to any of them
+                        // AND event does NOT contain DNC (DNC events are counted in Open Events)
+                        if (eventWings.isNotEmpty() && hasNoMatchingWing && 
+                            event.getDisplayWings() != "Open Event" && 
+                            !event.wings.contains(DNC_WING)) {
+                            extraEventsList.add("${event.getEventName()} ($hours)")
+                        }
+                    }
+                }
+                return extraEventsList.joinToString("\n")
             }
 
-            writer.close()
+            // ==================== SHEET 1 generation ====================
+            val sheet1 = workbook.createSheet("Open & DNC Events")
+            // Header Row
+            val headerRow1 = sheet1.createRow(0)
+            val headers1 = mutableListOf("Name", "Roll", "Wing", "Wing Hours", "Open Event Hours", "Extra Events")
+            headers1.addAll(sheet1Events.map { it.getEventName() })
+            
+            // Styles
+            val headerStyle = workbook.createCellStyle()
+            headerStyle.fillForegroundColor = IndexedColors.GREY_25_PERCENT.index
+            headerStyle.fillPattern = FillPatternType.SOLID_FOREGROUND
+            val font = workbook.createFont()
+            font.bold = true
+            headerStyle.setFont(font)
 
-            Log.d(TAG, "CSV file generated: ${excelFile.absolutePath}")
+            headers1.forEachIndexed { index, title ->
+                val cell = headerRow1.createCell(index)
+                cell.setCellValue(title)
+                cell.cellStyle = headerStyle
+            }
+
+            // Data Rows (All Students, sorted by Wing)
+            val sortedStudents = students.sortedWith(
+                compareBy(
+                    { it.wings.firstOrNull() ?: "ZZZZ" }, // No wing at end
+                    { it.name }
+                )
+            )
+
+            sortedStudents.forEachIndexed { index, student ->
+                val row = sheet1.createRow(index + 1)
+                val roll = student.rollNumber.ifEmpty { student.id }
+                val (wHours, oHours) = calculateSplitHours(student)
+
+                row.createCell(0).setCellValue(student.name)
+                row.createCell(1).setCellValue(roll)
+                row.createCell(2).setCellValue(student.wings.joinToString("\n"))
+                row.createCell(3).setCellValue(wHours)
+                row.createCell(4).setCellValue(oHours)
+                row.createCell(5).setCellValue(getExtraEvents(student))
+
+                // Event Columns (now starting at column 6)
+                val studentHoursMap = perStudentEventHours[roll] ?: emptyMap()
+                
+                sheet1Events.forEachIndexed { evtIndex, event ->
+                    val cell = row.createCell(6 + evtIndex)
+                    val hours = studentHoursMap[event.id]
+                    
+                    if (hours != null) {
+                        val claim = getClaimResult(student.wings, event)
+                        if (claim.source == ClaimSource.WING_SHEET) {
+                           // Claimed in wing sheet -> 0 here
+                           cell.setCellValue(0.0)
+                        } else {
+                            // Claimed here
+                            cell.setCellValue(hours)
+                        }
+                    } else {
+                        // Absent / No record
+                         cell.setCellValue("")
+                    }
+                }
+            }
+
+            // ==================== WING SHEETS generation ====================
+            SPECIFIC_WINGS.forEach { wingName ->
+                // Create strict name for sheet (Excel limit 31 chars)
+                val sheetName = if (wingName.length > 31) wingName.take(31) else wingName
+                val sheet = workbook.createSheet(sheetName)
+                
+                // Filter Events: Conducted by this wing, excluding Open events
+                val wingEvents = events.filter { 
+                    it.wings.contains(wingName) && it.getDisplayWings() != "Open Event"
+                }.sortedBy { it.getEventDateAsDate() }
+                
+                // Filter Students: Belong to this wing
+                val wingStudents = students.filter { it.wings.contains(wingName) }.sortedBy { it.name }
+
+                // Headers
+                val wHeaderRow = sheet.createRow(0)
+                val wHeaders = mutableListOf("Name", "Roll", "Wing Hours")
+                wHeaders.addAll(wingEvents.map { it.getEventName() })
+                
+                wHeaders.forEachIndexed { idx, title ->
+                    val cell = wHeaderRow.createCell(idx)
+                    cell.setCellValue(title)
+                    cell.cellStyle = headerStyle
+                }
+
+                wingStudents.forEachIndexed { sIdx, student ->
+                    val row = sheet.createRow(sIdx + 1)
+                    val roll = student.rollNumber.ifEmpty { student.id }
+                    
+                    // Calculate hours claimed specifically in this wing
+                    var specificWingTotal = 0.0
+                    val studentHoursMap = perStudentEventHours[roll] ?: emptyMap()
+                    
+                    studentHoursMap.forEach { (eid, h) ->
+                         val ev = events.find { it.id == eid }
+                         if (ev != null) {
+                             val res = getClaimResult(student.wings, ev)
+                             if (res.source == ClaimSource.WING_SHEET && res.wingName == wingName) {
+                                 specificWingTotal += h
+                             }
+                         }
+                    }
+
+                    row.createCell(0).setCellValue(student.name)
+                    row.createCell(1).setCellValue(roll)
+                    row.createCell(2).setCellValue(specificWingTotal)
+                    
+                    // Event Columns
+                    wingEvents.forEachIndexed { eIdx, event ->
+                        val cell = row.createCell(3 + eIdx)
+                        val hours = studentHoursMap[event.id]
+                        
+                        if (hours != null) {
+                            val claim = getClaimResult(student.wings, event)
+                            if (claim.source == ClaimSource.WING_SHEET && claim.wingName == wingName) {
+                                // Claimed here
+                                cell.setCellValue(hours)
+                            } else if (claim.source == ClaimSource.WING_SHEET && claim.wingName != wingName) {
+                                // Claimed in OTHER wing
+                                cell.setCellValue("(Hours given in ${claim.wingName})")
+                            } else {
+                                // Claimed in Open Sheet
+                                cell.setCellValue("(Hours given in Open/DNC)")
+                            }
+                        } else {
+                             cell.setCellValue("")
+                        }
+                    }
+                }
+            }
+
+            // Write to file
+            val fos = FileOutputStream(excelFile)
+            workbook.write(fos)
+            fos.close()
+            workbook.close()
+
+            Log.d(TAG, "Excel file generated: ${excelFile.absolutePath}")
             return@withContext excelFile.absolutePath
-        } catch (e: SecurityException) {
-            Log.e(TAG, "Permission denied for file access", e)
-            return@withContext null
-        } catch (e: java.io.IOException) {
-            Log.e(TAG, "File I/O error during CSV generation", e)
-            return@withContext null
+
         } catch (e: Exception) {
-            Log.e(TAG, "Error generating attendance matrix CSV", e)
+            Log.e(TAG, "Error generating attendance matrix Excel", e)
             return@withContext null
         }
     }
-
-    /**
-     * Generate a student's attended events list for a semester
-     */
+    
+    // ==================== Other Methods ====================
+    
     suspend fun generateStudentEventsList(
         studentName: String,
         rollNumber: String,
@@ -115,197 +303,62 @@ class ExcelGenerator(private val context: Context) {
         rows: List<Triple<String, String, Double>>
     ): String? = withContext(Dispatchers.IO) {
         try {
-            Log.d(TAG, "Generating student events list CSV for $studentName ($rollNumber), semester $semester")
+            Log.d(TAG, "Generating student events list CSV for $studentName")
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
             val filename = "NSS_S${semester}_${rollNumber}_Events_${timestamp}.csv"
-
             val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
             val excelDir = File(downloadsDir, "NSS_Reports")
-            if (!excelDir.exists()) {
-                val created = excelDir.mkdirs()
-                if (!created) {
-                    Log.e(TAG, "Failed to create directory: ${excelDir.absolutePath}")
-                    return@withContext null
-                }
-            }
+            if (!excelDir.exists()) excelDir.mkdirs()
             val excelFile = File(excelDir, filename)
-
-            val writer = FileWriter(excelFile)
             
-            // Write title
-            writer.write("Semester $semester Events Summary\n")
-            writer.write("\n")
-
-            // Write student details
-            writer.write("Name:,$studentName\n")
-            writer.write("Roll Number:,$rollNumber\n")
-            writer.write("Semester:,$semester\n")
-            writer.write("Total Hours:,${rows.sumOf { it.third }}\n")
-            writer.write("Events Attended:,${rows.size}\n")
-            writer.write("\n")
-
-            // Write table headers
+            val writer = FileWriter(excelFile)
+            writer.write("Semester $semester Events Summary\n\n")
+            writer.write("Name:,$studentName\nRoll Number:,$rollNumber\nSemester:,$semester\n")
+            writer.write("Total Hours:,${rows.sumOf { it.third }}\nEvents Attended:,${rows.size}\n\n")
             writer.write("Event,Date,Hours\n")
-
-            // Write data rows
             rows.forEach { (name, date, hours) ->
-                writer.write("${escapeCsvValue(name)},${escapeCsvValue(date)},$hours\n")
+                writer.write("\"$name\",\"$date\",$hours\n")
             }
-
             writer.close()
-
-            Log.d(TAG, "Student events list CSV generated: ${excelFile.absolutePath}")
             return@withContext excelFile.absolutePath
-        } catch (e: SecurityException) {
-            Log.e(TAG, "Permission denied for file access", e)
-            return@withContext null
-        } catch (e: java.io.IOException) {
-            Log.e(TAG, "File I/O error during student events list generation", e)
-            return@withContext null
         } catch (e: Exception) {
-            Log.e(TAG, "Error generating student events list CSV", e)
-            return@withContext null
+            Log.e(TAG, "Error", e)
+            null
         }
     }
 
-    /**
-     * Generate CSV report for attendance event with attendees sorted by NSS group
-     */
     suspend fun generateAttendanceReport(
         event: AttendanceEvent,
         attendees: List<AttendeeRecord>
     ): String? = withContext(Dispatchers.IO) {
-        try {
-            Log.d(TAG, "Generating CSV report for event: ${event.getEventName()}")
-            
+         try {
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
             val filename = "NSS_Attendance_${event.getEventName().replace(" ", "_")}_$timestamp.csv"
-            
             val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
             val excelDir = File(downloadsDir, "NSS_Reports")
-            if (!excelDir.exists()) {
-                val created = excelDir.mkdirs()
-                if (!created) {
-                    Log.e(TAG, "Failed to create directory: ${excelDir.absolutePath}")
-                    return@withContext null
-                }
-            }
+            if (!excelDir.exists()) excelDir.mkdirs()
             val excelFile = File(excelDir, filename)
 
             val writer = FileWriter(excelFile)
+            writer.write("NSS Attendance Report\n\n")
+            writer.write("Event:,${event.getEventName()}\nDate:,${event.getFormattedEventDate()}\n")
+            writer.write("Hours:,${event.hours}\n\n")
             
-            // Write title
-            writer.write("NSS Attendance Report\n")
-            writer.write("\n")
-
-            // Write event details
-            writer.write("Event:,${event.getEventName()}\n")
-            writer.write("Date:,${event.getFormattedEventDate()}\n")
-            writer.write("Time:,${event.getFormattedTimeRange()}\n")
-            writer.write("Location:,${event.location.ifEmpty { "Not specified" }}\n")
-            writer.write("Hours:,${event.hours}\n")
-            if (event.description.isNotEmpty()) {
-                writer.write("Description:,${event.description}\n")
-            }
-            writer.write("\n")
-
             if (attendees.isNotEmpty()) {
-                // Group attendees by NSS group
-                val groupedAttendees = runBlockingGroupBy(attendees)
-
-                // Write table headers
-                writer.write("NSS Group,Name,Roll Number\n")
-
-                // Write data rows
-                groupedAttendees.forEach { (nssGroup, groupAttendees) ->
-                    groupAttendees.forEach { attendee ->
-                        writer.write("${escapeCsvValue(nssGroup)},${escapeCsvValue(attendee.name)},${escapeCsvValue(attendee.rollNumber)}\n")
-                    }
-                }
-
-                writer.write("\n")
-                
-                // Write summary
-                writer.write("Total Attendees:,${attendees.size}\n")
-                writer.write("NSS Groups Represented:,${groupedAttendees.keys.size}\n")
-                val currentTime = SimpleDateFormat("dd MMM yyyy, HH:mm:ss", Locale.getDefault()).format(Date())
-                writer.write("Report Generated:,$currentTime\n")
+                 writer.write("NSS Group,Name,Roll Number\n")
+                 val sorted = attendees.sortedBy { it.name }
+                 sorted.forEach { attendee ->
+                     val group = "Unknown"
+                     writer.write("\"$group\",\"${attendee.name}\",\"${attendee.rollNumber}\"\n")
+                 }
             } else {
-                writer.write("No attendees recorded for this event.\n")
+                writer.write("No attendees.\n")
             }
-
             writer.close()
-
-            Log.d(TAG, "CSV file generated: ${excelFile.absolutePath}")
             return@withContext excelFile.absolutePath
-        } catch (e: SecurityException) {
-            Log.e(TAG, "Permission denied for file access", e)
-            return@withContext null
-        } catch (e: java.io.IOException) {
-            Log.e(TAG, "File I/O error during attendance report generation", e)
-            return@withContext null
         } catch (e: Exception) {
-            Log.e(TAG, "Error generating CSV report", e)
-            return@withContext null
-        }
-    }
-
-    /**
-     * Group attendees by their NSS group
-     */
-    private fun runBlockingGroupBy(attendees: List<AttendeeRecord>): Map<String, List<AttendeeRecord>> {
-        return kotlinx.coroutines.runBlocking {
-            groupAttendeesByNSSGroup(attendees)
-        }
-    }
-
-    private suspend fun groupAttendeesByNSSGroup(attendees: List<AttendeeRecord>): Map<String, List<AttendeeRecord>> {
-        val groupedAttendees = mutableMapOf<String, MutableList<AttendeeRecord>>()
-        
-        for (attendee in attendees) {
-            val nssGroup = getNSSGroupForStudent(attendee.rollNumber)
-            if (!groupedAttendees.containsKey(nssGroup)) {
-                groupedAttendees[nssGroup] = mutableListOf()
-            }
-            groupedAttendees[nssGroup]?.add(attendee)
-        }
-        
-        // Sort each group by name
-        groupedAttendees.forEach { (_, groupAttendees) ->
-            groupAttendees.sortBy { it.name }
-        }
-        
-        // Sort groups alphabetically
-        return groupedAttendees.toSortedMap()
-    }
-    
-    /**
-     * Get NSS group for a student by their roll number
-     */
-    private suspend fun getNSSGroupForStudent(rollNumber: String): String {
-        return try {
-            val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-            val studentDoc = db.collection("Student").document(rollNumber).get().await()
-            
-            if (studentDoc.exists()) {
-                studentDoc.getString("NSS_gro") ?: "Unknown"
-            } else {
-                "Unknown"
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error fetching NSS group for student $rollNumber", e)
-            "Unknown"
-        }
-    }
-
-    /**
-     * Escape CSV values to handle commas, quotes, and newlines
-     */
-    private fun escapeCsvValue(value: String): String {
-        return if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
-            "\"${value.replace("\"", "\"\"")}\""
-        } else {
-            value
+            Log.e(TAG, "Error", e)
+            null
         }
     }
 }

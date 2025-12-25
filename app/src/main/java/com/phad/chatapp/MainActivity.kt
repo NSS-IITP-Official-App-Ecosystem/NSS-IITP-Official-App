@@ -2,6 +2,7 @@ package com.phad.chatapp
 
 import android.Manifest
 import android.content.Intent
+import com.phad.chatapp.activities.LoginActivity
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -34,11 +35,9 @@ import com.phad.chatapp.utils.MultiDatabaseHelper
 import com.phad.chatapp.fragments.HomeFragment
 import com.phad.chatapp.features.calendar.ui.CalendarFragment
 import com.phad.chatapp.fragments.ProfileFragment
-import com.phad.chatapp.fragments.ScheduleFragment
+
 import com.phad.chatapp.features.scheduling.SchedulingFragment
 import android.widget.ImageButton
-import com.phad.chatapp.fragments.AdminAttendanceApprovalFragment
-import com.phad.chatapp.fragments.AttendanceManagerFragment
 
 class MainActivity : AppCompatActivity() {
     private val TAG = "MainActivity"
@@ -493,19 +492,5 @@ class MainActivity : AppCompatActivity() {
         findViewById<ImageButton>(R.id.btn_calendar).clearColorFilter()
         findViewById<ImageButton>(R.id.btn_schedule).clearColorFilter()
         findViewById<ImageButton>(R.id.btn_profile).clearColorFilter()
-    }
-
-    /**
-     * Load a fragment into the content frame
-     */
-    fun navigateToAttendanceManager() {
-        navController.navigate(R.id.attendanceManagerFragment)
-    }
-
-    /**
-     * Navigate to the Admin Attendance Approval screen
-     */
-    fun navigateToAttendanceApproval() {
-        navController.navigate(R.id.adminAttendanceApprovalFragment)
     }
 }
