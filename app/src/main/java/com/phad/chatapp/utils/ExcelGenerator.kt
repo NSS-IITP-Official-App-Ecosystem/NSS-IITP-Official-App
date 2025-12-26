@@ -195,8 +195,8 @@ class ExcelGenerator(private val context: Context) {
                     if (hours != null) {
                         val claim = getClaimResult(student.wings, event)
                         if (claim.source == ClaimSource.WING_SHEET) {
-                           // Claimed in wing sheet -> 0 here
-                           cell.setCellValue(0.0)
+                           // Claimed in wing sheet -> Show reference text
+                           cell.setCellValue("(Hours given in ${claim.wingName})")
                         } else {
                             // Claimed here
                             cell.setCellValue(hours)

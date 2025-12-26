@@ -736,7 +736,8 @@ class AttendanceQRRepository {
                 // Ensure mandatory penalty config is persisted on edit
                 "mandatory" to event.isMandatory,
                 "negativeHours" to event.negativeHours,
-                "wings" to event.wings
+                "wings" to event.wings,
+                "visibleOnlyToPresent" to event.visibleOnlyToPresent
             )
             batch.update(eventDocRef, eventUpdates)
 
@@ -782,8 +783,15 @@ class AttendanceQRRepository {
             // Compute old/new penalty values
             val oldPenalty = if (oldEvent.isMandatory && oldEvent.negativeHours > 0.0) oldEvent.negativeHours else 0.0
             val newPenalty = if (event.isMandatory && event.negativeHours > 0.0) event.negativeHours else 0.0
+            
+            // CRITICAL FIX: Only adjust penalties if they've already been applied (i.e., event was closed before)
+            // This prevents instant deduction when creating new mandatory events
+            // Penalties should ONLY be applied via closeAttendanceEvent, not during updates
+            val penaltyApplied = (existingSnapshot.get("absentPenaltyApplied") as? Boolean) == true
+            
+            Log.d(TAG, "Penalty update check: oldPenalty=$oldPenalty, newPenalty=$newPenalty, penaltyApplied=$penaltyApplied")
 
-            if (oldPenalty != newPenalty || oldSemester != newSemester) {
+            if ((oldPenalty != newPenalty || oldSemester != newSemester) && penaltyApplied) {
                 // Determine absentee set: prefer stored metadata, else recompute
                 @Suppress("UNCHECKED_CAST")
                 val storedAbsentees = (existingSnapshot.get("absenteeRollNumbers") as? List<String>)
@@ -1059,8 +1067,14 @@ class AttendanceQRRepository {
             // 6) Handle mandatory penalties for absentees
             val oldPenalty = if (oldEvent.isMandatory && oldEvent.negativeHours > 0.0) oldEvent.negativeHours else 0.0
             val newPenalty = if (newEvent.isMandatory && newEvent.negativeHours > 0.0) newEvent.negativeHours else 0.0
+            
+            // CRITICAL FIX: Only adjust penalties if they've already been applied (i.e., event was closed before)
+            // This prevents instant deduction when recreating mandatory events
+            val penaltyApplied = (oldEventSnapshot.get("absentPenaltyApplied") as? Boolean) == true
+            
+            Log.d(TAG, "Recreate penalty check: oldPenalty=$oldPenalty, newPenalty=$newPenalty, penaltyApplied=$penaltyApplied")
 
-            if (oldPenalty != newPenalty) {
+            if (oldPenalty != newPenalty && penaltyApplied) {
                 val oldSemester = getSemesterFromDate(oldEvent.eventDate)
                 val newSemester = getSemesterFromDate(newEvent.eventDate)
                 val attendeeRolls = oldEvent.attendees.map { it.rollNumber }.toSet()

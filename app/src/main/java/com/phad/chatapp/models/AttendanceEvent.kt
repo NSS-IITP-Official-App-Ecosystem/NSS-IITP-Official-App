@@ -41,6 +41,9 @@ data class AttendanceEvent(
     @PropertyName("location")
     val location: String = "", // Location where the event will take place
 
+    @PropertyName("absentPenaltyApplied")
+    val absentPenaltyApplied: Boolean = false, // Whether penalties have been applied for absentees
+
     @PropertyName("attendanceLocationLatitude")
     val attendanceLocationLatitude: Double? = null, // GPS latitude where attendance is being taken
 
@@ -120,6 +123,7 @@ data class AttendanceEvent(
         hours = 0.0,
         isMandatory = false,
         negativeHours = 0.0,
+        absentPenaltyApplied = false,
         location = "",
         attendanceLocationLatitude = null,
         attendanceLocationLongitude = null,

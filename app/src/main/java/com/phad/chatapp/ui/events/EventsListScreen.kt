@@ -143,7 +143,7 @@ fun EventsListScreen(
                                 // Fallback for pure DNC or other cases
                                 openEventLog.add(eventDetail)
                             }
-                        } else if (!event.visibleOnlyToPresent && event.isMandatory && event.negativeHours > 0.0) {
+                        } else if (!event.visibleOnlyToPresent && event.isMandatory && event.negativeHours > 0.0 && event.absentPenaltyApplied) {
                             // Absent in a mandatory event: check if relevant to user
                             if (isDnc || isUserWingEvent) {
                                 val eventDetail = EventDetail(

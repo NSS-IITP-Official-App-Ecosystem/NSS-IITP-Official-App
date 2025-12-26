@@ -333,7 +333,48 @@ class QRSecurityValidator {
         Log.d(TAG, "Session found in cache: ${sessionInfo != null}")
         if (sessionInfo != null) {
             Log.d(TAG, "Cached session details - AdminId: '${sessionInfo.adminId}', EventId: '${sessionInfo.eventId}', IsActive: ${sessionInfo.isActive}")
+            
+            // CRITICAL FIX: If cached session says inactive, verify against Firestore
+            // This handles the case where a session was ended but then restarted
+            if (!sessionInfo.isActive) {
+                Log.w(TAG, "⚠️ Cached session shows isActive=false - verifying against Firestore before rejecting")
+                try {
+                    val firestoreEvent = runBlocking {
+                        repository.getAttendanceEventForDuplicateCheck(sessionId).getOrNull()
+                            ?: repository.getAttendanceEvent(sessionId).getOrNull()
+                    }
+                    
+                    if (firestoreEvent != null) {
+                        val isFirestoreLive = firestoreEvent.isLive && firestoreEvent.closedAt == null
+                        Log.d(TAG, "Firestore check - Event isLive: ${firestoreEvent.isLive}, closedAt: ${firestoreEvent.closedAt}, calculated isLive: $isFirestoreLive")
+                        
+                        if (isFirestoreLive) {
+                            // Event is actually live in Firestore! Update cache
+                            Log.d(TAG, "✅ Event is LIVE in Firestore but cache was stale - refreshing cache")
+                            sessionInfo = SessionValidationInfo(
+                                sessionId = firestoreEvent.id,
+                                adminId = firestoreEvent.createdBy,
+                                eventId = firestoreEvent.id,
+                                startTime = firestoreEvent.createdAt.toDate().time,
+                                endTime = firestoreEvent.closedAt?.toDate()?.time,
+                                isActive = true // Mark as active since Firestore shows it's live
+                            )
+                            validSessions[sessionId] = sessionInfo
+                            sessionInfoSource = "firestore-refresh"
+                            Log.d(TAG, "Cache refreshed with live session data from Firestore")
+                        } else {
+                            Log.d(TAG, "Firestore confirms event is not live - cache was correct")
+                        }
+                    } else {
+                        Log.w(TAG, "Could not fetch event from Firestore for verification - using cache")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error verifying session against Firestore", e)
+                    // Continue with cached data on error
+                }
+            }
         }
+
 
         // If not found in cache, check Firestore events directly
         // (We no longer store sessions in NSS_Sessions collection)

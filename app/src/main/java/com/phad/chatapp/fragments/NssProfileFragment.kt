@@ -405,9 +405,19 @@ class NssProfileFragment : Fragment() {
                     }
                     
                     // Add negative hours for mandatory events where student is absent
+                    val userWings = (doc.get("wings") as? List<String>) ?: emptyList<String>()
+                    
                     events.forEach { event ->
-                        // Only penalize for non-visible-only-to-present events
-                        if (!event.visibleOnlyToPresent && event.isMandatory && event.id !in eventsList) {
+                        // Check relevance: Open Event OR student belongs to one of the event's wings
+                        // Note: event.wings might be empty for some open events, getDisplayWings handles logic
+                        val isOpenEvent = event.getDisplayWings() == "Open Event"
+                        // DNC events are also relevant to everyone (public/common wing)
+                        val isDncEvent = event.wings.contains("Design and Curation Wing")
+                        // For non-open/non-DNC events, check if student shares any wing with the event
+                        val isRelevant = isOpenEvent || isDncEvent || userWings.any { it in event.wings }
+
+                        // Only penalize for non-visible-only-to-present events if relevant to student
+                        if (isRelevant && !event.visibleOnlyToPresent && event.isMandatory && event.id !in eventsList) {
                             perEvent[event.id] = -event.negativeHours
                         }
                     }

@@ -1829,6 +1829,17 @@ fun EventCard(
                             color = Color(0xFF333333)
                         )
                     }
+
+                    if (event.visibleOnlyToPresent) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Note - This Event is visible to only Attendees",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.Red,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
             }
 

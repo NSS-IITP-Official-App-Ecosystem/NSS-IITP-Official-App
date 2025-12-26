@@ -122,7 +122,7 @@ object AttendanceStatsCalculator {
                                     1 -> s1 += event.hours
                                     2 -> s2 += event.hours
                                 }
-                            } else if (!event.visibleOnlyToPresent && event.isMandatory && event.negativeHours > 0.0) {
+                            } else if (!event.visibleOnlyToPresent && event.isMandatory && event.negativeHours > 0.0 && event.absentPenaltyApplied) {
                                 val eventWings = event.wings
                                 val isDnc = eventWings.contains("Design and Curation Wing")
                                 val isUserWing = eventWings.any { it in userWings }
@@ -218,7 +218,7 @@ object AttendanceStatsCalculator {
                             1 -> sem1Hours += event.hours
                             2 -> sem2Hours += event.hours
                         }
-                    } else if (!event.visibleOnlyToPresent && event.isMandatory && event.negativeHours > 0.0) {
+                    } else if (!event.visibleOnlyToPresent && event.isMandatory && event.negativeHours > 0.0 && event.absentPenaltyApplied) {
                         val eventWings = event.wings
                         val isDnc = eventWings.contains("Design and Curation Wing")
                         val isUserWing = eventWings.any { it in userWings }
