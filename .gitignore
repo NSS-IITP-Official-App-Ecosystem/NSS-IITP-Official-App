@@ -98,3 +98,8 @@ scripts/__pycache__/
 # Development artifacts
 *.svg
 run_auth_creator.bat
+
+# Keystore files
+*.jks
+*.keystore
+*.aab
