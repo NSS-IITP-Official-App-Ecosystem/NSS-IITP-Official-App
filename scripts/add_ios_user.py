@@ -50,40 +50,59 @@ def main():
         print(f"Failed to initialize Firebase: {e}")
         sys.exit(1)
 
-    # 3. Get Roll Number
+    # 3. Get Roll Numbers
     while True:
-        roll_number = input("Enter the Roll Number to authorized (e.g., 2301CS01): ").strip().upper()
-        if roll_number:
-            confirm = input(f"Are you sure you want to allow '{roll_number}'? (y/n): ").lower()
+        raw_input = input("Enter Roll Numbers separated by space (e.g., 2301CS01 2401CE02): ").strip().upper()
+        if raw_input:
+            roll_numbers = [r.strip() for r in raw_input.split() if r.strip()]
+            
+            if not roll_numbers:
+                print("No valid roll numbers found.")
+                continue
+
+            print(f"Found {len(roll_numbers)} roll numbers: {', '.join(roll_numbers)}")
+            confirm = input(f"Are you sure you want to allow these {len(roll_numbers)} users? (y/n): ").lower()
             if confirm == 'y':
                 break
         else:
-            print("Roll number cannot be empty.")
+            print("Input cannot be empty.")
 
     # 4. Add to Firestore
+    print(f"\nProcessing {len(roll_numbers)} users...")
+    
+    batch = db.batch()
+    batch_count = 0
+    total_added = 0
+    
     try:
-        doc_ref = db.collection('allowed_ios_users').document(roll_number)
+        for roll in roll_numbers:
+            doc_ref = db.collection('allowed_ios_users').document(roll)
+            
+            # Use 'set' to create or overwrite. 
+            # (We skip the existence check for bulk operations to be faster, 
+            #  but you can assume this action means 'ensure they are allowed')
+            data = {
+                'added_at': firestore.SERVER_TIMESTAMP,
+                'active': True
+            }
+            batch.set(doc_ref, data)
+            batch_count += 1
+            total_added += 1
+            
+            # Commit processing in chunks of 400 (limit is 500)
+            if batch_count >= 400:
+                batch.commit()
+                print(f"  Committed batch of {batch_count} users...")
+                batch = db.batch()
+                batch_count = 0
         
-        # Check if already exists
-        doc = doc_ref.get()
-        if doc.exists:
-            print(f"Warning: User '{roll_number}' is already in the allowlist.")
-            choice = input("Do you want to update/overwrite it? (y/n): ").lower()
-            if choice != 'y':
-                print("Operation cancelled.")
-                return
-
-        # Set the data
-        data = {
-            'added_at': firestore.SERVER_TIMESTAMP,
-            'active': True
-        }
-        
-        doc_ref.set(data)
-        print(f"\nSUCCESS: User '{roll_number}' has been added to the 'allowed_ios_users' collection.")
+        if batch_count > 0:
+            batch.commit()
+            
+        print(f"\nSUCCESS: Processed {total_added} users. They are now in the 'allowed_ios_users' collection.")
         
     except Exception as e:
-        print(f"Error adding user: {e}")
+        print(f"Error adding users: {e}")
 
 if __name__ == "__main__":
     try:
