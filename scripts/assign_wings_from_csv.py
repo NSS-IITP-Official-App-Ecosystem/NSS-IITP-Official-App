@@ -73,7 +73,13 @@ def main():
     print("\nProcessing CSV...")
     
     try:
-        with open(csv_path, 'r', encoding='utf-8-sig') as f: # utf-8-sig handles BOM if present
+        # Pre-fetch existing user IDs to avoid 404s in batch
+        print("Fetching existing user list from Firestore...")
+        users_ref = db.collection('users')
+        existing_ids = {doc.id for doc in users_ref.stream()}
+        print(f"Loaded {len(existing_ids)} existing users.")
+
+        with open(csv_path, 'r', encoding='utf-8-sig') as f:
             reader = csv.reader(f)
             headers = next(reader, None)
             
@@ -84,7 +90,6 @@ def main():
             print(f"Headers found: {headers}")
 
             # Find columns
-            # Updated to match specific headers provided by user
             roll_idx = get_column_index(headers, [
                 'Roll number (Letters in capital)', 
                 'Roll Number', 'rollNumber', 'RollNo', 'Roll'
@@ -104,14 +109,15 @@ def main():
 
             print(f"Mapped columns - Roll Number: Index {roll_idx}, Wing: Index {wing_idx}")
             
-            # Prepare batch
             batch = db.batch()
             batch_count = 0
             total_updates = 0
+            skipped_users = []
+            processed_rolls = []
             
             for row in reader:
                 if len(row) <= max(roll_idx, wing_idx):
-                    continue # Skip incomplete rows
+                    continue
 
                 roll_number = row[roll_idx].strip().upper()
                 wing_name = row[wing_idx].strip()
@@ -119,29 +125,78 @@ def main():
                 if not roll_number or not wing_name:
                     continue
 
-                # Reference to user
+                # Validation: Check if user exists
+                if roll_number not in existing_ids:
+                    print(f"Skipping {roll_number} (Not found in DB)")
+                    skipped_users.append(roll_number)
+                    continue
+
                 doc_ref = db.collection('users').document(roll_number)
                 
-                # Update wings field (ArrayUnion ensures it's added to the list without duplicates)
                 batch.update(doc_ref, {
                     'wings': firestore.ArrayUnion([wing_name])
                 })
                 
+                processed_rolls.append(roll_number)
+                
                 batch_count += 1
                 total_updates += 1
                 
-                # Commit if limit reached
                 if batch_count >= 400:
                     batch.commit()
                     print(f"  Committed batch of {batch_count} updates...")
                     batch = db.batch()
                     batch_count = 0
             
-            # Final commit
             if batch_count > 0:
                 batch.commit()
                 
             print(f"\nSUCCESS: Updated wings for {total_updates} users.")
+            
+            # --- Report Missing Users (Batch 25) ---
+            print("\n--- Checking for Batch 25 Missing in CSV ---")
+            
+            # 1. Fetch full details (Name + Roll) for Batch 25 users in DB
+            # We already have existing_ids (set of rolls), but we need names now.
+            # Ideally we fetch this at start if we wanted names, but to correct minimal code, 
+            # let's just re-fetch or assume efficient lookup if needed. 
+            # Actually, let's just do a specific query for batch 25 now.
+            
+            processed_rolls_set = set(processed_rolls) # We need to track this in the loop
+            
+            missing_in_csv = []
+            
+            # Optimization: Filter existing_ids locally first to avoid DB read if we didn't save names
+            # But user wants NAMES. existing_ids only has IDs.
+            # So let's query DB for users where 'rollNumber' >= '25' and 'rollNumber' < '26' 
+            # (Lexicographical check for startsWith '25')
+            
+            batch_25_users = users_ref.where('rollNumber', '>=', '25').where('rollNumber', '<', '26').stream()
+            
+            count_25 = 0
+            for doc in batch_25_users:
+                data = doc.to_dict()
+                roll = data.get('rollNumber', doc.id).upper()
+                name = data.get('name', 'Unknown')
+                
+                count_25 += 1
+                
+                if roll not in processed_rolls_set:
+                    missing_in_csv.append({'roll': roll, 'name': name})
+            
+            if missing_in_csv:
+                print(f"\nFound {len(missing_in_csv)} users starting with '25' in DB but NOT in CSV:")
+                print(f"{'ROLL NUMBER':<15} | {'NAME'}")
+                print("-" * 40)
+                for u in sorted(missing_in_csv, key=lambda x: x['roll']):
+                    print(f"{u['roll']:<15} | {u['name']}")
+            else:
+                print("All Batch 25 users in DB were present in the CSV!")
+
+            if skipped_users:
+                print(f"\nWARNING: Skipped {len(skipped_users)} users not found in database (from CSV):")
+                for s in skipped_users:
+                    print(f" - {s}")
             
     except Exception as e:
         print(f"Error processing CSV: {e}")

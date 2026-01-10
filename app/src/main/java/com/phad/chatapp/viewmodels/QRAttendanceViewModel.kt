@@ -85,7 +85,7 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                     val deferred = CompletableDeferred<android.location.Location?>()
                     // Force a fresh high-accuracy fix each tick
                     locationService.getFreshHighAccuracyLocation { loc -> deferred.complete(loc) }
-                    val loc = withTimeout(8000) { deferred.await() }
+                    val loc = withTimeout(30000) { deferred.await() }
                     if (loc != null) {
                         val gp = GeoPoint(loc.latitude, loc.longitude)
                         val now = System.currentTimeMillis()
@@ -442,7 +442,7 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                     locationDeferred.complete(location)
                 }
                 val adminLocation = try {
-                    withTimeout(10000) { // 10s timeout
+                    withTimeout(30000) { // 30s timeout
                         locationDeferred.await()
                     }
                 } catch (e: TimeoutCancellationException) {
@@ -917,24 +917,61 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
             } else {
                 val locationService = LocationService(application)
                 try {
-                    val locationDeferred = CompletableDeferred<Location?>()
-                    // Try fresh high-accuracy fix for scan
-                    locationService.getFreshHighAccuracyLocation { location ->
-                        locationDeferred.complete(location)
-                    }
-                    scanLocation = withContext(Dispatchers.IO) {
+                    // Retry loop for location fetching
+                    var attempt = 1
+                    while (attempt <= 2 && scanLocation == null) {
                         try {
-                            withTimeout(10000) { locationDeferred.await() }
-                        } catch (e: TimeoutCancellationException) { null }
+                            if (attempt > 1) {
+                                // Inform user about retry if possible, or just log
+                                Log.d(TAG, "Refining location... Attempt $attempt")
+                                // Wait a bit before retry to let GPS warm up
+                                delay(1000) 
+                            }
+                            
+                            val locationDeferred = CompletableDeferred<Location?>()
+                            locationService.getFreshHighAccuracyLocation { location ->
+                                locationDeferred.complete(location)
+                            }
+                            scanLocation = withContext(Dispatchers.IO) {
+                                try {
+                                    withTimeout(30000) { locationDeferred.await() }
+                                } catch (e: TimeoutCancellationException) { null }
+                            }
+                            
+                            if (scanLocation != null) {
+                                locationGeoPoint = GeoPoint(scanLocation.latitude, scanLocation.longitude)
+                                Log.d(TAG, "Location captured on attempt $attempt: lat=${scanLocation.latitude}, lng=${scanLocation.longitude}")
+                                break // Success!
+                            } else {
+                                Log.w(TAG, "Attempt $attempt failed to capture location")
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error in location attempt $attempt: ${e.message}")
+                        }
+                        attempt++
                     }
-                    if (scanLocation != null) {
-                        locationGeoPoint = GeoPoint(scanLocation.latitude, scanLocation.longitude)
-                        Log.d(TAG, "Location captured: lat=${scanLocation.latitude}, lng=${scanLocation.longitude}")
-                    } else {
-                        Log.w(TAG, "Could not capture location - blocking attendance")
+
+                    if (scanLocation == null) {
+                        Log.w(TAG, "Could not capture location after 2 attempts - blocking attendance")
+                        
+                        // Check if location is actually disabled to show correct error
+                        val locationManager = application.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
+                        val isLocationEnabled = try {
+                            locationManager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) || 
+                            locationManager.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER)
+                        } catch (e: Exception) {
+                            false
+                        }
+                        
+                        val errorMessage = if (!isLocationEnabled) {
+                            "Turn on location and grant permission to mark attendance"
+                        } else {
+                            "Weak GPS signal. Please move near a window or open area and try again."
+                        }
+                        
                         _studentUiState.value = _studentUiState.value.copy(
                             isProcessing = false,
-                            scanResult = ScanResult.Error("Turn on location and grant permission to mark attendance")
+                            scanResult = ScanResult.Error(errorMessage)
                         )
                         return
                     }
