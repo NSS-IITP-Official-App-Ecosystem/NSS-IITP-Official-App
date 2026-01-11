@@ -46,7 +46,21 @@ def main():
     print("--- Compare Event Attendees ---")
     
     # 1. Get Service Account Key Path
-    while True:
+    # Common locations to check
+    possible_paths = [
+        "C:/Users/itses/CodeVault/Projects/Keys/IITP App/service-account.json",
+        "serviceAccountKey.json",
+        "scripts/serviceAccountKey.json",
+    ]
+    
+    key_path = None
+    for path in possible_paths:
+        if os.path.exists(path):
+            key_path = os.path.abspath(path)
+            print(f"Found service account key at: {key_path}")
+            break
+            
+    while not key_path:
         key_path = input("Enter the absolute path to your serviceAccountKey.json: ").strip()
         key_path = key_path.strip("'\"")
         
@@ -68,6 +82,7 @@ def main():
                     print(f"Using: {key_path}")
                     break
         print(f"Error: Valid JSON key file not found.")
+        key_path = None # Reset if validation failed
 
     # 2. Initialize Firebase
     try:

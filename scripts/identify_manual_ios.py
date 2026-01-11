@@ -14,6 +14,7 @@ def initialize_firebase():
     if not os.path.exists(key_path):
         # Check parent directories
         possible_paths = [
+            "C:/Users/itses/CodeVault/Projects/Keys/IITP App/service-account.json",
             "serviceAccountKey.json",
             "../serviceAccountKey.json",
             "scripts/serviceAccountKey.json"
