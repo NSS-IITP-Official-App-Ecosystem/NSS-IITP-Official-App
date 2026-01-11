@@ -46,6 +46,7 @@ import com.phad.chatapp.ui.components.DimmedHomeBackground
 import com.phad.chatapp.ui.components.GradientHeader
 import com.phad.chatapp.utils.SessionManager
 import com.phad.chatapp.utils.LocationPermissionHelper
+import com.phad.chatapp.utils.CloneDetectionUtils
 import com.phad.chatapp.viewmodels.QRAttendanceViewModel
 import com.phad.chatapp.viewmodels.QRAttendanceViewModelFactory
 import com.phad.chatapp.viewmodels.ScanResult
@@ -97,6 +98,10 @@ class NssQRScanFragment : Fragment() {
     
     // State for showing location dialog
     private var showLocationDialog by mutableStateOf(false)
+    
+    // State for showing clone detection dialog
+    private var showCloneDetectionDialog by mutableStateOf(false)
+    private var cloneDetectionResult: CloneDetectionUtils.CloneDetectionResult? = null
 
     
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -141,6 +146,17 @@ class NssQRScanFragment : Fragment() {
         composeOverlay.setContent {
             val uiState by viewModel.studentUiState.collectAsState()
 
+            // Show clone detection dialog if detected
+            if (showCloneDetectionDialog && cloneDetectionResult != null) {
+                CloneDetectionBlockDialog(
+                    detectionResult = cloneDetectionResult!!,
+                    onDismiss = {
+                        showCloneDetectionDialog = false
+                        parentFragmentManager.popBackStack()
+                    }
+                )
+            }
+
             // Show location dialog if needed
             if (showLocationDialog) {
                 LocationEnableDialog(
@@ -174,6 +190,21 @@ class NssQRScanFragment : Fragment() {
     
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+
+        // Clone detection - check if app is running in cloned environment
+        Log.d(TAG, "Performing clone detection check...")
+        CloneDetectionUtils.logDetectionDetails(requireContext())
+        val detectionResult = CloneDetectionUtils.getCloneDetectionDetails(requireContext())
+        
+        if (detectionResult.isCloned) {
+            Log.w(TAG, "Clone app detected: ${detectionResult.reason}")
+            cloneDetectionResult = detectionResult
+            showCloneDetectionDialog = true
+            // Don't proceed with camera/permissions if cloned
+            return
+        }
+        
+        Log.d(TAG, "Clone detection passed - app is running in normal environment")
 
         // Auto-check and request permissions if needed
         requestPermissionsIfNeeded()
@@ -757,5 +788,62 @@ fun LocationEnableDialog(
                 Text("Cancel", color = Color(0xFF757575))
             }
         }
+    )
+}
+
+@Composable
+fun CloneDetectionBlockDialog(
+    detectionResult: CloneDetectionUtils.CloneDetectionResult,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = Icons.Default.Error,
+                contentDescription = "Clone App Detected",
+                tint = Color(0xFFE53935),
+                modifier = Modifier.size(56.dp)
+            )
+        },
+        title = {
+            Text(
+                text = "Cloned App Detected",
+                fontWeight = FontWeight.Bold,
+                fontSize = 22.sp,
+                color = Color(0xFFE53935)
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "Attendance marking is not allowed in cloned apps. Please use the official app installed from Play Store.",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFF4B4B4B),
+                    textAlign = TextAlign.Center
+                )
+
+//                Text(
+//                    text = "Please use the official app installed from Play Store.",
+//                    fontSize = 14.sp,
+//                    color = Color(0xFF757575),
+//                    lineHeight = 20.sp,
+//                    textAlign = TextAlign.Center
+//                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF2196F3)
+                )
+            ) {
+                Text("Exit", fontSize = 16.sp)
+            }
+        },
+        containerColor = Color.White,
+        shape = RoundedCornerShape(16.dp)
     )
 }
