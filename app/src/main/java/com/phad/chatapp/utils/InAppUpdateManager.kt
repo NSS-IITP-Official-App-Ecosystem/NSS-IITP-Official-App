@@ -29,8 +29,8 @@ object InAppUpdateManager {
          * For testing, we use a small interval (0 or 3600).
          */
         val configSettings = remoteConfigSettings {
-            // Set to 12 hours for production to avoid throttling
-            minimumFetchIntervalInSeconds = 43200 
+            // Set to 1 hour (3600s) to allow quicker updates for ~450 users
+            minimumFetchIntervalInSeconds = 3600 
         }
         remoteConfig.setConfigSettingsAsync(configSettings)
 

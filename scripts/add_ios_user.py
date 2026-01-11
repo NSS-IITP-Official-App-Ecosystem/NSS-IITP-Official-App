@@ -8,7 +8,21 @@ def main():
     print("--- Add iOS User to Allowlist ---")
     
     # 1. Get Service Account Key Path
-    while True:
+    # Common locations to check
+    possible_paths = [
+        "C:/Users/itses/CodeVault/Projects/Keys/IITP App/service-account.json",
+        "serviceAccountKey.json",
+        "scripts/serviceAccountKey.json",
+    ]
+    
+    key_path = None
+    for path in possible_paths:
+        if os.path.exists(path):
+            key_path = os.path.abspath(path)
+            print(f"Found service account key at: {key_path}")
+            break
+            
+    while not key_path:
         key_path = input("Enter the absolute path to your serviceAccountKey.json: ").strip()
         # Remove quotes if user dragged and dropped file
         key_path = key_path.strip("'\"")
@@ -18,6 +32,7 @@ def main():
             json_files = [f for f in os.listdir(key_path) if f.endswith('.json')]
             if not json_files:
                 print(f"Error: No .json files found in directory '{key_path}'. Please provide the full path to the file.")
+                key_path = None
                 continue
             
             if 'serviceAccountKey.json' in json_files:
@@ -33,12 +48,14 @@ def main():
             else:
                 print(f"Directory contains multiple JSON files: {json_files}")
                 print("Please append the correct filename to your path.")
+                key_path = None
                 continue
 
         if os.path.exists(key_path):
             break
         else:
             print(f"Error: File not found at {key_path}. Please try again.")
+            key_path = None
 
     # 2. Initialize Firebase
     try:
