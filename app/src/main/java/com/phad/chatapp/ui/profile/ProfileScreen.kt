@@ -45,6 +45,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -178,158 +179,173 @@ fun ProfileScreen(
         // Ensure we have enough white background to cover the entire area above the nav
         val whiteBackgroundHeight = effectiveBottomSpace + 80.dp // extra space for content safety
         
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .nestedScroll(pullRefreshState.nestedScrollConnection)
+        val scrollState = rememberScrollState()
+
+        // Disable overscroll effect
+        @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+        androidx.compose.runtime.CompositionLocalProvider(
+            androidx.compose.foundation.LocalOverscrollConfiguration provides null
         ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-        ) {
-            // Top Section with background images and stats
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(480.dp)
+                    .fillMaxSize()
+                    .nestedScroll(pullRefreshState.nestedScrollConnection)
             ) {
-                Image(
-                    painter = painterResource(id = R.drawable.vector271),
-                    contentDescription = null,
-                    contentScale = ContentScale.FillBounds,
-                    modifier = Modifier.fillMaxSize()
-                )
-                Image(
-                    painter = painterResource(id = R.drawable.vector272),
-                    contentDescription = null,
-                    contentScale = ContentScale.FillBounds,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(start = 50.dp, end = 50.dp, top = 20.dp, bottom = 100.dp)
-                        .clip(RoundedCornerShape(150.dp))
-                )
-
-                // Header with logo and icons
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 24.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Image(
-                        painter = painterResource(
-                            id = if (currentInterface == "NSS") R.drawable.nss_logo_main else R.drawable.logo
-                        ),
-                        contentDescription = if (currentInterface == "NSS") "NSS Logo" else "Teaching Wing Logo",
-                        colorFilter = if (currentInterface == "NSS") null else null,
-                        modifier = Modifier.size(48.dp),
-                        contentScale = ContentScale.Fit
-                    )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        // Standalone Switch User icon (to the left of menu)
-                        if (teachingWing) {
-                            IconButton(
-                                onClick = onSwitchInterfaceClick,
-                                modifier = Modifier.size(40.dp)
-                            ) {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_group),
-                                    contentDescription = "Switch User",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.size(8.dp))
-                        }
-                        // Hamburger menu button (single button for all options)
-                        Box {
-                            ProfileMenuButton(
-                                onMenuClick = { showMenu = true },
-                                modifier = Modifier.size(40.dp)
-                            )
-                            
-                            // Profile menu dropdown
-                            ProfileMenu(
-                                expanded = showMenu,
-                                onDismiss = { showMenu = false },
-                                onSwitchUser = onSwitchInterfaceClick,
-                                onRefresh = onRefreshClick,
-                                onExportAttendance = onExportAttendanceClick,
-                                onEventHistory = onEventHistoryClick,
-                                onFaqs = onFaqsClick,
-                                onLogout = { showLogoutDialog = true },
-                                isTeachingWing = teachingWing,
-                                isAdmin = isAdmin,
-                                currentInterface = currentInterface
-                            )
-                        }
-                    }
-                }
-
-                // Profile Image (centered between header and content) - For both Admin and Student users
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
+            ) {
+                // Top Section with background images and stats
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(
-                            top = 150.dp,
-                            bottom = 30.dp
-                        ),
-                    contentAlignment = Alignment.Center
+                        .height(480.dp)
+                        .graphicsLayer {
+                            translationY = scrollState.value.toFloat()
+                        }
                 ) {
-                    // White background circle for better contrast
-                    Box(
+                    Image(
+                        painter = painterResource(id = R.drawable.vector271),
+                        contentDescription = null,
+                        contentScale = ContentScale.FillBounds,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    Image(
+                        painter = painterResource(id = R.drawable.vector272),
+                        contentDescription = null,
+                        contentScale = ContentScale.FillBounds,
                         modifier = Modifier
-                            .size(if (!state.isStudent) 160.dp else 140.dp)
-                            .clip(CircleShape)
-                            .background(Color.White)
-                            .border(4.dp, Color(0xFFFFCC00), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProfileImage(
-                            imageUrl = state.profileImageUrl,
-                            size = if (!state.isStudent) 150.dp else 130.dp,
-                            borderColor = Color(0xFFFFCC00)
-                        )
-                    }
-                }
+                            .fillMaxSize()
+                            .padding(start = 50.dp, end = 50.dp, top = 20.dp, bottom = 100.dp)
+                            .clip(RoundedCornerShape(150.dp))
+                    )
 
-                // Stats Section - Only show for Students, not for Admin
-                if (state.isStudent) {
+                    // Header with logo and icons
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = 40.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
+                            .padding(horizontal = 24.dp, vertical = 24.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        ClickableStatItem(
-                            label = "Hours\nSem-1", 
-                            value = "${state.sem1Hours.split("/")[0]}", 
-                            color = onBackgroundColor,
-                            onClick = onSem1HoursClick
+                        Image(
+                            painter = painterResource(
+                                id = if (currentInterface == "NSS") R.drawable.nss_logo_main else R.drawable.logo
+                            ),
+                            contentDescription = if (currentInterface == "NSS") "NSS Logo" else "Teaching Wing Logo",
+                            colorFilter = if (currentInterface == "NSS") null else null,
+                            modifier = Modifier.size(48.dp),
+                            contentScale = ContentScale.Fit
                         )
-                        StatItem(label = "Events", value = state.eventsAttended, size = 48.sp, color = onBackgroundColor)
-                        ClickableStatItem(
-                            label = "Hours\nSem-2", 
-                            value = "${state.sem2Hours.split("/")[0]}", 
-                            color = onBackgroundColor,
-                            onClick = onSem2HoursClick
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Standalone Switch User icon (to the left of menu)
+                            if (teachingWing) {
+                                IconButton(
+                                    onClick = onSwitchInterfaceClick,
+                                    modifier = Modifier.size(40.dp)
+                                ) {
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.ic_group),
+                                        contentDescription = "Switch User",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.size(8.dp))
+                            }
+                            // Hamburger menu button (single button for all options)
+                            Box {
+                                ProfileMenuButton(
+                                    onMenuClick = { showMenu = true },
+                                    modifier = Modifier.size(40.dp)
+                                )
+                                
+                                // Profile menu dropdown
+                                ProfileMenu(
+                                    expanded = showMenu,
+                                    onDismiss = { showMenu = false },
+                                    onSwitchUser = onSwitchInterfaceClick,
+                                    onRefresh = onRefreshClick,
+                                    onExportAttendance = onExportAttendanceClick,
+                                    onEventHistory = onEventHistoryClick,
+                                    onFaqs = onFaqsClick,
+                                    onLogout = { showLogoutDialog = true },
+                                    isTeachingWing = teachingWing,
+                                    isAdmin = isAdmin,
+                                    currentInterface = currentInterface
+                                )
+                            }
+                        }
+                    }
+
+                    // Profile Image (centered between header and content) - For both Admin and Student users
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                top = 150.dp,
+                                bottom = 30.dp
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        // White background circle for better contrast
+                        Box(
+                            modifier = Modifier
+                                .size(if (!state.isStudent) 160.dp else 140.dp)
+                                .clip(CircleShape)
+                                .background(Color.White)
+                                .border(4.dp, Color(0xFFFFCC00), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProfileImage(
+                                imageUrl = state.profileImageUrl,
+                                size = if (!state.isStudent) 150.dp else 130.dp,
+                                borderColor = Color(0xFFFFCC00)
+                            )
+                        }
+                    }
+
+                    // Stats Section - Only show for Students, not for Admin
+                    if (state.isStudent) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = 40.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            ClickableStatItem(
+                                label = "Hours\nSem-1", 
+                                value = "${state.sem1Hours.split("/")[0]}", 
+                                color = onBackgroundColor,
+                                onClick = onSem1HoursClick
+                            )
+                            StatItem(label = "Events", value = state.eventsAttended, size = 48.sp, color = onBackgroundColor)
+                            ClickableStatItem(
+                                label = "Hours\nSem-2", 
+                                value = "${state.sem2Hours.split("/")[0]}", 
+                                color = onBackgroundColor,
+                                onClick = onSem2HoursClick
+                            )
+                        }
                     }
                 }
-            }
 
-            // Bottom Section with profile details and logout - ROBUST LAYOUT
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    //.weight(1f) // Removed weight to allow scrolling in parent Column
-                    .clip(RoundedCornerShape(topStart = 40.dp, topEnd = 40.dp))
-                    .background(surfaceColor)
-            ) {
+                // Bottom Section with profile details and logout - ROBUST LAYOUT
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        //.weight(1f) // Removed weight to allow scrolling in parent Column
+                        .clip(RoundedCornerShape(topStart = 40.dp, topEnd = 40.dp))
+                        .background(surfaceColor)
+                        // Add touch consumer to prevent click-through to buttons behind
+                        .clickable(
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                            indication = null
+                        ) {}
+                ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -426,6 +442,7 @@ fun ProfileScreen(
                 contentColor = Color(0xFF2196F3)
             )
         }
+    }
     }
     
     // Logout confirmation dialog
