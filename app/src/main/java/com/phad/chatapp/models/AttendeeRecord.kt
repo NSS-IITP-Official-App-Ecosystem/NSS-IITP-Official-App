@@ -9,10 +9,10 @@ import com.google.firebase.firestore.GeoPoint
  * Data class representing admin details who generated the QR code
  */
 data class ScannedFromAdmin(
-    @PropertyName("admin_roll_number")
+    @PropertyName("adminRollNumber")
     var adminRollNumber: String = "",
 
-    @PropertyName("admin_name")
+    @PropertyName("adminName")
     var adminName: String = ""
 ) {
     // Empty constructor for Firestore
@@ -23,25 +23,25 @@ data class ScannedFromAdmin(
  * Data model representing an individual attendee record in the consolidated NSS_Events_Attendence collection
  */
 data class AttendeeRecord(
-    @PropertyName("roll_number")
+    @PropertyName("rollNumber")
     var rollNumber: String = "",
 
     @PropertyName("name")
     var name: String = "",
 
-    @PropertyName("scan_timestamp")
+    @PropertyName("scanTimestamp")
     var scanTimestamp: Timestamp = Timestamp.now(),
 
-    @PropertyName("scanned_from")
+    @PropertyName("scannedFrom")
     var scannedFrom: ScannedFromAdmin = ScannedFromAdmin(),
 
-    @PropertyName("device_id")
+    @PropertyName("deviceId")
     var deviceId: String = "", // Unique device identifier for duplicate prevention
 
-    @PropertyName("scan_location")
+    @PropertyName("scanLocation")
     var scanLocation: GeoPoint? = null, // GPS location where QR code was scanned (null for manual entries)
 
-    @PropertyName("is_manual_entry")
+    @PropertyName("manualEntry")
     var isManualEntry: Boolean = false // True for manual add/delete, false for QR scan
 ) {
     // Empty constructor for Firestore

@@ -105,6 +105,19 @@ class ProfileFragment : Fragment() {
                         val intent = Intent(requireContext(), com.phad.chatapp.features.home.faqs.ui.FaqActivity::class.java)
                         startActivity(intent)
                     },
+                    onChangeSubjectsClick = {
+                        // Navigate to scheduling fragment with arguments
+                        val bundle = android.os.Bundle().apply {
+                            putString("startDestination", "manageSubjects")
+                        }
+                        findNavController().navigate(R.id.schedulingFragment, bundle)
+                    },
+                    onSubjectPreferenceClick = {
+                        val bundle = android.os.Bundle().apply {
+                            putString("startDestination", "subjectPreference")
+                        }
+                        findNavController().navigate(R.id.schedulingFragment, bundle)
+                    },
                     currentInterface = "Teaching Wing",
                     teachingWing = teachingWing
                 )
@@ -285,6 +298,8 @@ class ProfileFragment : Fragment() {
                     Log.e(TAG, "Error refreshing student attendance statistics", e)
                     _uiState.update { it.copy(isRefreshing = false) } // Ensure false on error
                 }
+                // Refresh subject preferences
+                loadSubjectPreferences()
             }
         } else { // Admin or other
             lifecycleScope.launch {
@@ -349,6 +364,9 @@ class ProfileFragment : Fragment() {
         // Load attendance statistics
         Log.d(TAG, "Calling loadStatistics with rollNumber: $rollNumber")
         loadStatistics(rollNumber)
+        
+        // Load Subject Preferences
+        loadSubjectPreferences()
         
         Log.d(TAG, "=== PROFILE FROM SESSION LOADING COMPLETE ===")
     }
@@ -448,5 +466,29 @@ class ProfileFragment : Fragment() {
             }
         }
         Log.d(TAG, "=== LOADING STATISTICS COMPLETE ===")
+    }
+    private fun loadSubjectPreferences() {
+        val rollNumber = sessionManager.fetchUserId()
+        lifecycleScope.launch {
+            try {
+                // 1. Fetch User Preferences (IDs - which are Names now, but code is robust)
+                val userDoc = FirebaseFirestore.getInstance()
+                    .collection("ttwStudents")
+                    .document(rollNumber)
+                    .get()
+                    .await()
+                
+                val prefIds = userDoc.get("subjectPreferences") as? List<String> ?: emptyList()
+                
+                if (prefIds.isNotEmpty()) {
+                    // Update directly with names (ID=Name)
+                    _uiState.update { it.copy(subjectPreferences = prefIds) }
+                } else {
+                     _uiState.update { it.copy(subjectPreferences = emptyList()) }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading subject preferences", e)
+            }
+        }
     }
 } 
