@@ -616,40 +616,8 @@ private suspend fun deleteTeachingSlot(slotId: String) {
     val db = FirebaseFirestore.getInstance()
 
     try {
-        // First, get the teaching slot document to retrieve the preset name
-        Log.d(TAG, "Fetching teaching slot document to get preset name: $slotId")
-
-        val teachingSlotDoc = db.collection(TEACHING_SLOT_PRESETS_COLLECTION)
-            .document(slotId)
-            .get()
-            .await()
-
-        if (teachingSlotDoc.exists()) {
-            val presetName = teachingSlotDoc.getString("presetName")
-
-            if (!presetName.isNullOrEmpty()) {
-                // Delete volunteer availability data using preset name as document ID
-                Log.d(TAG, "Deleting volunteer availability data for preset: $presetName")
-
-                val availabilityDocRef = db.collection(VOLUNTEER_AVAILABILITY_COLLECTION)
-                    .document(presetName)
-
-                // Check if availability document exists
-                val availabilityDoc = availabilityDocRef.get().await()
-                if (availabilityDoc.exists()) {
-                    availabilityDocRef.delete().await()
-                    Log.d(TAG, "Successfully deleted volunteer availability data for preset: $presetName")
-                } else {
-                    Log.d(TAG, "No volunteer availability data found for preset: $presetName")
-                }
-            } else {
-                Log.w(TAG, "Teaching slot document has no presetName field: $slotId")
-            }
-        } else {
-            Log.w(TAG, "Teaching slot document not found: $slotId")
-        }
-
-        // Then delete the teaching slot preset document
+        // Just delete the teaching slot preset document
+        // This will automatically remove any availability data stored within it as well
         db.collection(TEACHING_SLOT_PRESETS_COLLECTION)
             .document(slotId)
             .delete()
@@ -657,7 +625,7 @@ private suspend fun deleteTeachingSlot(slotId: String) {
 
         Log.d(TAG, "Teaching slot preset successfully deleted: $slotId")
     } catch (e: Exception) {
-        Log.e(TAG, "Error deleting teaching slot preset and associated data: $slotId", e)
+        Log.e(TAG, "Error deleting teaching slot preset: $slotId", e)
         throw e
     }
 }

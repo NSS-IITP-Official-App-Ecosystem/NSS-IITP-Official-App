@@ -141,47 +141,18 @@ class ScheduleGenerationViewModel : ViewModel() {
                 val schools = mutableListOf<School>()
                 val allSlots = mutableListOf<Slot>()
 
-                for (vaId in vaIds) {
-                    // First load the teaching slot preset with the same name
-                    val availabilityDoc = FirebaseFirestore.getInstance()
-                        .collection(AVAILABILITY_COLLECTION)
-                        .document(vaId)
-                        .get()
-                        .await()
+                for (presetId in vaIds) {
+                    // Load the school directly from the teaching slot preset
+                    // The preset ID passed here (from ScheduleGenerationScreen) is the teaching slot preset ID
+                    val school = loadSchool(presetId)
+                    if (school != null) {
+                        schools.add(school)
 
-                    if (availabilityDoc.exists()) {
-                        val presetName = availabilityDoc.getString("presetName") ?: "Unknown"
-
-                        // Find teaching slot preset with same name
-                        val teachingSlotPresets = FirebaseFirestore.getInstance()
-                            .collection(TEACHING_SLOT_PRESETS_COLLECTION)
-                            .whereEqualTo("presetName", presetName)
-                            .get()
-                            .await()
-
-                        val teachingSlotPresetDoc = teachingSlotPresets.documents.firstOrNull()
-
-                        if (teachingSlotPresetDoc != null) {
-                            // Create school using teaching slot preset for structure
-                            val school = loadSchoolFromPresets(teachingSlotPresetDoc.id, vaId)
-                            if (school != null) {
-                                schools.add(school)
-
-                                // Extract slots from school
-                                val schoolSlots = extractSlotsFromSchool(school)
-                                allSlots.addAll(schoolSlots)
-                            }
-                        } else {
-                            // Fall back to just using the availability preset
-                            val school = loadAvailabilityPreset(vaId)
-                            if (school != null) {
-                                schools.add(school)
-
-                                // Extract slots from school
-                                val schoolSlots = extractSlotsFromSchool(school)
-                                allSlots.addAll(schoolSlots)
-                            }
-                        }
+                        // Extract slots from school
+                        val schoolSlots = extractSlotsFromSchool(school)
+                        allSlots.addAll(schoolSlots)
+                    } else {
+                        Log.e(TAG, "❌ Failed to load school for preset ID: $presetId")
                     }
                 }
 
@@ -201,27 +172,37 @@ class ScheduleGenerationViewModel : ViewModel() {
     }
 
     /**
-     * Load a school using both teaching slot preset and volunteer availability
+     * Load a school from a single teaching slot preset which now contains availability data
      */
-    private suspend fun loadSchoolFromPresets(teachingSlotPresetId: String, availabilityPresetId: String): School? {
+    private suspend fun loadSchool(presetId: String): School? {
         try {
             val db = FirebaseFirestore.getInstance()
-            val teachingSlotDoc = db.collection(TEACHING_SLOT_PRESETS_COLLECTION).document(teachingSlotPresetId).get().await()
-            val availabilityDoc = db.collection(AVAILABILITY_COLLECTION).document(availabilityPresetId).get().await()
+            val doc = db.collection(TEACHING_SLOT_PRESETS_COLLECTION).document(presetId).get().await()
 
-            if (!teachingSlotDoc.exists() || !availabilityDoc.exists()) {
+            if (!doc.exists()) {
+                Log.e(TAG, "❌ Preset document $presetId not found")
                 return null
             }
 
-            val presetName = teachingSlotDoc.getString("presetName") ?: "Unknown"
-            val columnNames = teachingSlotDoc.get("columnNames") as? List<String> ?: emptyList()
-            val scheduleData = teachingSlotDoc.get("schedule") as? List<Map<String, Any>> ?: emptyList()
+            val presetName = doc.getString("presetName") ?: "Unknown"
+            val rawColumns = doc.get("columnNames") as? List<*> ?: emptyList<Any>()
+            val columnNames = mutableListOf<String>()
+            
+            // Handle both String list and Map list (legacy/new format support)
+            rawColumns.forEach { item ->
+                when (item) {
+                    is String -> columnNames.add(item)
+                    is Map<*, *> -> columnNames.add(item["classTime"] as? String ?: "")
+                }
+            }
+            
+            val scheduleData = doc.get("schedule") as? List<Map<String, Any>> ?: emptyList()
 
-            // Get availability data
-            val availabilityMap = availabilityDoc.get("availability") as? Map<String, Map<String, String>> ?: emptyMap()
+            // Get availability data from the same document
+            val availabilityMap = doc.get("availability") as? Map<String, Map<String, String>> ?: emptyMap()
 
-            Log.d(TAG, "📋 Loading school from preset - Teaching slot: $teachingSlotPresetId, Availability: $availabilityPresetId")
-            Log.d(TAG, "📋 Availability map: $availabilityMap")
+            Log.d(TAG, "📋 Loading school from preset: $presetId ($presetName)")
+            Log.d(TAG, "📋 Availability map size: ${availabilityMap.size}")
 
             val days = scheduleData.mapIndexed { index, dayMap ->
                 val dayName = dayMap["day"] as? String ?: "Day $index"
@@ -231,23 +212,24 @@ class ScheduleGenerationViewModel : ViewModel() {
                     if (isActive) {
                         val timeLabel = if (slotIndex < columnNames.size) columnNames[slotIndex] else "Slot $slotIndex"
 
-                        // Get available groups from availability preset
+                        // Get available groups from the availability map
                         val dayAvailability = availabilityMap[dayName] ?: emptyMap()
                         val groupsString = dayAvailability[slotIndex.toString()] ?: ""
 
-                        // Process groups string, handling potential format differences
+                        // Process groups string
                         val groups = if (groupsString.isNotEmpty()) {
+                            // Using expandGroupRanges directly here instead of just split
+                            // Actually the existing code used split, and then calculation used expandAllGroupRanges
+                            // Let's keep consistency. The string is stored as "1-5,7" or "1,2,3".
+                            // The previous code split by comma then trimmed.
                             val splitGroups = groupsString.split(",").map { it.trim() }
-                            Log.d(TAG, "🔢 Raw groups from string: $splitGroups")
                             splitGroups
                         } else emptyList()
-
-                        Log.d(TAG, "📌 Slot $dayName - $timeLabel (index $slotIndex) has groups: $groups")
 
                         Slot(
                             slotIndex = slotIndex,
                             dayIndex = index,
-                            schoolId = availabilityPresetId,
+                            schoolId = presetId,
                             schoolName = presetName,
                             dayName = dayName,
                             timeLabel = timeLabel,
@@ -263,12 +245,12 @@ class ScheduleGenerationViewModel : ViewModel() {
             }
 
             return School(
-                id = availabilityPresetId,
+                id = presetId,
                 name = presetName,
                 days = days
             )
         } catch (e: Exception) {
-            Log.e(TAG, "Error loading school from presets", e)
+            Log.e(TAG, "Error loading school from preset: $presetId", e)
             return null
         }
     }
@@ -446,59 +428,7 @@ class ScheduleGenerationViewModel : ViewModel() {
         return volunteers
     }
 
-    /**
-     * Load an availability preset
-     */
-    private suspend fun loadAvailabilityPreset(presetId: String): School? {
-        val db = FirebaseFirestore.getInstance()
-        val presetDoc = db.collection(AVAILABILITY_COLLECTION).document(presetId).get().await()
 
-        if (!presetDoc.exists()) {
-            return null
-        }
-
-        val presetName = presetDoc.getString("presetName") ?: "Unknown"
-        val columnNames = presetDoc.get("columnNames") as? List<String> ?: emptyList()
-        val scheduleData = presetDoc.get("schedule") as? List<Map<String, Any>> ?: emptyList()
-
-        val days = scheduleData.mapIndexed { index, dayMap ->
-            val dayName = dayMap["day"] as? String ?: "Day $index"
-            val slots = dayMap["slots"] as? List<Boolean> ?: emptyList()
-
-            // Get the slot values (which groups are available)
-            val availabilityMap = presetDoc.get("availability") as? Map<String, Map<String, String>> ?: emptyMap()
-            val dayAvailability = availabilityMap[dayName] ?: emptyMap()
-
-            val daySlots = slots.mapIndexedNotNull { slotIndex, isActive ->
-                if (isActive) {
-                    val timeLabel = if (slotIndex < columnNames.size) columnNames[slotIndex] else "Slot $slotIndex"
-                    val groupsString = dayAvailability[slotIndex.toString()] ?: ""
-                    val groups = if (groupsString.isNotEmpty()) groupsString.split(",").map { it.trim() } else emptyList()
-
-                    Slot(
-                        slotIndex = slotIndex,
-                        dayIndex = index,
-                        schoolId = presetId,
-                        schoolName = presetName,
-                        dayName = dayName,
-                        timeLabel = timeLabel,
-                        availableGroups = groups
-                    )
-                } else null
-            }
-
-            Day(
-                name = dayName,
-                slots = daySlots
-            )
-        }
-
-        return School(
-            id = presetId,
-            name = presetName,
-            days = days
-        )
-    }
 
     /**
      * Extract slots from a school for easier access

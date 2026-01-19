@@ -80,17 +80,12 @@ suspend fun deleteAvailabilityData(
 ) {
     try {
         val db = FirebaseFirestore.getInstance()
-        val docRef = db.collection(VOLUNTEER_AVAILABILITY_COLLECTION).document(presetName)
+        val docRef = db.collection(TEACHING_SLOT_PRESETS_COLLECTION).document(presetId)
 
-        // Check if document exists
-        val docSnapshot = docRef.get().await()
-        if (docSnapshot.exists()) {
-            // Delete the document
-            docRef.delete().await()
-            onSuccess(presetId, presetName)
-        } else {
-            onError("No availability data found for $presetName")
-        }
+        // Delete the availability field using FieldValue.delete()
+        docRef.update("availability", com.google.firebase.firestore.FieldValue.delete()).await()
+        onSuccess(presetId, presetName)
+
     } catch (e: Exception) {
         Log.e(TAG, "Error deleting availability data", e)
         onError("Error: ${e.message}")
@@ -540,52 +535,36 @@ private fun expandGroupRanges(groupString: String): List<String> {
     return expandedGroups
 }
 
-// Helper function to calculate group frequencies from availability data
-suspend fun calculateGroupFrequencies(presetName: String): Map<String, Int> {
-    return try {
-        val db = FirebaseFirestore.getInstance()
-        val availabilityDoc = db.collection(VOLUNTEER_AVAILABILITY_COLLECTION)
-            .document(presetName)
-            .get()
-            .await()
+// Helper function to calculate group frequencies from availability map
+fun calculateGroupFrequenciesFromMap(availabilityMap: Map<String, Map<String, String>>): Map<String, Int> {
+    val groupFrequencies = mutableMapOf<String, Int>()
 
-        val groupFrequencies = mutableMapOf<String, Int>()
+    try {
+        // Iterate through each day's availability
+        for ((_, dayAvailability) in availabilityMap) {
+            // Iterate through each slot in the day
+            for ((_, groupsString) in dayAvailability) {
+                if (groupsString.isNotEmpty()) {
+                    // Split the groups string and process each entry
+                    val groupEntries = groupsString.split(",").map { it.trim() }.filter { it.isNotEmpty() }
 
-        if (availabilityDoc.exists()) {
-            try {
-                // Get the availability map from the document
-                val availabilityMap = availabilityDoc.get("availability") as? Map<String, Map<String, String>> ?: emptyMap()
-
-                // Iterate through each day's availability
-                for ((dayName, dayAvailability) in availabilityMap) {
-                    // Iterate through each slot in the day
-                    for ((slotIndex, groupsString) in dayAvailability) {
-                        if (groupsString.isNotEmpty()) {
-                            // Split the groups string and process each entry
-                            val groupEntries = groupsString.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-
-                            for (groupEntry in groupEntries) {
-                                // Expand ranges and count each individual group
-                                val expandedGroups = expandGroupRanges(groupEntry)
-                                for (group in expandedGroups) {
-                                    if (group.isNotEmpty()) {
-                                        groupFrequencies[group] = (groupFrequencies[group] ?: 0) + 1
-                                    }
-                                }
+                    for (groupEntry in groupEntries) {
+                        // Expand ranges and count each individual group
+                        val expandedGroups = expandGroupRanges(groupEntry)
+                        for (group in expandedGroups) {
+                            if (group.isNotEmpty()) {
+                                groupFrequencies[group] = (groupFrequencies[group] ?: 0) + 1
                             }
                         }
                     }
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error processing availability document: ${availabilityDoc.id}", e)
             }
         }
-
-        groupFrequencies
     } catch (e: Exception) {
-        Log.e(TAG, "Error calculating group frequencies for preset $presetName", e)
-        emptyMap()
+        Log.e(TAG, "Error calculating group frequencies", e)
     }
+
+    return groupFrequencies
 }
 
 // Function to fetch teaching slot presets from Firestore
@@ -613,17 +592,13 @@ suspend fun fetchTeachingSlotsWithAvailabilityData(
                 // Get schedule data for day count
                 val scheduleData = document.get("schedule") as? List<Map<String, Any>> ?: emptyList()
 
-                // Check if there's availability data for this preset using preset name as document ID
-                val availabilityDoc = db.collection(VOLUNTEER_AVAILABILITY_COLLECTION)
-                    .document(name)
-                    .get()
-                    .await()
-
-                val hasAvailabilityData = availabilityDoc.exists()
+                // Check for availability data directly in the document
+                val availabilityMap = document.get("availability") as? Map<String, Map<String, String>>
+                val hasAvailabilityData = availabilityMap != null && availabilityMap.isNotEmpty()
 
                 // Calculate group frequencies if availability data exists
-                val groupFrequencies = if (hasAvailabilityData) {
-                    calculateGroupFrequencies(name)
+                val groupFrequencies = if (hasAvailabilityData && availabilityMap != null) {
+                    calculateGroupFrequenciesFromMap(availabilityMap)
                 } else {
                     emptyMap()
                 }

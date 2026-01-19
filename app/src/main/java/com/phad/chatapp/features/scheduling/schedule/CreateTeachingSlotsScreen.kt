@@ -22,6 +22,9 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -214,6 +217,8 @@ fun CreateTeachingSlotsScreen(
     var subjectsList by remember { mutableStateOf<List<SubjectAllocation>>(emptyList()) }
     var availableSubjects by remember { mutableStateOf<List<String>>(emptyList()) }
     var showSubjectDialog by remember { mutableStateOf(false) }
+
+    var showCopyDialog by remember { mutableStateOf(false) }
 
     val daysOfWeek = listOf("Mon", "Tue", "Wed", "Thu", "Fri")
 
@@ -764,7 +769,32 @@ fun CreateTeachingSlotsScreen(
                     hostState = snackbarHostState,
                     modifier = Modifier.padding(bottom = 90.dp)
                 ) 
-            }
+            },
+            floatingActionButton = {
+                if (teachingSchedule.isNotEmpty()) {
+                    FloatingActionButton(
+                        onClick = {
+                            if (validateSchedule()) {
+                                if (isEditMode && presetNameInput.isNotEmpty()) {
+                                    savePreset()
+                                } else {
+                                    showSaveDialog = true
+                                }
+                            }
+                        },
+                        containerColor = SuccessGreen,
+                        contentColor = Color.White,
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Save,
+                            contentDescription = if (isEditMode) "Save" else "Create",
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+            },
+
         ) { _ ->
             Column(
                 modifier = Modifier
@@ -800,24 +830,14 @@ fun CreateTeachingSlotsScreen(
                         modifier = Modifier.weight(1f)
                     )
 
-                    // Save button - only show when grid exists
-                    if (teachingSchedule.isNotEmpty()) {
-                        StandardButton(
-                            onClick = {
-                                if (validateSchedule()) {
-                                    if (isEditMode && presetNameInput.isNotEmpty()) {
-                                        savePreset()
-                                    } else {
-                                        showSaveDialog = true
-                                    }
-                                }
-                            }
-                        ) {
-                            Text(
-                                text = if (isEditMode) "Save" else "Create",
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
+                    // Copy Button (replaces Save/Create in top bar)
+                    StandardButton(
+                        onClick = { showCopyDialog = true }
+                    ) {
+                        Text(
+                            text = "Copy",
+                            fontWeight = FontWeight.Medium
+                        )
                     }
                 }
 
@@ -2100,7 +2120,62 @@ fun CreateTeachingSlotsScreen(
                     }
                 }
             }
-        }
+
+    // --- Copy Preset Logic ---
+    if (showCopyDialog) {
+        CopyPresetDialog(
+            onDismiss = { showCopyDialog = false },
+            onPresetSelected = { preset ->
+                // Apply preset data
+                coroutineScope.launch {
+                    try {
+                        // 1. Set Slot Count and Days
+                        slotCountInput = preset.slotCount.toString()
+                        selectedDays = preset.days.toSet()
+                        
+                        // 2. Parse Schedule Data to restore grid
+                        val newSchedule = preset.days.map { day ->
+                             val daySlots = preset.schedule.find { (it["day"] as? String) == day }
+                             val slotFlags = daySlots?.get("slots") as? List<Boolean> ?: List(preset.slotCount) { false }
+                             
+                             DaySlots(
+                                 day = day,
+                                 slots = slotFlags.map { active ->
+                                     if (active) ScreenTeachingSlot(id = java.util.UUID.randomUUID().toString()) else null
+                                 }
+                             )
+                        }
+                        teachingSchedule = newSchedule
+                        
+                        // 3. Parse Column Names (Time Info)
+                        val newTimeInfo = preset.columnNames.map {
+                             ColumnTimeInfo(
+                                 classTime = it["classTime"] as? String ?: "",
+                                 freeGroupTime = it["freeGroupTime"] as? String ?: ""
+                             )
+                        }
+                        columnTimeInfoList = newTimeInfo
+
+                        // 4. Parse Subjects
+                        val newSubjects = preset.subjects.map {
+                             SubjectAllocation(
+                                 subjectName = it["subjectName"] as? String ?: "",
+                                 classCount = (it["classCount"] as? Number)?.toInt() ?: 0
+                             )
+                        }
+                        subjectsList = newSubjects
+
+                        showCopyDialog = false
+                        snackbarHostState.showSnackbar("Preset '${preset.name}' copied successfully!")
+                    } catch (e: Exception) {
+                        Log.e("CopyPreset", "Error applying preset", e)
+                        snackbarHostState.showSnackbar("Error copying preset: ${e.localizedMessage}")
+                    }
+                }
+            }
+        )
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -2261,6 +2336,120 @@ fun DayCheckbox(
 
     
 
+
+
+// Helper Data Class for Preset Copying
+data class CopyPresetItem(
+    val id: String,
+    val name: String,
+    val days: List<String>,
+    val slotCount: Int,
+    val schedule: List<Map<String, Any>>,
+    val columnNames: List<Map<String, Any>>,
+    val subjects: List<Map<String, Any>>
+)
+
+@Composable
+fun CopyPresetDialog(
+    onDismiss: () -> Unit,
+    onPresetSelected: (CopyPresetItem) -> Unit
+) {
+    var presets by remember { mutableStateOf<List<CopyPresetItem>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    val db = FirebaseFirestore.getInstance()
+
+    LaunchedEffect(Unit) {
+        try {
+            val result = db.collection("teachingSlotPresets").get().await()
+            presets = result.documents.mapNotNull { doc ->
+                try {
+                     val scheduleData = doc.get("schedule") as? List<Map<String, Any>> ?: emptyList()
+                     val days = scheduleData.mapNotNull { it["day"] as? String }
+                     
+                     // Helper to handle both legacy (String) and map (Map) columnNames
+                     val rawColumns = doc.get("columnNames") as? List<*> ?: emptyList<Any>()
+                     val columnNames = rawColumns.map { item ->
+                        when(item) {
+                            is Map<*, *> -> item as Map<String, Any>
+                            is String -> mapOf("classTime" to item, "freeGroupTime" to "")
+                            else -> mapOf("classTime" to "", "freeGroupTime" to "")
+                        }
+                     }
+
+                     val subjects = doc.get("subjects") as? List<Map<String, Any>> ?: emptyList()
+                     
+                     CopyPresetItem(
+                         id = doc.id,
+                         name = doc.getString("presetName") ?: "Unnamed",
+                         days = days,
+                         slotCount = columnNames.size,
+                         schedule = scheduleData,
+                         columnNames = columnNames,
+                         subjects = subjects
+                     )
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            isLoading = false
+        } catch (e: Exception) {
+            isLoading = false
+        }
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 600.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = DarkSurface)
+        ) {
+            Column(modifier = Modifier.padding(24.dp)) {
+                Text(
+                    "Copy From Preset",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                if (isLoading) {
+                    Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+                         CircularProgressIndicator(color = YellowAccent)
+                    }
+                } else {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        itemsIndexed(presets) { _, preset ->
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onPresetSelected(preset) },
+                                colors = CardDefaults.cardColors(containerColor = NeutralCardSurface),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                     Text(preset.name, color = YellowAccent, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.align(Alignment.End),
+                    colors = ButtonDefaults.buttonColors(containerColor = NeutralGray)
+                ) {
+                    Text("Cancel", color = Color.White)
+                }
+            }
+        }
+    }
+}
 
 @Preview(showBackground = true, backgroundColor = 0xFF121212, widthDp = 360, heightDp = 740)
 @Composable
