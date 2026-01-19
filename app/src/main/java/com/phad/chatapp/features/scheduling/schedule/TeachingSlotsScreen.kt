@@ -63,7 +63,18 @@ data class TeachingSlotItem(
     val name: String,
     val days: List<String>,
     val slotCount: Int,
-    val columnNames: List<String> = emptyList()
+    val timeSlots: List<TimeSlotInfo> = emptyList(),
+    val subjects: List<SubjectInfo> = emptyList()
+)
+
+data class TimeSlotInfo(
+    val classTime: String,
+    val freeGroupTime: String
+)
+
+data class SubjectInfo(
+    val name: String,
+    val count: Int
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -398,7 +409,7 @@ fun TeachingSlotCard(
                 Text(
                     text = slot.name,
                     style = MaterialTheme.typography.titleMedium,
-                    color = Color.White,
+                    color = YellowAccent,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
                 )
@@ -423,115 +434,109 @@ fun TeachingSlotCard(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Days display with better stylingF
+            // Days display
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Top
             ) {
                 Text(
                     text = "Days: ",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color.LightGray,
-                    fontWeight = FontWeight.Medium
+                    color = YellowAccent, // Header Yellow
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.width(80.dp)
                 )
 
                 Text(
                     text = if (slot.days.isNotEmpty()) slot.days.joinToString(", ") else "No days selected",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (slot.days.isNotEmpty()) Color.White else Color.Gray,
+                    color = if (slot.days.isNotEmpty()) Color.White else Color.Gray, // Content White
                     fontWeight = FontWeight.Medium
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Display all slots in a row with wrapping - improved styling
-            SlotFlowRow(
-                slot = slot,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-    }
-}
-
-@Composable
-fun SlotFlowRow(slot: TeachingSlotItem, modifier: Modifier = Modifier) {
-    // Create a simple flow layout using Column and Row
-    Column(modifier = modifier) {
-        val chunkedSlots = slot.columnNames.chunked(3) // Show 3 slots per row
-
-        chunkedSlots.forEach { rowSlots ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                rowSlots.forEach { slotName ->
-                    SlotPill(
-                        slotName = slotName,
-                        modifier = Modifier.weight(1f)
+            // Times Display
+            if (slot.timeSlots.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Text(
+                        text = "Times: ",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = YellowAccent, // Header Yellow
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.width(80.dp)
                     )
-                }
 
-                // Fill remaining space if row is not complete
-                repeat(3 - rowSlots.size) {
-                    Spacer(modifier = Modifier.weight(1f))
+                    Column {
+                        slot.timeSlots.forEach { timeInfo ->
+                            Text(
+                                text = "${timeInfo.classTime}  (FG: ${timeInfo.freeGroupTime})",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White, // Content White
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(bottom = 2.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Subjects Display
+            if (slot.subjects.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Text(
+                        text = "Subjects: ",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = YellowAccent, // Header Yellow
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.width(80.dp)
+                    )
+
+                    Column {
+                        val chunkedSubjects = slot.subjects.chunked(3)
+                        chunkedSubjects.forEach { rowSubjects ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 2.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                rowSubjects.forEach { subject ->
+                                    val shortName = subject.name.take(3)
+                                    Text(
+                                        text = "$shortName : ${subject.count}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = Color.White, // Content White
+                                        fontWeight = FontWeight.Medium,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                                repeat(3 - rowSubjects.size) {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
-
-        // Show message if no slots
-        if (slot.columnNames.isEmpty()) {
-            Text(
-                text = "No time slots configured",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray,
-                modifier = Modifier.padding(8.dp)
-            )
-        }
     }
 }
 
-@Composable
-fun SlotPill(
-    slotName: String,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .height(36.dp)
-            .shadow(
-                elevation = 2.dp,
-                shape = RoundedCornerShape(18.dp)
-            )
-            .background(
-                brush = Brush.horizontalGradient(
-                    colors = listOf(
-                        YellowAccent,
-                        YellowAccent.copy(alpha = 0.8f)
-                    )
-                ),
-                shape = RoundedCornerShape(18.dp)
-            )
-            .clickable {
-                // Optional: Add haptic feedback or click action
-            },
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = slotName,
-            style = MaterialTheme.typography.bodySmall,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            color = Color.Black,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(horizontal = 8.dp)
-        )
-    }
-}
+
 
 // Function to fetch teaching slots from Firestore
 private suspend fun fetchTeachingSlots(): List<TeachingSlotItem> {
@@ -553,9 +558,33 @@ private suspend fun fetchTeachingSlots(): List<TeachingSlotItem> {
                 val scheduleData = document.get("schedule") as? List<Map<String, Any>> ?: emptyList()
                 val days = scheduleData.mapNotNull { it["day"] as? String }
 
-                // Get column names for slot count
-                val columnNames = document.get("columnNames") as? List<String> ?: emptyList()
-                val slotCount = columnNames.size
+                // Extract time slots
+                val rawColumns = document.get("columnNames") as? List<*> ?: emptyList<Any>()
+                val timeSlots = rawColumns.mapNotNull { item ->
+                     when (item) {
+                        is Map<*, *> -> {
+                            val c = item["classTime"] as? String ?: ""
+                            val f = item["freeGroupTime"] as? String ?: ""
+                            TimeSlotInfo(c, f)
+                        }
+                        is String -> TimeSlotInfo(item, "N/A") // Legacy support
+                        else -> null
+                     }
+                }
+                
+                // Extract subjects
+                val subjectsData = document.get("subjects") as? List<Map<String, Any>> ?: emptyList()
+                val subjects = subjectsData.mapNotNull {
+                    val subName = it["subjectName"] as? String
+                    // Handle Number type safely (Firestore numbers can be Long)
+                    val count = (it["classCount"] as? Number)?.toInt()
+                    
+                    if (subName != null && count != null) {
+                        SubjectInfo(subName, count)
+                    } else null
+                }
+
+                val slotCount = timeSlots.size
 
                 slotsList.add(
                     TeachingSlotItem(
@@ -563,7 +592,8 @@ private suspend fun fetchTeachingSlots(): List<TeachingSlotItem> {
                         name = name,
                         days = days,
                         slotCount = slotCount,
-                        columnNames = columnNames
+                        timeSlots = timeSlots,
+                        subjects = subjects
                     )
                 )
             } catch (e: Exception) {
@@ -571,7 +601,7 @@ private suspend fun fetchTeachingSlots(): List<TeachingSlotItem> {
             }
         }
 
-        // Sort naturally by preset name (handles numbers correctly: AM 9B before AM 10G)
+        // Sort naturally by preset name
         slotsList.sortWith(compareBy { naturalSortKey(it.name) })
 
         return slotsList
@@ -637,15 +667,5 @@ private suspend fun deleteTeachingSlot(slotId: String) {
 fun TeachingSlotsScreenPreview() {
     SchedulingTheme {
         TeachingSlotsScreen(navController = rememberNavController())
-    }
-}
-
-@Preview(showBackground = true, backgroundColor = 0xFF121212)
-@Composable
-fun SlotPillPreview() {
-    SchedulingTheme {
-        SlotPill(
-            slotName = "10-11"
-        )
     }
 }
