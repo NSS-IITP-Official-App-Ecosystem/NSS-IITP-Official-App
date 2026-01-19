@@ -20,6 +20,8 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -43,6 +45,7 @@ import androidx.navigation.compose.rememberNavController
 import com.phad.chatapp.features.scheduling.firebase.FirebaseManager
 import com.phad.chatapp.features.scheduling.firebase.FirebaseManager.FirestoreCollection
 import com.phad.chatapp.features.scheduling.models.TeachingSlot
+import com.phad.chatapp.features.scheduling.models.SubjectAllocation
 import com.phad.chatapp.features.scheduling.ui.theme.SchedulingTheme
 import com.phad.chatapp.features.scheduling.ui.theme.DarkBackground
 import com.phad.chatapp.features.scheduling.ui.theme.DarkSurface
@@ -122,6 +125,12 @@ fun StandardButton(
     )
 }
 
+// Data structure for time slot information with both class and free group times
+data class ColumnTimeInfo(
+    val classTime: String = "",
+    val freeGroupTime: String = ""
+)
+
 // Data structure for a slot - Simplified, only needs existence status maybe?
 // Keep ID for potential future use, but name is now per-column.
 data class ScreenTeachingSlot(val id: String)
@@ -142,25 +151,32 @@ fun CreateTeachingSlotsScreen(
     var selectedDays by remember { mutableStateOf(setOf<String>()) }
     var slotCountInput by remember { mutableStateOf("4") }
     var teachingSchedule by remember { mutableStateOf<List<DaySlots>>(emptyList()) }
-    // State for column names
-    var columnNames by remember { mutableStateOf<List<String>>(emptyList()) }
+    // State for column time information (both class and free group times)
+    var columnTimeInfoList by remember { mutableStateOf<List<ColumnTimeInfo>>(emptyList()) }
 
     var showRenameColumnDialog by remember { mutableStateOf(false) }
     var columnToRenameIndex by remember { mutableStateOf<Int?>(null) }
     var currentColumnName by remember { mutableStateOf("") }
 
-    // Time picker states using Material3 TimePicker
-    // Mutable state for the hour and minute values
-    var startTimeHour by remember { mutableStateOf(9) }
-    var startTimeMinute by remember { mutableStateOf(0) }
-    var endTimeHour by remember { mutableStateOf(10) }
-    var endTimeMinute by remember { mutableStateOf(0) }
+    // Time picker states for Class Time
+    var classTimeStartHour by remember { mutableStateOf(9) }
+    var classTimeStartMinute by remember { mutableStateOf(0) }
+    var classTimeEndHour by remember { mutableStateOf(10) }
+    var classTimeEndMinute by remember { mutableStateOf(0) }
+    
+    // Time picker states for Free Group Time
+    var freeGroupTimeStartHour by remember { mutableStateOf(10) }
+    var freeGroupTimeStartMinute by remember { mutableStateOf(0) }
+    var freeGroupTimeEndHour by remember { mutableStateOf(10) }
+    var freeGroupTimeEndMinute by remember { mutableStateOf(30) }
     
     var timePickerError by remember { mutableStateOf<String?>(null) }
 
     // Time picker UI states
-    var showStartTimePicker by remember { mutableStateOf(false) }
-    var showEndTimePicker by remember { mutableStateOf(false) }
+    var showClassTimeStartPicker by remember { mutableStateOf(false) }
+    var showClassTimeEndPicker by remember { mutableStateOf(false) }
+    var showFreeGroupTimeStartPicker by remember { mutableStateOf(false) }
+    var showFreeGroupTimeEndPicker by remember { mutableStateOf(false) }
 
     var showSaveDialog by remember { mutableStateOf(false) }
     var presetNameInput by remember { mutableStateOf("") }
@@ -194,6 +210,11 @@ fun CreateTeachingSlotsScreen(
     var isEditMode by remember { mutableStateOf(presetId != null) }
     var isLoading by remember { mutableStateOf(isEditMode) }
 
+    // Subject management states
+    var subjectsList by remember { mutableStateOf<List<SubjectAllocation>>(emptyList()) }
+    var availableSubjects by remember { mutableStateOf<List<String>>(emptyList()) }
+    var showSubjectDialog by remember { mutableStateOf(false) }
+
     val daysOfWeek = listOf("Mon", "Tue", "Wed", "Thu", "Fri")
 
     // Function to parse existing preset name and set dropdown values
@@ -225,7 +246,138 @@ fun CreateTeachingSlotsScreen(
         sectionExpanded = false
     }
 
+    // Function to fetch subjects from TTW_Subjects collection
+    fun fetchSubjects() {
+        val db = FirebaseFirestore.getInstance()
+        db.collection("TTW_Subjects")
+            .get()
+            .addOnSuccessListener { documents ->
+                val subjects = documents.mapNotNull { it.id }
+                availableSubjects = subjects.sorted()
+                Log.d("CreateTeachingSlotsScreen", "Fetched ${subjects.size} subjects")
+            }
+            .addOnFailureListener { e ->
+                Log.e("CreateTeachingSlotsScreen", "Error fetching subjects: ${e.message}")
+            }
+    }
 
+    // Fetch subjects when screen opens
+    LaunchedEffect(Unit) {
+        fetchSubjects()
+    }
+
+    // Subject Management Dialog
+    if (showSubjectDialog) {
+        // Temporary state for the dialog
+        val tempCounts = remember { 
+            mutableStateMapOf<String, Int>().apply {
+                subjectsList.forEach { put(it.subjectName, it.classCount) }
+            }
+        }
+
+        AlertDialog(
+            onDismissRequest = { showSubjectDialog = false },
+            title = {
+                Text(
+                    "Manage Subjects",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 20.sp
+                )
+            },
+            text = {
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 400.dp) 
+                ) {
+                    items(availableSubjects.size) { index ->
+                        val subjectName = availableSubjects[index]
+                        val count = tempCounts[subjectName] ?: 0
+                        
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = subjectName,
+                                color = Color.White,
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 16.sp
+                            )
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                // Decrease Button
+                                IconButton(
+                                    onClick = { 
+                                        if (count > 0) tempCounts[subjectName] = count - 1 
+                                    },
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .background(Color.White.copy(alpha = 0.1f), CircleShape)
+                                ) {
+                                   Text(
+                                       text = "-",
+                                       color = YellowAccent,
+                                       fontSize = 20.sp,
+                                       fontWeight = FontWeight.Bold
+                                   )
+                                }
+
+                                Text(
+                                    text = count.toString(),
+                                    color = Color.White,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.width(24.dp), // Fixed width for alignment
+                                    textAlign = TextAlign.Center
+                                )
+
+                                // Increase Button
+                                IconButton(
+                                    onClick = { tempCounts[subjectName] = count + 1 },
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .background(Color.White.copy(alpha = 0.1f), CircleShape)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = "Increase",
+                                        tint = YellowAccent,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+                        if (index < availableSubjects.size - 1) {
+                            Divider(color = Color.White.copy(alpha = 0.1f))
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                StandardButton(
+                    onClick = {
+                        // Save changes
+                        subjectsList = tempCounts.mapNotNull { (name, count) ->
+                            if (count > 0) SubjectAllocation(name, count) else null
+                        }.sortedBy { it.subjectName }
+                        
+                        showSubjectDialog = false
+                    }
+                ) {
+                    Text("Save", fontWeight = FontWeight.Bold)
+                }
+            },
+            containerColor = SurfaceElevated,
+            shape = RoundedCornerShape(16.dp)
+        )
+    }
 
     // Function to load existing preset data
     fun loadPresetData(id: String) {
@@ -244,12 +396,51 @@ fun CreateTeachingSlotsScreen(
                         presetNameInput = name
                         parsePresetName(name)
 
-                        // Get column names
-                        val columns = document.get("columnNames") as? List<String> ?: emptyList()
-                        columnNames = columns.toMutableList()
+                        // Get column names - support both old (List<String>) and new (List<Map>) formats
+                        val columnData = document.get("columnNames")
+                        val columnTimeInfos = mutableListOf<ColumnTimeInfo>()
+                        
+                        when (columnData) {
+                            is List<*> -> {
+                                // Check if it's old format (List<String>) or new format (List<Map>)
+                                if (columnData.isNotEmpty()) {
+                                    when (val firstItem = columnData[0]) {
+                                        is String -> {
+                                            // Old format - migrate by adding default free group time
+                                            Log.d("CreateTeachingSlotsScreen", "Migrating old format preset")
+                                            columnData.filterIsInstance<String>().forEach { timeStr ->
+                                                // Parse the end time and add 30 minutes for free group time
+                                                val endTimeMatch = Regex("""(\d{1,2}):(\d{2})$""").find(timeStr)
+                                                val freeGroupTime = if (endTimeMatch != null) {
+                                                    val endHour = endTimeMatch.groupValues[1].toInt()
+                                                    val endMinute = endTimeMatch.groupValues[2].toInt()
+                                                    val freeGroupEndHour = if (endMinute + 30 >= 60) endHour + 1 else endHour
+                                                    val freeGroupEndMinute = (endMinute + 30) % 60
+                                                    String.format("%02d:%02d-%02d:%02d", endHour, endMinute, freeGroupEndHour, freeGroupEndMinute)
+                                                } else {
+                                                    "10:00-10:30" // Fallback
+                                                }
+                                                columnTimeInfos.add(ColumnTimeInfo(classTime = timeStr, freeGroupTime = freeGroupTime))
+                                            }
+                                        }
+                                        is Map<*, *> -> {
+                                            // New format
+                                            Log.d("CreateTeachingSlotsScreen", "Loading new format preset")
+                                            columnData.filterIsInstance<Map<String, Any>>().forEach { map ->
+                                                val classTime = map["classTime"] as? String ?: ""
+                                                val freeGroupTime = map["freeGroupTime"] as? String ?: ""
+                                                columnTimeInfos.add(ColumnTimeInfo(classTime, freeGroupTime))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        columnTimeInfoList = columnTimeInfos
 
                         // Update slot count input based on columns
-                        slotCountInput = columns.size.toString()
+                        slotCountInput = columnTimeInfos.size.toString()
 
                         // Get schedule days and slots
                         val days = mutableSetOf<String>()
@@ -266,6 +457,14 @@ fun CreateTeachingSlotsScreen(
 
                         selectedDays = days
                         teachingSchedule = loadedSchedule
+                        
+                        // Get subjects
+                        val subjectsData = document.get("subjects") as? List<Map<String, Any>> ?: emptyList()
+                        subjectsList = subjectsData.mapNotNull { map ->
+                            val name = map["subjectName"] as? String
+                            val count = (map["classCount"] as? Number)?.toInt() ?: 0
+                            if (name != null) SubjectAllocation(name, count) else null
+                        }
                     } else {
                         Log.e("CreateTeachingSlotsScreen", "Document does not exist for ID: $id")
                         saveErrorMessage = "Preset not found"
@@ -291,11 +490,11 @@ fun CreateTeachingSlotsScreen(
 
         val numSlots = slotCountInput.toIntOrNull() ?: 0
         if (numSlots > 0) {
-            // Update Column Names
-            val newColumnNames = List(numSlots) { index ->
-                columnNames.getOrNull(index) ?: "Slot ${index + 1}" // Preserve existing names
+            // Update Column Time Info
+            val newColumnTimeInfoList = List(numSlots) { index ->
+                columnTimeInfoList.getOrNull(index) ?: ColumnTimeInfo() // Preserve existing info or create empty
             }
-            columnNames = newColumnNames
+            columnTimeInfoList = newColumnTimeInfoList
 
             // Update Schedule Grid
             if (selectedDays.isNotEmpty()) {
@@ -321,7 +520,7 @@ fun CreateTeachingSlotsScreen(
             }
         } else {
             // Clear everything if slot count is 0
-            columnNames = emptyList()
+            columnTimeInfoList = emptyList()
             teachingSchedule = emptyList()
         }
     }
@@ -348,29 +547,40 @@ fun CreateTeachingSlotsScreen(
 
     // --- Column Renaming Logic ---
     fun openRenameColumnDialog(index: Int) {
-        if (index >= 0 && index < columnNames.size) {
+        if (index >= 0 && index < columnTimeInfoList.size) {
             columnToRenameIndex = index
-            currentColumnName = columnNames[index]
+            val currentTimeInfo = columnTimeInfoList[index]
 
-            // Parse existing time range if it exists
-            val timePattern = Regex("""(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})""")
-            val match = timePattern.find(currentColumnName)
-            if (match != null) {
-                val parsedStartHour = match.groupValues[1].toInt()
-                val parsedStartMinute = match.groupValues[2].toInt()
-                val parsedEndHour = match.groupValues[3].toInt()
-                val parsedEndMinute = match.groupValues[4].toInt()
-                // Update the time state variables with parsed values
-                startTimeHour = parsedStartHour
-                startTimeMinute = parsedStartMinute
-                endTimeHour = parsedEndHour
-                endTimeMinute = parsedEndMinute
+            // Parse class time
+            val classTimePattern = Regex("""(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})""")
+            val classTimeMatch = classTimePattern.find(currentTimeInfo.classTime)
+            if (classTimeMatch != null) {
+                classTimeStartHour = classTimeMatch.groupValues[1].toInt()
+                classTimeStartMinute = classTimeMatch.groupValues[2].toInt()
+                classTimeEndHour = classTimeMatch.groupValues[3].toInt()
+                classTimeEndMinute = classTimeMatch.groupValues[4].toInt()
             } else {
-                // Default times
-                startTimeHour = 9
-                startTimeMinute = 0
-                endTimeHour = 10
-                endTimeMinute = 0
+                // Default class time values
+                classTimeStartHour = 9
+                classTimeStartMinute = 0
+                classTimeEndHour = 10
+                classTimeEndMinute = 0
+            }
+
+            // Parse free group time
+            val freeGroupTimeMatch = classTimePattern.find(currentTimeInfo.freeGroupTime)
+            if (freeGroupTimeMatch != null) {
+                freeGroupTimeStartHour = freeGroupTimeMatch.groupValues[1].toInt()
+                freeGroupTimeStartMinute = freeGroupTimeMatch.groupValues[2].toInt()
+                freeGroupTimeEndHour = freeGroupTimeMatch.groupValues[3].toInt()
+                freeGroupTimeEndMinute = freeGroupTimeMatch.groupValues[4].toInt()
+            } else {
+                // Default free group time to 30 minutes after class time
+                freeGroupTimeStartHour = classTimeEndHour
+                freeGroupTimeStartMinute = classTimeEndMinute
+                val freeEndMinute = classTimeEndMinute + 30
+                freeGroupTimeEndHour = if (freeEndMinute >= 60) classTimeEndHour + 1 else classTimeEndHour
+                freeGroupTimeEndMinute = freeEndMinute % 60
             }
 
             timePickerError = null
@@ -379,22 +589,34 @@ fun CreateTeachingSlotsScreen(
     }
 
     fun validateAndSaveTimeRange() {
-        val startTimeMinutes = startTimeHour * 60 + startTimeMinute
-        val endTimeMinutes = endTimeHour * 60 + endTimeMinute
+        // Validate class time
+        val classTimeStartMinutes = classTimeStartHour * 60 + classTimeStartMinute
+        val classTimeEndMinutes = classTimeEndHour * 60 + classTimeEndMinute
 
-        if (endTimeMinutes <= startTimeMinutes) {
-            timePickerError = "End time must be after start time"
+        if (classTimeEndMinutes <= classTimeStartMinutes) {
+            timePickerError = "Class end time must be after class start time"
             return
         }
 
-        val formattedTimeRange = String.format("%02d:%02d-%02d:%02d", startTimeHour, startTimeMinute, endTimeHour, endTimeMinute)
+        // Validate free group time
+        val freeGroupTimeStartMinutes = freeGroupTimeStartHour * 60 + freeGroupTimeStartMinute
+        val freeGroupTimeEndMinutes = freeGroupTimeEndHour * 60 + freeGroupTimeEndMinute
+
+        if (freeGroupTimeEndMinutes <= freeGroupTimeStartMinutes) {
+            timePickerError = "Free group end time must be after free group start time"
+            return
+        }
+
+        // Format both time ranges
+        val formattedClassTime = String.format("%02d:%02d-%02d:%02d", classTimeStartHour, classTimeStartMinute, classTimeEndHour, classTimeEndMinute)
+        val formattedFreeGroupTime = String.format("%02d:%02d-%02d:%02d", freeGroupTimeStartHour, freeGroupTimeStartMinute, freeGroupTimeEndHour, freeGroupTimeEndMinute)
 
         columnToRenameIndex?.let { index ->
-            if (index >= 0 && index < columnNames.size) {
-                val updatedColumnNames = columnNames.toMutableList().apply {
-                    this[index] = formattedTimeRange
+            if (index >= 0 && index < columnTimeInfoList.size) {
+                val updatedColumnTimeInfoList = columnTimeInfoList.toMutableList().apply {
+                    this[index] = ColumnTimeInfo(classTime = formattedClassTime, freeGroupTime = formattedFreeGroupTime)
                 }
-                columnNames = updatedColumnNames.toList()
+                columnTimeInfoList = updatedColumnTimeInfoList.toList()
             }
         }
         showRenameColumnDialog = false
@@ -403,8 +625,30 @@ fun CreateTeachingSlotsScreen(
     }
     // --- End Column Renaming ---
 
+    fun validateSchedule(): Boolean {
+        // Validate Subject Class Counts
+        val totalClasses = subjectsList.sumOf { it.classCount }
+        
+        // Calculate actual slots from grid (counting non-null/active slots)
+        val totalSlots = teachingSchedule.sumOf { daySlot -> 
+            daySlot.slots.count { it != null } 
+        }
+        
+        if (totalClasses != totalSlots) {
+             coroutineScope.launch {
+                snackbarHostState.showSnackbar(
+                    "Expected $totalSlots classes, but defined $totalClasses."
+                )
+            }
+            return false
+        }
+        return true
+    }
+
     // --- Save Preset Logic ---
     fun savePreset() {
+        if (!validateSchedule()) return
+
         val nameToUse = if (generatedPresetName.isNotEmpty()) generatedPresetName else presetNameInput
         if (nameToUse.isBlank()) {
             coroutineScope.launch {
@@ -420,6 +664,8 @@ fun CreateTeachingSlotsScreen(
             return
         }
 
+
+
         showSavingIndicator = true
         saveErrorMessage = null
 
@@ -431,11 +677,28 @@ fun CreateTeachingSlotsScreen(
             )
         }
 
+        // Convert columnTimeInfoList to saveable format
+        val columnNamesData = columnTimeInfoList.map { timeInfo ->
+            mapOf(
+                "classTime" to timeInfo.classTime,
+                "freeGroupTime" to timeInfo.freeGroupTime
+            )
+        }
+        
+        // Convert subjectsList to saveable format
+        val subjectsData = subjectsList.map { subject ->
+            mapOf(
+                "subjectName" to subject.subjectName,
+                "classCount" to subject.classCount
+            )
+        }
+
         // Create the preset data
         val presetData = hashMapOf(
             "presetName" to nameToUse,
-            "columnNames" to columnNames,
-            "schedule" to scheduleData
+            "columnNames" to columnNamesData,
+            "schedule" to scheduleData,
+            "subjects" to subjectsData
         )
 
         try {
@@ -496,7 +759,12 @@ fun CreateTeachingSlotsScreen(
     ) {
         Scaffold(
             containerColor = Color.Transparent,
-            snackbarHost = { SnackbarHost(snackbarHostState) }
+            snackbarHost = { 
+                SnackbarHost(
+                    hostState = snackbarHostState,
+                    modifier = Modifier.padding(bottom = 90.dp)
+                ) 
+            }
         ) { _ ->
             Column(
                 modifier = Modifier
@@ -536,10 +804,12 @@ fun CreateTeachingSlotsScreen(
                     if (teachingSchedule.isNotEmpty()) {
                         StandardButton(
                             onClick = {
-                                if (isEditMode && presetNameInput.isNotEmpty()) {
-                                    savePreset()
-                                } else {
-                                    showSaveDialog = true
+                                if (validateSchedule()) {
+                                    if (isEditMode && presetNameInput.isNotEmpty()) {
+                                        savePreset()
+                                    } else {
+                                        showSaveDialog = true
+                                    }
                                 }
                             }
                         ) {
@@ -622,113 +892,177 @@ fun CreateTeachingSlotsScreen(
                                     Spacer(modifier = Modifier.height(28.dp))
                                 }
 
-                                // Step 2: Number of slots per day
-                                Column {
+                                // Step 2: Number of slots per day - Compact UI
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
                                     Text(
                                         text = "Number of Slots per Day:",
-                                        style = MaterialTheme.typography.titleLarge,
+                                        style = MaterialTheme.typography.titleMedium,
                                         color = Color.White,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(bottom = 12.dp)
+                                        fontWeight = FontWeight.Bold
                                     )
-
-                                    // Slot count input with increment/decrement buttons
+                                    
                                     Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 12.dp),
-                                        verticalAlignment = Alignment.CenterVertically
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                                     ) {
-                                        // Decrement button with consistent styling
-                                        Box(
-                                            modifier = Modifier
-                                                .size(48.dp)
-                                                .shadow(
-                                                    elevation = 2.dp,
-                                                    shape = CircleShape,
-                                                    spotColor = YellowAccent.copy(alpha = 0.5f)
-                                                )
-                                                .background(
-                                                    color = YellowAccent,
-                                                    shape = CircleShape
-                                                )
-                                                .clickable {
-                                                    val currentValue = slotCountInput.toIntOrNull() ?: 0
-                                                    if (currentValue > 1) {
-                                                        slotCountInput = (currentValue - 1).toString()
-                                                    }
-                                                },
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(
-                                                text = "−", // Unicode minus sign
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 20.sp,
-                                                color = Color.Black
-                                            )
-                                        }
-
-                                        // Number input field
-                                        Card(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .height(56.dp)
-                                                .padding(horizontal = 16.dp),
-                                            shape = RoundedCornerShape(16.dp),
-                                            colors = CardDefaults.cardColors(
-                                                containerColor = SurfaceElevated
-                                            ),
-                                            elevation = CardDefaults.cardElevation(
-                                                defaultElevation = 2.dp
-                                            )
-                                        ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .fillMaxSize(),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Text(
-                                                    text = slotCountInput,
-                                                    color = Color.White,
-                                                    fontSize = 28.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    textAlign = TextAlign.Center
-                                                )
-                                            }
-                                        }
-
-                                        // Increment button with consistent styling
-                                        Box(
-                                            modifier = Modifier
-                                                .size(48.dp)
-                                                .shadow(
-                                                    elevation = 2.dp,
-                                                    shape = CircleShape,
-                                                    spotColor = YellowAccent.copy(alpha = 0.5f)
-                                                )
-                                                .background(
-                                                    color = YellowAccent,
-                                                    shape = CircleShape
-                                                )
-                                                .clickable {
-                                                    val currentValue = slotCountInput.toIntOrNull() ?: 0
-                                                    if (currentValue < 8) {
-                                                        slotCountInput = (currentValue + 1).toString()
-                                                    }
-                                                },
-                                            contentAlignment = Alignment.Center
+                                        // Up arrow
+                                        IconButton(
+                                            onClick = {
+                                                val currentValue = slotCountInput.toIntOrNull() ?: 0
+                                                if (currentValue < 8) {
+                                                    slotCountInput = (currentValue + 1).toString()
+                                                }
+                                            },
+                                            modifier = Modifier.size(32.dp)
                                         ) {
                                             Icon(
-                                                imageVector = Icons.Default.Add,
-                                                contentDescription = "Increase",
-                                                tint = Color.Black,
-                                                modifier = Modifier.size(24.dp)
+                                                imageVector = Icons.Default.KeyboardArrowUp,
+                                                contentDescription = "Increase slots",
+                                                tint = YellowAccent,
+                                                modifier = Modifier.size(28.dp)
+                                            )
+                                        }
+                                        
+                                        // Number display
+                                        Text(
+                                            text = slotCountInput,
+                                            color = YellowAccent,
+                                            fontSize = 24.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.widthIn(min = 32.dp),
+                                            textAlign = TextAlign.Center
+                                        )
+                                        
+                                        // Down arrow
+                                        IconButton(
+                                            onClick = {
+                                                val currentValue = slotCountInput.toIntOrNull() ?: 0
+                                                if (currentValue > 1) {
+                                                    slotCountInput = (currentValue - 1).toString()
+                                                }
+                                            },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.KeyboardArrowDown,
+                                                contentDescription = "Decrease slots",
+                                                tint = YellowAccent,
+                                                modifier = Modifier.size(28.dp)
                                             )
                                         }
                                     }
                                 }
                             }
                         }
+
+                            // Subjects Section
+                            Spacer(modifier = Modifier.height(24.dp))
+                            
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = SurfaceElevated.copy(alpha = 0.6f)
+                                ),
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(16.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = "Subjects:",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        
+                                        IconButton(
+                                            onClick = { showSubjectDialog = true },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Edit,
+                                                contentDescription = "Edit subjects",
+                                                tint = YellowAccent,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+                                    
+                                    if (subjectsList.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        
+                                        // Display subjects in rows of 3
+                                        val rows = subjectsList.chunked(3)
+                                        rows.forEachIndexed { index, rowSubjects ->
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                rowSubjects.forEach { subject ->
+                                                    val shortName = if (subject.subjectName.length > 3) 
+                                                        subject.subjectName.take(3) 
+                                                    else subject.subjectName
+                                                    
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .weight(1f)
+                                                            .background(
+                                                                color = Color.White.copy(alpha = 0.1f),
+                                                                shape = RoundedCornerShape(8.dp)
+                                                            )
+                                                            .border(
+                                                                width = 1.dp,
+                                                                color = YellowAccent.copy(alpha = 0.3f),
+                                                                shape = RoundedCornerShape(8.dp)
+                                                            )
+                                                            .padding(vertical = 8.dp, horizontal = 4.dp),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Text(
+                                                            text = "$shortName : ${subject.classCount}",
+                                                            color = Color.White,
+                                                            style = MaterialTheme.typography.bodyMedium,
+                                                            fontWeight = FontWeight.Bold,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Clip
+                                                        )
+                                                    }
+                                                }
+                                                
+                                                // Fill empty spaces if last row has fewer than 3 items
+                                                if (rowSubjects.size < 3) {
+                                                    repeat(3 - rowSubjects.size) {
+                                                        Spacer(modifier = Modifier.weight(1f))
+                                                    }
+                                                }
+                                            }
+                                            
+                                            if (index < rows.size - 1) {
+                                                Spacer(modifier = Modifier.height(8.dp))
+                                            }
+                                        }
+                                    } else {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text(
+                                            text = "No subjects added",
+                                            color = Color.Gray,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                                        )
+                                    }
+                                }
+                            }
 
                             // Footer instructions
                             if (teachingSchedule.isEmpty() && selectedDays.isNotEmpty() && slotCountInput.toIntOrNull() ?: 0 > 0) {
@@ -798,10 +1132,10 @@ fun CreateTeachingSlotsScreen(
                                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                                             ) {
                                                 // Slot column headers with fixed dimensions
-                                                columnNames.forEachIndexed { index, columnName ->
+                                                columnTimeInfoList.forEachIndexed { index, timeInfo ->
                                                     Column(
                                                         modifier = Modifier
-                                                            .width(80.dp) // Fixed width for consistent sizing
+                                                            .width(100.dp) // Increased width to accommodate two lines
                                                             .padding(horizontal = 2.dp),
                                                         horizontalAlignment = Alignment.CenterHorizontally
                                                     ) {
@@ -811,23 +1145,52 @@ fun CreateTeachingSlotsScreen(
                                                                 .clickable { openRenameColumnDialog(index) },
                                                             shape = RoundedCornerShape(8.dp),
                                                             colors = CardDefaults.cardColors(
-                                                                containerColor = Color.Transparent
+                                                                containerColor = YellowAccent.copy(alpha = 0.1f)
                                                             )
                                                         ) {
-                                                            Box(
+                                                            Column(
                                                                 modifier = Modifier
                                                                     .fillMaxWidth()
-                                                                    .padding(vertical = 4.dp),
-                                                                contentAlignment = Alignment.Center
+                                                                    .padding(vertical = 6.dp, horizontal = 4.dp),
+                                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                                                verticalArrangement = Arrangement.spacedBy(2.dp)
                                                             ) {
+                                                                // Class Time
                                                                 Text(
-                                                                    text = columnName,
+                                                                    text = "Class:",
+                                                                    style = MaterialTheme.typography.labelSmall,
+                                                                    fontWeight = FontWeight.Medium,
+                                                                    color = YellowAccent,
+                                                                    fontSize = 10.sp
+                                                                )
+                                                                Text(
+                                                                    text = timeInfo.classTime.ifEmpty { "--:--" },
                                                                     style = MaterialTheme.typography.bodySmall,
                                                                     fontWeight = FontWeight.Bold,
-                                                                    maxLines = 1,
-                                                                    overflow = TextOverflow.Clip,
+                                                                    color = Color.White,
+                                                                    textAlign = TextAlign.Center,
+                                                                    fontSize = 11.sp,
+                                                                    maxLines = 1
+                                                                )
+
+                                                                Spacer(modifier = Modifier.height(4.dp))
+
+                                                                // Free Group Time
+                                                                Text(
+                                                                    text = "Free:",
+                                                                    style = MaterialTheme.typography.labelSmall,
+                                                                    fontWeight = FontWeight.Medium,
                                                                     color = YellowAccent,
-                                                                    textAlign = TextAlign.Center
+                                                                    fontSize = 10.sp
+                                                                )
+                                                                Text(
+                                                                    text = timeInfo.freeGroupTime.ifEmpty { "--:--" },
+                                                                    style = MaterialTheme.typography.bodySmall,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = Color.White,
+                                                                    textAlign = TextAlign.Center,
+                                                                    fontSize = 11.sp,
+                                                                    maxLines = 1
                                                                 )
                                                             }
                                                         }
@@ -878,7 +1241,7 @@ fun CreateTeachingSlotsScreen(
 
                                                         Card(
                                                             modifier = Modifier
-                                                                .width(80.dp) // Fixed width for consistent sizing
+                                                                .width(100.dp) // Match header width
                                                                 .height(60.dp) // Fixed height for consistent sizing
                                                                 .clickable {
                                                                     if (slot != null) {
@@ -953,29 +1316,35 @@ fun CreateTeachingSlotsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        // Time Range Section - Horizontal Layout
+                        // Class Time Section
+                        Text(
+                            text = "Class Time",
+                            color = YellowAccent,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            // Start Time Column
+                            // Class Start Time Column
                             Column(
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Text(
                                     "Start Time",
-                                    color = YellowAccent,
-                                    style = MaterialTheme.typography.titleSmall,
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Medium
                                 )
 
-                                Spacer(modifier = Modifier.height(8.dp))
+                                Spacer(modifier = Modifier.height(6.dp))
 
-                                // Start Time Picker Card
                                 Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clickable { showStartTimePicker = true },
+                                        .clickable { showClassTimeStartPicker = true },
                                     colors = CardDefaults.cardColors(
                                         containerColor = YellowAccent.copy(alpha = 0.1f)
                                     ),
@@ -985,37 +1354,36 @@ fun CreateTeachingSlotsScreen(
                                     Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(16.dp),
+                                            .padding(14.dp),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
-                                            String.format("%02d:%02d", startTimeHour, startTimeMinute),
+                                            String.format("%02d:%02d", classTimeStartHour, classTimeStartMinute),
                                             color = YellowAccent,
-                                            style = MaterialTheme.typography.titleLarge,
+                                            style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.Bold
                                         )
                                     }
                                 }
                             }
 
-                            // End Time Column
+                            // Class End Time Column
                             Column(
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Text(
                                     "End Time",
-                                    color = YellowAccent,
-                                    style = MaterialTheme.typography.titleSmall,
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Medium
                                 )
 
-                                Spacer(modifier = Modifier.height(8.dp))
+                                Spacer(modifier = Modifier.height(6.dp))
 
-                                // End Time Picker Card
                                 Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clickable { showEndTimePicker = true },
+                                        .clickable { showClassTimeEndPicker = true },
                                     colors = CardDefaults.cardColors(
                                         containerColor = YellowAccent.copy(alpha = 0.1f)
                                     ),
@@ -1025,13 +1393,104 @@ fun CreateTeachingSlotsScreen(
                                     Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(16.dp),
+                                            .padding(14.dp),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
-                                            String.format("%02d:%02d", endTimeHour, endTimeMinute),
+                                            String.format("%02d:%02d", classTimeEndHour, classTimeEndMinute),
                                             color = YellowAccent,
-                                            style = MaterialTheme.typography.titleLarge,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Free Group Time Section
+                        Text(
+                            text = "Free Group Time",
+                            color = YellowAccent,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            // Free Group Start Time Column
+                            Column(
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    "Start Time",
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Medium
+                                )
+
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { showFreeGroupTimeStartPicker = true },
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = YellowAccent.copy(alpha = 0.1f)
+                                    ),
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = BorderStroke(1.dp, YellowAccent.copy(alpha = 0.3f))
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(14.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            String.format("%02d:%02d", freeGroupTimeStartHour, freeGroupTimeStartMinute),
+                                            color = YellowAccent,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Free Group End Time Column
+                            Column(
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    "End Time",
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Medium
+                                )
+
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { showFreeGroupTimeEndPicker = true },
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = YellowAccent.copy(alpha = 0.1f)
+                                    ),
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = BorderStroke(1.dp, YellowAccent.copy(alpha = 0.3f))
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(14.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            String.format("%02d:%02d", freeGroupTimeEndHour, freeGroupTimeEndMinute),
+                                            color = YellowAccent,
+                                            style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.Bold
                                         )
                                     }
@@ -1048,7 +1507,8 @@ fun CreateTeachingSlotsScreen(
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             Column(
-                                modifier = Modifier.padding(12.dp)
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 Text(
                                     "Preview:",
@@ -1057,9 +1517,15 @@ fun CreateTeachingSlotsScreen(
                                     fontWeight = FontWeight.Medium
                                 )
                                 Text(
-                                    String.format("%02d:%02d-%02d:%02d", startTimeHour, startTimeMinute, endTimeHour, endTimeMinute),
+                                    "Class: " + String.format("%02d:%02d-%02d:%02d", classTimeStartHour, classTimeStartMinute, classTimeEndHour, classTimeEndMinute),
                                     color = Color.White,
-                                    style = MaterialTheme.typography.titleMedium,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    "Free Group: " + String.format("%02d:%02d-%02d:%02d", freeGroupTimeStartHour, freeGroupTimeStartMinute, freeGroupTimeEndHour, freeGroupTimeEndMinute),
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
@@ -1115,20 +1581,19 @@ fun CreateTeachingSlotsScreen(
             )
         }
 
-        // Start Time Picker Dialog
-        if (showStartTimePicker) {
-            // Create a new TimePickerState with current values when dialog opens
+        // Class Time Start Picker Dialog
+        if (showClassTimeStartPicker) {
             val dialogTimePickerState = rememberTimePickerState(
-                initialHour = startTimeHour,
-                initialMinute = startTimeMinute,
+                initialHour = classTimeStartHour,
+                initialMinute = classTimeStartMinute,
                 is24Hour = true
             )
             
             AlertDialog(
-                onDismissRequest = { showStartTimePicker = false },
+                onDismissRequest = { showClassTimeStartPicker = false },
                 title = {
                     Text(
-                        "Select Start Time",
+                        "Select Class Start Time",
                         color = Color.White,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
@@ -1139,7 +1604,6 @@ fun CreateTeachingSlotsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        // Material3 TimePicker with yellow accent colors
                         TimePicker(
                             state = dialogTimePickerState,
                             colors = TimePickerDefaults.colors(
@@ -1150,7 +1614,7 @@ fun CreateTeachingSlotsScreen(
                                 containerColor = SurfaceElevated,
                                 periodSelectorBorderColor = YellowAccent,
                                 periodSelectorSelectedContainerColor = YellowAccent,
-                                periodSelectorUnselectedContainerColor = Color.Transparent,
+                                periodSelectorUnselectedContainerColor =Color.Transparent,
                                 periodSelectorSelectedContentColor = Color.Black,
                                 periodSelectorUnselectedContentColor = Color.White,
                                 timeSelectorSelectedContainerColor = YellowAccent,
@@ -1163,30 +1627,22 @@ fun CreateTeachingSlotsScreen(
                 },
                 confirmButton = {
                     StandardButton(
-                        onClick = { 
-                            startTimeHour = dialogTimePickerState.hour
-                            startTimeMinute = dialogTimePickerState.minute
+                        onClick = {
+                            classTimeStartHour = dialogTimePickerState.hour
+                            classTimeStartMinute = dialogTimePickerState.minute
                             timePickerError = null
-                            showStartTimePicker = false
+                            showClassTimeStartPicker = false
                         }
                     ) {
-                        Text(
-                            "Set",
-                            fontWeight = FontWeight.Medium
-                        )
+                        Text("Set", fontWeight = FontWeight.Medium)
                     }
                 },
                 dismissButton = {
                     TextButton(
-                        onClick = { showStartTimePicker = false },
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = Color.White
-                        )
+                        onClick = { showClassTimeStartPicker = false },
+                        colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
                     ) {
-                        Text(
-                            "Cancel",
-                            fontWeight = FontWeight.Medium
-                        )
+                        Text("Cancel", fontWeight = FontWeight.Medium)
                     }
                 },
                 containerColor = SurfaceElevated,
@@ -1194,20 +1650,19 @@ fun CreateTeachingSlotsScreen(
             )
         }
 
-        // End Time Picker Dialog
-        if (showEndTimePicker) {
-            // Create a new TimePickerState with current values when dialog opens
+        // Class Time End Picker Dialog
+        if (showClassTimeEndPicker) {
             val dialogTimePickerState = rememberTimePickerState(
-                initialHour = endTimeHour,
-                initialMinute = endTimeMinute,
+                initialHour = classTimeEndHour,
+                initialMinute = classTimeEndMinute,
                 is24Hour = true
             )
             
             AlertDialog(
-                onDismissRequest = { showEndTimePicker = false },
+                onDismissRequest = { showClassTimeEndPicker = false },
                 title = {
                     Text(
-                        "Select End Time",
+                        "Select Class End Time",
                         color = Color.White,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
@@ -1218,7 +1673,6 @@ fun CreateTeachingSlotsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        // Material3 TimePicker with yellow accent colors
                         TimePicker(
                             state = dialogTimePickerState,
                             colors = TimePickerDefaults.colors(
@@ -1242,30 +1696,160 @@ fun CreateTeachingSlotsScreen(
                 },
                 confirmButton = {
                     StandardButton(
-                        onClick = { 
-                            endTimeHour = dialogTimePickerState.hour
-                            endTimeMinute = dialogTimePickerState.minute
+                        onClick = {
+                            classTimeEndHour = dialogTimePickerState.hour
+                            classTimeEndMinute = dialogTimePickerState.minute
                             timePickerError = null
-                            showEndTimePicker = false
+                            showClassTimeEndPicker = false
                         }
                     ) {
-                        Text(
-                            "Set",
-                            fontWeight = FontWeight.Medium
-                        )
+                        Text("Set", fontWeight = FontWeight.Medium)
                     }
                 },
                 dismissButton = {
                     TextButton(
-                        onClick = { showEndTimePicker = false },
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = Color.White
-                        )
+                        onClick = { showClassTimeEndPicker = false },
+                        colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
                     ) {
-                        Text(
-                            "Cancel",
-                            fontWeight = FontWeight.Medium
+                        Text("Cancel", fontWeight = FontWeight.Medium)
+                    }
+                },
+                containerColor = SurfaceElevated,
+                shape = RoundedCornerShape(16.dp)
+            )
+        }
+
+        // Free Group Time Start Picker Dialog
+        if (showFreeGroupTimeStartPicker) {
+            val dialogTimePickerState = rememberTimePickerState(
+                initialHour = freeGroupTimeStartHour,
+                initialMinute = freeGroupTimeStartMinute,
+                is24Hour = true
+            )
+            
+            AlertDialog(
+                onDismissRequest = { showFreeGroupTimeStartPicker = false },
+                title = {
+                    Text(
+                        "Select Free Group Start Time",
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                text = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        TimePicker(
+                            state = dialogTimePickerState,
+                            colors = TimePickerDefaults.colors(
+                                clockDialColor = SurfaceElevated,
+                                clockDialSelectedContentColor = Color.Black,
+                                clockDialUnselectedContentColor = Color.White,
+                                selectorColor = YellowAccent,
+                                containerColor = SurfaceElevated,
+                                periodSelectorBorderColor = YellowAccent,
+                                periodSelectorSelectedContainerColor = YellowAccent,
+                                periodSelectorUnselectedContainerColor = Color.Transparent,
+                                periodSelectorSelectedContentColor = Color.Black,
+                                periodSelectorUnselectedContentColor = Color.White,
+                                timeSelectorSelectedContainerColor = YellowAccent,
+                                timeSelectorUnselectedContainerColor = Color.Transparent,
+                                timeSelectorSelectedContentColor = Color.Black,
+                                timeSelectorUnselectedContentColor = Color.White
+                            )
                         )
+                    }
+                },
+                confirmButton = {
+                    StandardButton(
+                        onClick = {
+                            freeGroupTimeStartHour = dialogTimePickerState.hour
+                            freeGroupTimeStartMinute = dialogTimePickerState.minute
+                            timePickerError = null
+                            showFreeGroupTimeStartPicker = false
+                        }
+                    ) {
+                        Text("Set", fontWeight = FontWeight.Medium)
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { showFreeGroupTimeStartPicker = false },
+                        colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
+                    ) {
+                        Text("Cancel", fontWeight = FontWeight.Medium)
+                    }
+                },
+                containerColor = SurfaceElevated,
+                shape = RoundedCornerShape(16.dp)
+            )
+        }
+
+        // Free Group Time End Picker Dialog
+        if (showFreeGroupTimeEndPicker) {
+            val dialogTimePickerState = rememberTimePickerState(
+                initialHour = freeGroupTimeEndHour,
+                initialMinute = freeGroupTimeEndMinute,
+                is24Hour = true
+            )
+            
+            AlertDialog(
+                onDismissRequest = { showFreeGroupTimeEndPicker = false },
+                title = {
+                    Text(
+                        "Select Free Group End Time",
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                text = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        TimePicker(
+                            state = dialogTimePickerState,
+                            colors = TimePickerDefaults.colors(
+                                clockDialColor = SurfaceElevated,
+                                clockDialSelectedContentColor = Color.Black,
+                                clockDialUnselectedContentColor = Color.White,
+                                selectorColor = YellowAccent,
+                                containerColor = SurfaceElevated,
+                                periodSelectorBorderColor = YellowAccent,
+                                periodSelectorSelectedContainerColor = YellowAccent,
+                                periodSelectorUnselectedContainerColor = Color.Transparent,
+                                periodSelectorSelectedContentColor = Color.Black,
+                                periodSelectorUnselectedContentColor = Color.White,
+                                timeSelectorSelectedContainerColor = YellowAccent,
+                                timeSelectorUnselectedContainerColor = Color.Transparent,
+                                timeSelectorSelectedContentColor = Color.Black,
+                                timeSelectorUnselectedContentColor = Color.White
+                            )
+                        )
+                    }
+                },
+                confirmButton = {
+                    StandardButton(
+                        onClick = {
+                            freeGroupTimeEndHour = dialogTimePickerState.hour
+                            freeGroupTimeEndMinute = dialogTimePickerState.minute
+                            timePickerError = null
+                            showFreeGroupTimeEndPicker = false
+                        }
+                    ) {
+                        Text("Set", fontWeight = FontWeight.Medium)
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { showFreeGroupTimeEndPicker = false },
+                        colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
+                    ) {
+                        Text("Cancel", fontWeight = FontWeight.Medium)
                     }
                 },
                 containerColor = SurfaceElevated,
@@ -1675,6 +2259,7 @@ fun DayCheckbox(
     }
 }
 
+    
 
 
 @Preview(showBackground = true, backgroundColor = 0xFF121212, widthDp = 360, heightDp = 740)

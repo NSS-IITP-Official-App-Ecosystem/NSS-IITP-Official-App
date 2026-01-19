@@ -56,7 +56,7 @@ data class AttendanceEvent(
     @PropertyName("attendanceLocationTimestamp")
     val attendanceLocationTimestamp: Timestamp? = null, // When the location was last updated
 
-    @PropertyName("created_at")
+    @PropertyName("createdAt")
     val createdAt: Timestamp = Timestamp.now(), // When the event was created in the system
 
     @PropertyName("attendees")
@@ -75,7 +75,7 @@ data class AttendanceEvent(
     val visibleOnlyToPresent: Boolean = false, // If true, only visible to attendees
 
     // Use a private backing field to prevent automatic serialization of 'live' field
-    @PropertyName("is_live")
+    @PropertyName("isLive")
     private val _isLive: Boolean = true // Default to true for new events
 ) {
     /**

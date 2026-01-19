@@ -15,8 +15,14 @@ import androidx.fragment.app.Fragment
 class SchedulingFragment : Fragment() {
 
     companion object {
-        fun newInstance(): SchedulingFragment {
-            return SchedulingFragment()
+        private const val ARG_START_DESTINATION = "startDestination"
+        
+        fun newInstance(startDestination: String? = null): SchedulingFragment {
+            return SchedulingFragment().apply {
+                arguments = Bundle().apply {
+                    startDestination?.let { putString(ARG_START_DESTINATION, it) }
+                }
+            }
         }
     }
 
@@ -32,10 +38,22 @@ class SchedulingFragment : Fragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
+        val startDestination = arguments?.getString(ARG_START_DESTINATION)
         return ComposeView(requireContext()).apply {
             setContent {
                 Surface {
-                    SchedulingApp()
+                    SchedulingApp(
+                        startDestination = startDestination,
+                        onBackClick = {
+                            // Pop back to the previous fragment (ProfileFragment)
+                            try {
+                                androidx.navigation.Navigation.findNavController(this).popBackStack()
+                            } catch (e: Exception) {
+                                // Fallback
+                                requireActivity().onBackPressedDispatcher.onBackPressed()
+                            }
+                        }
+                    )
                 }
             }
         }

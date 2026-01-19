@@ -27,29 +27,39 @@ import com.phad.chatapp.features.scheduling.schedule.SubjectAssignmentScreen
 import com.phad.chatapp.features.scheduling.schedule.SubjectPresetSelectionScreen
 import com.phad.chatapp.features.scheduling.schedule.SubjectAssignmentGridScreen
 import com.phad.chatapp.features.scheduling.schedule.ViewAssignmentsScreen
+import com.phad.chatapp.features.scheduling.schedule.ManageSubjectsScreen
 
 /**
  * Main composable for the Scheduling feature.
  * This will be used inside the SchedulingFragment.
  */
 @Composable
-fun SchedulingApp() {
+fun SchedulingApp(
+    startDestination: String? = null,
+    onBackClick: () -> Unit = {}
+) {
     SchedulingTheme {
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
-            AppNavigation()
+            AppNavigation(
+                startDestination = startDestination,
+                onBackClick = onBackClick
+            )
         }
     }
 }
 
 @Composable
-fun AppNavigation() {
+fun AppNavigation(
+    startDestination: String? = null,
+    onBackClick: () -> Unit = {}
+) {
     val navController = rememberNavController()
     NavHost(
         navController = navController, 
-        startDestination = "scheduleMaker"
+        startDestination = startDestination ?: "scheduleMaker"
     ) {
         composable("scheduleMaker") {
             ScheduleMakerScreen(navController = navController)
@@ -127,6 +137,18 @@ fun AppNavigation() {
                 navController = navController,
                 vpId = vpId,
                 vaIds = vaIds
+            )
+        }
+        composable("manageSubjects") {
+            ManageSubjectsScreen(
+                navController = navController,
+                onBackClick = onBackClick
+            )
+        }
+        composable("subjectPreference") {
+            com.phad.chatapp.features.scheduling.schedule.SubjectPreferenceScreen(
+                navController = navController,
+                onBackClick = onBackClick
             )
         }
     }

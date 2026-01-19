@@ -401,7 +401,7 @@ class AttendanceQRRepository {
             // We rely on UI/device checks to minimize duplicates; server uses atomic increments.
             val updates = mapOf(
                 "attendees" to FieldValue.arrayUnion(normalizedAttendee),
-                "total_marked" to FieldValue.increment(1)
+                "totalMarked" to FieldValue.increment(1)
             )
 
             Log.d(TAG, "Performing Firestore update with: $updates")
@@ -509,7 +509,7 @@ class AttendanceQRRepository {
             // Remove from attendees array and decrement total_marked
             val updates = mapOf(
                 "attendees" to FieldValue.arrayRemove(attendeeToRemove),
-                "total_marked" to FieldValue.increment(-1)
+                "totalMarked" to FieldValue.increment(-1)
             )
 
             Log.d(TAG, "Performing Firestore update with: $updates")
@@ -1018,51 +1018,10 @@ class AttendanceQRRepository {
                 }
             }
 
-            // 5) Update user statistics to reflect the event recreation
-            if (oldEvent.attendees.isNotEmpty()) {
-                val oldSemester = getSemesterFromDate(oldEvent.eventDate)
-                val newSemester = getSemesterFromDate(newEvent.eventDate)
-                val hoursDelta = newEvent.hours - oldEvent.hours
+            // User statistics updates moved to after main batch commit to ensure
+            // 1. We don't hit batch size limits
+            // 2. We can properly handle the arrayRemove + arrayUnion split
 
-                Log.d(TAG, "Updating user stats: oldSemester=$oldSemester, newSemester=$newSemester, hoursDelta=$hoursDelta")
-
-                oldEvent.attendees.forEach { attendee ->
-                    val userRef = usersCollection.document(attendee.rollNumber)
-                    val userUpdates = mutableMapOf<String, Any>()
-
-                    // Update eventsList to replace old event ID with new event ID
-                    userUpdates["eventsList"] = FieldValue.arrayRemove(oldEventId)
-                    userUpdates["eventsList"] = FieldValue.arrayUnion(newEvent.id)
-
-                    // Handle hours changes
-                    if (hoursDelta != 0.0) {
-                        userUpdates["hours"] = FieldValue.increment(hoursDelta)
-                    }
-
-                    // Handle semester changes
-                    if (oldSemester == newSemester) {
-                        // Same semester: just increment by delta
-                        when (newSemester) {
-                            1 -> userUpdates["sem1Hours"] = FieldValue.increment(hoursDelta)
-                            2 -> userUpdates["sem2Hours"] = FieldValue.increment(hoursDelta)
-                        }
-                    } else {
-                        // Different semester: subtract old hours from old semester, add new hours to new semester
-                        when (oldSemester) {
-                            1 -> userUpdates["sem1Hours"] = FieldValue.increment(-oldEvent.hours)
-                            2 -> userUpdates["sem2Hours"] = FieldValue.increment(-oldEvent.hours)
-                        }
-                        when (newSemester) {
-                            1 -> userUpdates.merge("sem1Hours", FieldValue.increment(newEvent.hours)) { _, new -> new }
-                            2 -> userUpdates.merge("sem2Hours", FieldValue.increment(newEvent.hours)) { _, new -> new }
-                        }
-                    }
-
-                    if (userUpdates.isNotEmpty()) {
-                        batch.update(userRef, userUpdates)
-                    }
-                }
-            }
 
             // 6) Handle mandatory penalties for absentees
             val oldPenalty = if (oldEvent.isMandatory && oldEvent.negativeHours > 0.0) oldEvent.negativeHours else 0.0
@@ -1120,8 +1079,64 @@ class AttendanceQRRepository {
                 }
             }
 
-            // 7) Commit the main batch
+            // 7) Commit the main batch (Creates new event + Copies attendance)
             batch.commit().await()
+
+            // 7b) Update user statistics (Moved here to handle batch limits and array operations)
+            if (oldEvent.attendees.isNotEmpty()) {
+                val oldSemester = getSemesterFromDate(oldEvent.eventDate)
+                val newSemester = getSemesterFromDate(newEvent.eventDate)
+                val hoursDelta = newEvent.hours - oldEvent.hours
+
+                Log.d(TAG, "Updating user stats (User Batch): oldSemester=$oldSemester, newSemester=$newSemester, hoursDelta=$hoursDelta")
+
+                // Chunk attendees to safe batch size (approx 150 users => 300 ops)
+                // Firestore limit is 500 ops per batch. We do 2 ops per user (remove + add).
+                oldEvent.attendees.chunked(150).forEachIndexed { idx, chunk ->
+                    val userBatch = firestore.batch()
+                    
+                    chunk.forEach { attendee ->
+                        val userRef = usersCollection.document(attendee.rollNumber)
+                        
+                        // Op 1: Remove old event ID
+                        // Must be a separate update call because Map keys are unique
+                        userBatch.update(userRef, "eventsList", FieldValue.arrayRemove(oldEventId))
+                        
+                        // Op 2: Add new event ID + update stats
+                        val userUpdates = mutableMapOf<String, Any>()
+                        userUpdates["eventsList"] = FieldValue.arrayUnion(newEvent.id)
+                        
+                         // Handle hours changes
+                        if (hoursDelta != 0.0) {
+                            userUpdates["hours"] = FieldValue.increment(hoursDelta)
+                        }
+
+                        // Handle semester changes
+                        if (oldSemester == newSemester) {
+                            // Same semester: just increment by delta
+                            when (newSemester) {
+                                1 -> userUpdates["sem1Hours"] = FieldValue.increment(hoursDelta)
+                                2 -> userUpdates["sem2Hours"] = FieldValue.increment(hoursDelta)
+                            }
+                        } else {
+                            // Different semester: subtract old hours from old semester, add new hours to new semester
+                            when (oldSemester) {
+                                1 -> userUpdates["sem1Hours"] = FieldValue.increment(-oldEvent.hours)
+                                2 -> userUpdates["sem2Hours"] = FieldValue.increment(-oldEvent.hours)
+                            }
+                            when (newSemester) {
+                                1 -> userUpdates.merge("sem1Hours", FieldValue.increment(newEvent.hours)) { _, new -> new }
+                                2 -> userUpdates.merge("sem2Hours", FieldValue.increment(newEvent.hours)) { _, new -> new }
+                            }
+                        }
+                        
+                        userBatch.update(userRef, userUpdates)
+                    }
+                    
+                    userBatch.commit().await()
+                    Log.d(TAG, "User stats update batch ${idx + 1} committed")
+                }
+            }
 
             // 8) Delete the old event document and its subcollections
             val deleteBatch = firestore.batch()

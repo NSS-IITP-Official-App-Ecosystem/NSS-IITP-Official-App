@@ -46,7 +46,9 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
         _uiState.value = base
 
         loadEnhancedUserProfile()
+        loadEnhancedUserProfile()
         loadStatistics()
+        loadSubjectPreferences()
     }
 
     fun prefetch() {
@@ -107,6 +109,42 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
 
     fun refreshStatistics() {
         loadStatistics()
+        loadSubjectPreferences()
+    }
+
+    private fun loadSubjectPreferences() {
+        val rollNumber = sessionManager.fetchUserId()
+        viewModelScope.launch {
+            try {
+                // 1. Fetch User Preferences (IDs)
+                val userDoc = FirebaseFirestore.getInstance()
+                    .collection("ttwStudents")
+                    .document(rollNumber)
+                    .get()
+                    .await()
+                
+                val prefIds = userDoc.get("subjectPreferences") as? List<String> ?: emptyList()
+                
+                if (prefIds.isNotEmpty()) {
+                    // 2. Fetch All Subjects (to map ID -> Name)
+                    val subjectsSnapshot = FirebaseFirestore.getInstance()
+                        .collection("TTW_Subjects")
+                        .get()
+                        .await()
+                    
+                    val subjectMap = subjectsSnapshot.documents.associate { 
+                        it.id to (it.getString("name") ?: "") 
+                    }
+                    
+                    // 3. Map IDs to Names
+                    val prefNames = prefIds.mapNotNull { id -> subjectMap[id] }
+                    
+                    _uiState.update { it.copy(subjectPreferences = prefNames) }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading subject preferences", e)
+            }
+        }
     }
 }
 

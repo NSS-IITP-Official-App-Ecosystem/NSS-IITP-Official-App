@@ -53,7 +53,7 @@ data class ScheduleReferenceData(
 )
 
 /**
- * Volunteer details from students collection
+ * Data model for volunteer details from students collection
  * Contains enhanced information including interview scores and subject preferences
  */
 data class VolunteerDetails(
@@ -64,34 +64,6 @@ data class VolunteerDetails(
     val subjectPreference1: String = "",
     val subjectPreference2: String = "",
     val subjectPreference3: String = ""
-)
-
-/**
- * Data model for teaching slots
- */
-data class TeachingSlot(
-    val id: String? = null,
-    val name: String = "",
-    val dayOfWeek: DayOfWeek? = null,
-    val startTime: LocalTime? = null,
-    val endTime: LocalTime? = null,
-    val location: String = "",
-    val capacity: Int = 0,
-    val description: String = ""
-)
-
-/**
- * Data model for teaching slot presets
- */
-data class TeachingSlotPreset(
-    val id: String? = null,
-    val name: String = "",
-    val dayOfWeek: DayOfWeek? = null,
-    val startTime: LocalTime? = null,
-    val endTime: LocalTime? = null,
-    val location: String = "",
-    val capacity: Int = 0,
-    val description: String = ""
 )
 
 /**

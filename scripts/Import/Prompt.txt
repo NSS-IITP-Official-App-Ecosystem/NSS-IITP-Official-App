@@ -1,0 +1,1 @@
+python "C:\Users\itses\Desktop\NSS_App\Import\main.py" --csv "C:\Users\itses\Desktop\NSS_App\Import\cssj.csv" --service-account "C:\Users\itses\Desktop\NSS_App\Import\key.json" --project-id "nssiitp-app" --default-password "Temp@1234" 

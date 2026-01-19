@@ -1,0 +1,4 @@
+python Outlook.py --roll-number 2501 --new-email @iitp.ac.in --service-account "C:\Users\itses\Desktop\NSS_App\Import\key.json"
+
+
+cmd /c "firebase deploy --project nssiitp-app"

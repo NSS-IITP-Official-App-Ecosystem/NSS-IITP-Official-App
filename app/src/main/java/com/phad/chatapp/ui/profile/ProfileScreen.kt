@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -94,6 +95,7 @@ data class ProfileUiState(
     val teachingWingStatus: String = "loading...",
     val profileImageUrl: String = "",
     val wings: List<String> = emptyList(),
+    val subjectPreferences: List<String> = emptyList(),
     // New semester-based statistics fields
     val sem1Hours: String = "0/0",
     val sem2Hours: String = "0/0",
@@ -113,10 +115,12 @@ fun ProfileScreen(
     // New admin-only export button
     onExportAttendanceClick: () -> Unit = {},
     onEventHistoryClick: () -> Unit = {},
+    onChangeSubjectsClick: () -> Unit = {},
     onSwitchInterfaceClick: () -> Unit,
     onSem1HoursClick: () -> Unit,
     onSem2HoursClick: () -> Unit,
     onFaqsClick: () -> Unit = {},
+    onSubjectPreferenceClick: () -> Unit = {},
     currentInterface: String,
     teachingWing: Boolean
 ) {
@@ -269,7 +273,8 @@ fun ProfileScreen(
                                     onRefresh = onRefreshClick,
                                     onExportAttendance = onExportAttendanceClick,
                                     onEventHistory = onEventHistoryClick,
-                                    onFaqs = onFaqsClick,
+                                    onChangeSubjects = onChangeSubjectsClick,
+                                onFaqs = onFaqsClick,
                                     onLogout = { showLogoutDialog = true },
                                     isTeachingWing = teachingWing,
                                     isAdmin = isAdmin,
@@ -382,14 +387,68 @@ fun ProfileScreen(
                         // Third row: Institute ID
                         LabeledInfoItem(label = "Institute ID", value = state.instituteId, color = onSurfaceColor)
 
-                        // Wings
-                        if (state.wings.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(16.dp))
-                            LabeledInfoItem(
-                                label = "Wing", 
-                                value = state.wings.joinToString("\n"), 
-                                color = onSurfaceColor
-                            )
+                        // Wings or Subject Preferences based on Interface
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        if (currentInterface == "Teaching Wing") {
+                            // Subject Preference Section for TTW users
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onSubjectPreferenceClick() }
+                                    .padding(vertical = 4.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = "Subject Preference", 
+                                            color = onSurfaceColor.copy(alpha = 0.7f),
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        if (state.subjectPreferences.isEmpty()) {
+                                            Text(
+                                                text = "Tap to set preferences", 
+                                                color = onSurfaceColor,
+                                                fontSize = 16.sp,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        }
+                                    }
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "Edit Preferences",
+                                        tint = onSurfaceColor
+                                    )
+                                }
+                                
+                                // Display Preference List
+                                if (state.subjectPreferences.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    state.subjectPreferences.forEachIndexed { index, subject ->
+                                        Text(
+                                            text = "${index + 1}. $subject",
+                                            color = onSurfaceColor.copy(alpha = 0.9f),
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Normal,
+                                            modifier = Modifier.padding(start = 8.dp, bottom = 4.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        } else {
+                            // Standard Wing Section for NSS
+                            if (state.wings.isNotEmpty()) {
+                                LabeledInfoItem(
+                                    label = "Wing", 
+                                    value = state.wings.joinToString("\n"), 
+                                    color = onSurfaceColor
+                                )
+                            }
                         }
                         
                         // Add bottom spacing to ensure content is not cut off
@@ -766,6 +825,7 @@ fun ProfileMenu(
     onRefresh: () -> Unit,
     onExportAttendance: () -> Unit,
     onEventHistory: () -> Unit,
+    onChangeSubjects: () -> Unit,
     onFaqs: () -> Unit,
     onLogout: () -> Unit,
     isTeachingWing: Boolean,
@@ -780,8 +840,8 @@ fun ProfileMenu(
     ) {
         // Note: Switch User moved to header as a standalone icon
 
-        // Export Attendance Matrix - only for admins
-        if (isAdmin) {
+        // Export Attendance Matrix - only for admins in NSS interface
+        if (isAdmin && currentInterface == "NSS") {
             DropdownMenuItem(
                 text = { Text("Export Attendance Matrix", color = Color(0xFF444343)) },
                 onClick = {
@@ -799,8 +859,8 @@ fun ProfileMenu(
         }
 
 
-        // Event History - only for admins
-        if (isAdmin) {
+        // Event History - only for admins in NSS interface
+        if (isAdmin && currentInterface == "NSS") {
             DropdownMenuItem(
                 text = { Text("Event History", color = Color(0xFF444343)) },
                 onClick = {
@@ -810,6 +870,24 @@ fun ProfileMenu(
                 leadingIcon = {
                     Icon(
                         painter = painterResource(id = R.drawable.ic_calendar),
+                        contentDescription = null,
+                        tint = Color(0xFF444343)
+                    )
+                }
+            )
+        }
+
+        // Change Subjects - only for Teaching Wing interface
+        if (isAdmin && currentInterface == "Teaching Wing") {
+            DropdownMenuItem(
+                text = { Text("Change Subjects", color = Color(0xFF444343)) },
+                onClick = {
+                    onChangeSubjects()
+                    onDismiss()
+                },
+                leadingIcon = {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_book),
                         contentDescription = null,
                         tint = Color(0xFF444343)
                     )
