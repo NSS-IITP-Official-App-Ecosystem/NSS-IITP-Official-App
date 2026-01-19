@@ -161,39 +161,75 @@ class UpdateCardAdapter : ListAdapter<Update, UpdateCardAdapter.UpdateCardViewHo
                     authorImageView.setImageResource(R.drawable.default_profile_image)
                 }
                 
-                // Handle media image - use only mediaUrl
+                // Media handling
                 val mediaUrl = update.mediaUrl
-                if (!mediaUrl.isNullOrEmpty()) {
+                val instagramUrl = update.instagramUrl
+                
+                
+                if (!instagramUrl.isNullOrEmpty()) {
                     imageView.visibility = View.VISIBLE
-                    
-                    Log.d(TAG, "Original media URL: $mediaUrl")
-                    
-                    // Process the URL to make it viewable
-                    val displayUrl = processGoogleDriveUrl(mediaUrl)
-                    Log.d(TAG, "Processed media URL: $displayUrl")
-                    
-                    // Reset any previous image to prevent ghosting
-                    imageView.setImageDrawable(null)
-                    
-                    // Load and display the image with enhanced Glide configuration
+                    // Instagram doesn't provide direct thumbnail URLs, use a placeholder
                     Glide.with(imageView.context)
-                        .load(displayUrl)
+                        .load(android.R.color.darker_gray)
                         .apply(glideRequestOptions)
-                        .transition(DrawableTransitionOptions.withCrossFade()) // Smooth loading
-                        .override(800, 600) // Reasonable resolution for cards
-                        .centerCrop() // Proper cropping
                         .into(imageView)
-                    
-                    // Set click listener to open in ImageViewActivity
+                        
                     imageView.setOnClickListener {
                         try {
-                            val intent = Intent(imageView.context, ImageViewActivity::class.java).apply {
-                                putExtra(ImageViewActivity.EXTRA_IMAGE_URL, mediaUrl)
-                            }
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(instagramUrl))
                             imageView.context.startActivity(intent)
                         } catch (e: Exception) {
-                            Log.e(TAG, "Error opening image: ${e.message}")
-                            Toast.makeText(imageView.context, "Cannot open image: ${e.message}", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(imageView.context, "Cannot open Instagram: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                } else if (!mediaUrl.isNullOrEmpty()) {
+                    imageView.visibility = View.VISIBLE
+                    
+                    if (update.isVideo) {
+                        // Handle Direct Video
+                        Glide.with(imageView.context)
+                            .load(mediaUrl)
+                            .apply(glideRequestOptions)
+                            .into(imageView)
+                            
+                        imageView.setOnClickListener {
+                            try {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(mediaUrl))
+                                intent.setDataAndType(Uri.parse(mediaUrl), "video/*")
+                                imageView.context.startActivity(intent)
+                            } catch (e: Exception) {
+                                Toast.makeText(imageView.context, "Cannot play video: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    } else {
+                        // Handle Image - Existing logic
+                        Log.d(TAG, "Original media URL: $mediaUrl")
+                        
+                        // Process the URL to make it viewable
+                        val displayUrl = processGoogleDriveUrl(mediaUrl)
+                        
+                        // Reset any previous image to prevent ghosting
+                        imageView.setImageDrawable(null)
+                        
+                        // Load and display the image with enhanced Glide configuration
+                        Glide.with(imageView.context)
+                            .load(displayUrl)
+                            .apply(glideRequestOptions)
+                            .transition(DrawableTransitionOptions.withCrossFade()) 
+                            .override(800, 600) 
+                            .centerCrop() 
+                            .into(imageView)
+                        
+                        // Set click listener to open in ImageViewActivity
+                        imageView.setOnClickListener {
+                            try {
+                                val intent = Intent(imageView.context, ImageViewActivity::class.java).apply {
+                                    putExtra(ImageViewActivity.EXTRA_IMAGE_URL, mediaUrl)
+                                }
+                                imageView.context.startActivity(intent)
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Error opening image: ${e.message}")
+                            }
                         }
                     }
                 } else {

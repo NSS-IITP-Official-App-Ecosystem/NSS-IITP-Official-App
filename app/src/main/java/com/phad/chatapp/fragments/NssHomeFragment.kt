@@ -161,6 +161,21 @@ class NssHomeFragment : Fragment() {
         lifecycleScope.launch {
             try {
                 Log.d(TAG, "Loading user data for rollNumber: $rollNumber")
+                
+                if (rollNumber.isEmpty()) {
+                    Log.w(TAG, "Roll number is empty, skipping Firestore user data fetch")
+                    // Fallback to defaults
+                    _uiState.update {
+                        it.copy(
+                            greeting = greeting,
+                            userName = "User",
+                            isAdmin = userType.equals("Admin", ignoreCase = true),
+                            isNssInterface = true
+                        )
+                    }
+                    return@launch
+                }
+
                 val userDoc = db.collection("users").document(rollNumber).get().await()
                 
                 val userName = if (userDoc.exists()) {
@@ -232,31 +247,89 @@ class NssHomeFragment : Fragment() {
         Log.d(TAG, "NssHomeFragment - Starting to load updates...")
         db.collection("nss_updates")
             .orderBy("timestamp", Query.Direction.DESCENDING)
-            .limit(5) // Reduced from 10 to 5 for better performance
+            .limit(20) // Increased for Reel load
             .get()
             .addOnSuccessListener { documents ->
                 Log.d(TAG, "NssHomeFragment - Successfully loaded ${documents.size()} documents from Firestore")
                 
-                val updates = documents.toObjects(Update::class.java).map { update ->
-                    // Debug logging to see what data is loaded
-                    Log.d(TAG, "NssHomeFragment - Loaded update: id=${update.id}, title='${update.title}', content='${update.content}'")
-                    
-                    var tempUpdate = update
-                    val imageUrl = tempUpdate.mediaUrl ?: tempUpdate.imageUrl
-                    if (!imageUrl.isNullOrEmpty()) {
-                        tempUpdate = tempUpdate.copy(imageUrl = driveServiceHelper.processGoogleDriveUrl(imageUrl))
+                val updates = documents.mapNotNull { doc ->
+                    try {
+                        val id = doc.getString("id") ?: doc.id
+                        val title = doc.getString("title") // Nullable
+                        val content = doc.getString("content") // Nullable
+                        val authorId = doc.getString("authorId") ?: ""
+                        val authorName = doc.getString("authorName") ?: "Unknown"
+                        val authorImageUrl = doc.getString("authorImageUrl")
+                        val externalLink = doc.getString("externalLink")
+                        val documentName = doc.getString("documentName")
+                        val documentUrl = doc.getString("documentUrl")
+                        val imageName = doc.getString("imageName")
+                        
+                        // Handle potentially mixed types for mediaUrl
+                        val mediaUrl = doc.getString("mediaUrl")
+                        val imageUrl = doc.getString("imageUrl")
+                        
+                        // Robust timestamp handling
+                        val timestampObj = doc.get("timestamp")
+                        val timestamp: Long = when (timestampObj) {
+                            is Long -> timestampObj
+                            is String -> timestampObj.toLongOrNull() ?: 0L
+                            else -> 0L
+                        }
+                        
+                        // Robust updateType handling
+                        val updateTypeObj = doc.get("updateType")
+                        val updateType: Int = when (updateTypeObj) {
+                            is Long -> updateTypeObj.toInt()
+                            is Int -> updateTypeObj
+                            is String -> updateTypeObj.toIntOrNull() ?: 1
+                            else -> 1
+                        }
+                        
+                        val isVideo = doc.getBoolean("isVideo") ?: false
+                        val instagramUrl = doc.getString("instagramUrl")
+
+                        var update = Update(
+                            id = id,
+                            authorId = authorId,
+                            authorName = authorName,
+                            authorImageUrl = authorImageUrl,
+                            title = title,
+                            content = content,
+                            externalLink = externalLink,
+                            documentName = documentName,
+                            documentUrl = documentUrl,
+                            imageName = imageName,
+                            imageUrl = imageUrl,
+                            mediaUrl = mediaUrl,
+                            isVideo = isVideo,
+                            instagramUrl = instagramUrl,
+                            timestamp = timestamp,
+                            updateType = updateType
+                        )
+                        
+                        // Process Drive URL
+                        val finalImageUrl = update.mediaUrl ?: update.imageUrl
+                        if (!finalImageUrl.isNullOrEmpty()) {
+                            update = update.copy(imageUrl = driveServiceHelper.processGoogleDriveUrl(finalImageUrl))
+                        }
+                        
+                        update
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error parsing individual update document ${doc.id}", e)
+                        null
                     }
-                    tempUpdate
                 }.filter { update ->
-                    // Filter out updates with null or empty titles to prevent crashes
-                    val isValid = !update.title.isNullOrBlank()
-                    if (!isValid) {
-                        Log.w(TAG, "NssHomeFragment - Filtering out update with null/empty title: id=${update.id}")
-                    }
-                    isValid
+                    // Filter out truly invalid updates (e.g. no title AND no content AND no media)
+                    // But we allow empty titles now, so let's just check if it's not effectively empty
+                    val hasContent = !update.content.isNullOrEmpty() || 
+                                     !update.title.isNullOrEmpty() || 
+                                     !update.mediaUrl.isNullOrEmpty() || 
+                                     !update.instagramUrl.isNullOrEmpty()
+                    hasContent
                 }
                 
-                Log.d(TAG, "NssHomeFragment - After filtering, ${updates.size} valid updates remaining")
+                Log.d(TAG, "NssHomeFragment - After manual parsing, ${updates.size} valid updates remaining")
                 
                 // Update cache
                 updateCache = CachedUpdate(updates, System.currentTimeMillis())
@@ -317,6 +390,7 @@ class NssHomeFragment : Fragment() {
         val updateContentInput = dialog.findViewById<EditText>(R.id.updateContentInput)
         val updateTitleInput = dialog.findViewById<EditText>(R.id.updateTitleInput)
         val updateLinkInput = dialog.findViewById<EditText>(R.id.updateLinkInput)
+        val instagramLinkInput = dialog.findViewById<EditText>(R.id.instagramLinkInput)
         val attachImageButton = dialog.findViewById<ImageButton>(R.id.attachImageButton)
         val attachDocumentButton = dialog.findViewById<ImageButton>(R.id.attachDocumentButton)
         val cancelButton = dialog.findViewById<Button>(R.id.cancelButton)
@@ -388,7 +462,21 @@ class NssHomeFragment : Fragment() {
             
             // Create update data
             val link = updateLinkInput.text.toString().trim()
+            val instagramLink = instagramLinkInput.text.toString().trim()
             val crossPost = crossPostCheckbox?.isChecked ?: false
+
+            // Validate Instagram URL if present
+            var instagramUrl: String? = null
+            if (instagramLink.isNotEmpty()) {
+                if (validateInstagramUrl(instagramLink)) {
+                    instagramUrl = instagramLink
+                } else {
+                    Toast.makeText(requireContext(), "Invalid Instagram URL. Use format: instagram.com/reel/ID or instagram.com/p/ID", Toast.LENGTH_SHORT).show()
+                    dialog.findViewById<Button>(R.id.postUpdateButton).isEnabled = true
+                    dialog.findViewById<Button>(R.id.cancelButton).isEnabled = true
+                    return@setOnClickListener
+                }
+            }
 
             // Upload media if selected
             if (selectedImageUri != null) {
@@ -396,18 +484,22 @@ class NssHomeFragment : Fragment() {
                     // Upload document if selected
                     if (selectedDocumentUri != null) {
                         uploadDocument(selectedDocumentUri!!) { documentUrl: String, documentName: String ->
-                            createUpdate(content, title, link, mediaUrl, documentUrl, documentName, crossPost)
+                            createUpdate(content, title, link, mediaUrl, documentUrl, documentName, false, null, crossPost)
                         }
                     } else {
-                        createUpdate(content, title, link, mediaUrl, null, null, crossPost)
+                        // If both image and Instagram link are present, prioritize image as background or similar? 
+                        // For now we pass both, logic in ReelItem handles priority (Instagram > Media > Image)
+                        createUpdate(content, title, link, mediaUrl, null, null, false, instagramUrl, crossPost)
                     }
                 }
             } else if (selectedDocumentUri != null) {
                 uploadDocument(selectedDocumentUri!!) { documentUrl: String, documentName: String ->
-                    createUpdate(content, title, link, null, documentUrl, documentName, crossPost)
+                    createUpdate(content, title, link, null, documentUrl, documentName, false, instagramUrl, crossPost)
                 }
             } else {
-                createUpdate(content, title, link, null, null, null, crossPost)
+                // If only Instagram link is there
+                val isVideo = instagramUrl != null
+                createUpdate(content, title, link, null, null, null, isVideo, instagramUrl, crossPost)
             }
         }
 
@@ -569,13 +661,24 @@ class NssHomeFragment : Fragment() {
         }
     }
 
+    private fun validateInstagramUrl(url: String): Boolean {
+        // Validates Instagram Reel and Post URLs
+        // Formats: https://www.instagram.com/reel/ID/ or https://www.instagram.com/p/ID/
+        val pattern = "^https?://(www\\.)?instagram\\.com/(p|reel)/([A-Za-z0-9_-]+)/?.*$"
+        val compiledPattern = java.util.regex.Pattern.compile(pattern, java.util.regex.Pattern.CASE_INSENSITIVE)
+        val matcher = compiledPattern.matcher(url)
+        return matcher.matches()
+    }
+    
     private fun createUpdate(
         content: String,
-        title: String, // Changed from String? to String since title is now required
+        title: String?,
         link: String?,
         mediaUrl: String?,
         documentUrl: String?,
         documentName: String?,
+        isVideo: Boolean = false,
+        instagramUrl: String? = null,
         crossPost: Boolean = false
     ) {
         val userId = auth.currentUser?.uid ?: return
@@ -603,14 +706,16 @@ class NssHomeFragment : Fragment() {
             authorId = userRollNumber,
             authorName = authorName,
             authorImageUrl = authorImageUrl,
-            title = title, // Title is now required, so no need for null check
+            title = title,
             content = content,
             externalLink = if (link.isNullOrEmpty()) null else link,
             documentName = documentName,
             documentUrl = documentUrl,
-            imageName = if (mediaUrl != null) "image_${System.currentTimeMillis()}.jpg" else null,
-            imageUrl = mediaUrl,
+            imageName = if (mediaUrl != null && !isVideo) "image_${System.currentTimeMillis()}.jpg" else null,
+            imageUrl = if (!isVideo) mediaUrl else null,
             mediaUrl = mediaUrl, // Keep for backward compatibility
+            isVideo = isVideo,
+            instagramUrl = instagramUrl,
             timestamp = timestamp,
             updateType = updateType
         )
@@ -668,8 +773,10 @@ class NssHomeFragment : Fragment() {
             val currentUserId = sessionManager.fetchRollNumber() ?: auth.currentUser?.uid ?: ""
 
             // Create a descriptive message that includes update info
-            val title = update.title // Title is now guaranteed to be non-null
-            val message = "${title}: ${update.content.take(100)}${if (update.content.length > 100) "..." else ""}"
+            // Create a descriptive message that includes update info
+            val title = update.title ?: "New Update" // Safe default
+            val content = update.content ?: ""
+            val message = "$title: ${content.take(100)}${if (content.length > 100) "..." else ""}"
 
             // If there's a document, mention it in the notification
             val fullMessage = if (update.documentUrl != null) {
@@ -825,8 +932,8 @@ class NssHomeFragment : Fragment() {
                 
                 val updates = documents.toObjects(Update::class.java)
                 val updateTitles = updates.map { update ->
-                    val title = update.title // Title is now guaranteed to be non-null
-                    val content = update.content.take(50)
+                    val title = update.title ?: "Untitled"
+                    val content = (update.content ?: "").take(50)
                     val timestamp = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault())
                         .format(java.util.Date(update.timestamp))
                     "$title: $content... (Posted: $timestamp)"
@@ -851,8 +958,8 @@ class NssHomeFragment : Fragment() {
     
     private fun showDeleteConfirmationDialog(update: Update) {
         val message = "Are you sure you want to delete this update?\n\n" +
-                "Title: ${update.title}\n" + // Title is now guaranteed to be non-null
-                "Content: ${update.content.take(100)}...\n" +
+                "Title: ${update.title ?: "Untitled"}\n" +
+                "Content: ${(update.content ?: "").take(100)}...\n" +
                 "Posted by: ${update.authorName}\n" +
                 "Posted on: ${java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(update.timestamp))}"
         

@@ -165,74 +165,57 @@ fun HomeScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .clip(RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp))
-                    .background(surfaceColor)
-                    .verticalScroll(rememberScrollState())
+                    .background(Color.Black) // Dark background for reels
             ) {
-                // Greeting and Next Class
+                // Greeting and Next Class - Fixed at top
                 Column(
-                    modifier = Modifier.padding(all = contentPadding)
+                    modifier = Modifier
+                        .padding(horizontal = contentPadding, vertical = 16.dp)
+                        .background(Color.Black)
                 ) {
                     Text(
                         text = buildAnnotatedString {
                             withStyle(
                                 style = SpanStyle(
                                     fontSize = greetingFontSize,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
                                 )
                             ) {
                                 append("${state.greeting}\n")
                             }
                             withStyle(
-                                style = SpanStyle(fontSize = userNameFontSize)
+                                style = SpanStyle(
+                                    fontSize = userNameFontSize,
+                                    color = Color.White.copy(alpha = 0.8f)
+                                )
                             ) {
                                 append(state.userName)
                             }
                         },
-                        color = onSurfaceColor,
                         lineHeight = when {
                             isSmallScreen -> 30.sp
                             isMediumScreen -> 33.sp
                             else -> 36.sp
                         }
                     )
-                    Spacer(Modifier.height(spacingBetweenSections))
-                    // Next class info removed
                 }
 
-                // Updates Section
-                Text(
-                    text = "Updates",
-                    color = onSurfaceColor.copy(alpha = 0.8f),
-                    fontSize = updatesFontSize,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = contentPadding)
-                )
-                Spacer(Modifier.height(spacingBetweenSections))
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = contentPadding),
-                    horizontalArrangement = Arrangement.spacedBy(
-                        if (isSmallScreen) 12.dp else 16.dp
-                    )
+                // Reel Feed Section - Fills remaining space
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
                 ) {
-                    items(state.updates) { update ->
-                        UpdateCard(
-                            update = update,
-                            onUpdateClick = onUpdateClick,
-                            isSmallScreen = isSmallScreen
-                        )
-                    }
-                }
-                Spacer(
-                    Modifier.height(
-                        when {
-                            isSmallScreen -> 60.dp
-                            isMediumScreen -> 70.dp
-                            else -> 80.dp
-                        }
+                    ReelFeed(
+                        updates = state.updates,
+                        onUpdateClick = onUpdateClick
                     )
-                ) // Spacer for content to clear FAB
+                }
             }
         }
+
 
         // Floating Action Button positioned absolutely
         if (state.isAdmin) {

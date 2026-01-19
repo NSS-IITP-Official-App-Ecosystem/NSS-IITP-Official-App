@@ -176,6 +176,22 @@ class HomeFragment : Fragment() {
         lifecycleScope.launch {
             try {
                 Log.d(TAG, "Loading user data for rollNumber: $rollNumber")
+                
+                if (rollNumber.isEmpty()) {
+                    Log.w(TAG, "Roll number is empty, skipping Firestore user data fetch")
+                    // Fallback to defaults
+                    val userName = sessionManager.fetchUserName().ifEmpty { "User" }
+                    _uiState.update {
+                        it.copy(
+                            greeting = greeting,
+                            userName = userName,
+                            isAdmin = userType.trim().equals("Admin", ignoreCase = true) || userType.trim().contains("Admin", ignoreCase = true),
+                            isNssInterface = false
+                        )
+                    }
+                    return@launch
+                }
+
                 val userDoc = db.collection("users").document(rollNumber).get().await()
                 
                 val userName = if (userDoc.exists()) {
@@ -252,26 +268,82 @@ class HomeFragment : Fragment() {
             .addOnSuccessListener { documents ->
                 Log.d(TAG, "HomeFragment - Successfully loaded ${documents.size()} documents from Firestore")
                 
-                val updates = documents.toObjects(Update::class.java).map { update ->
-                    // Debug logging to see what data is loaded
-                    Log.d(TAG, "HomeFragment - Loaded update: id=${update.id}, title='${update.title}', content='${update.content}'")
-                    
-                    var tempUpdate = update
-                    val imageUrl = tempUpdate.mediaUrl ?: tempUpdate.imageUrl
-                    if (!imageUrl.isNullOrEmpty()) {
-                        tempUpdate = tempUpdate.copy(imageUrl = driveServiceHelper.processGoogleDriveUrl(imageUrl))
+                val updates = documents.mapNotNull { doc ->
+                    try {
+                        val id = doc.getString("id") ?: doc.id
+                        val title = doc.getString("title") // Nullable
+                        val content = doc.getString("content") // Nullable
+                        val authorId = doc.getString("authorId") ?: ""
+                        val authorName = doc.getString("authorName") ?: "Unknown"
+                        val authorImageUrl = doc.getString("authorImageUrl")
+                        val externalLink = doc.getString("externalLink")
+                        val documentName = doc.getString("documentName")
+                        val documentUrl = doc.getString("documentUrl")
+                        val imageName = doc.getString("imageName")
+                        
+                        // Handle potentially mixed types for mediaUrl
+                        val mediaUrl = doc.getString("mediaUrl")
+                        val imageUrl = doc.getString("imageUrl")
+                        
+                        // Robust timestamp handling
+                        val timestampObj = doc.get("timestamp")
+                        val timestamp: Long = when (timestampObj) {
+                            is Long -> timestampObj
+                            is String -> timestampObj.toLongOrNull() ?: 0L
+                            else -> 0L
+                        }
+                        
+                        // Robust updateType handling
+                        val updateTypeObj = doc.get("updateType")
+                        val updateType: Int = when (updateTypeObj) {
+                            is Long -> updateTypeObj.toInt()
+                            is Int -> updateTypeObj
+                            is String -> updateTypeObj.toIntOrNull() ?: 1
+                            else -> 1
+                        }
+                        
+                        val isVideo = doc.getBoolean("isVideo") ?: false
+                        val instagramUrl = doc.getString("instagramUrl")
+
+                        var update = Update(
+                            id = id,
+                            authorId = authorId,
+                            authorName = authorName,
+                            authorImageUrl = authorImageUrl,
+                            title = title,
+                            content = content,
+                            externalLink = externalLink,
+                            documentName = documentName,
+                            documentUrl = documentUrl,
+                            imageName = imageName,
+                            imageUrl = imageUrl,
+                            mediaUrl = mediaUrl,
+                            isVideo = isVideo,
+                            instagramUrl = instagramUrl,
+                            timestamp = timestamp,
+                            updateType = updateType
+                        )
+                        
+                        // Process Drive URL
+                        val finalImageUrl = update.mediaUrl ?: update.imageUrl
+                        if (!finalImageUrl.isNullOrEmpty()) {
+                            update = update.copy(imageUrl = driveServiceHelper.processGoogleDriveUrl(finalImageUrl))
+                        }
+                        
+                        update
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error parsing individual update document ${doc.id}", e)
+                        null
                     }
-                    tempUpdate
                 }.filter { update ->
-                    // Filter out updates with null or empty titles to prevent crashes
-                    val isValid = !update.title.isNullOrBlank()
-                    if (!isValid) {
-                        Log.w(TAG, "HomeFragment - Filtering out update with null/empty title: id=${update.id}")
-                    }
-                    isValid
+                    val hasContent = !update.content.isNullOrEmpty() || 
+                                     !update.title.isNullOrEmpty() || 
+                                     !update.mediaUrl.isNullOrEmpty() || 
+                                     !update.instagramUrl.isNullOrEmpty()
+                    hasContent
                 }
                 
-                Log.d(TAG, "HomeFragment - After filtering, ${updates.size} valid updates remaining")
+                Log.d(TAG, "HomeFragment - After manual parsing, ${updates.size} valid updates remaining")
                 
                 // Update cache
                 updateCache = CachedUpdate(updates, System.currentTimeMillis())
@@ -435,8 +507,8 @@ class HomeFragment : Fragment() {
                 
                 val updates = documents.toObjects(Update::class.java)
                 val updateTitles = updates.map { update ->
-                    val title = update.title // Title is now guaranteed to be non-null
-                    val content = update.content.take(50)
+                    val title = update.title ?: "Untitled"
+                    val content = (update.content ?: "").take(50)
                     val timestamp = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault())
                         .format(java.util.Date(update.timestamp))
                     "$title: $content... (Posted: $timestamp)"
@@ -461,8 +533,8 @@ class HomeFragment : Fragment() {
     
     private fun showDeleteConfirmationDialog(update: Update) {
         val message = "Are you sure you want to delete this update?\n\n" +
-                "Title: ${update.title}\n" + // Title is now guaranteed to be non-null
-                "Content: ${update.content.take(100)}...\n" +
+                "Title: ${update.title ?: "Untitled"}\n" +
+                "Content: ${(update.content ?: "").take(100)}...\n" +
                 "Posted by: ${update.authorName}\n" +
                 "Posted on: ${java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(update.timestamp))}"
         
@@ -709,8 +781,10 @@ class HomeFragment : Fragment() {
             val currentUserId = sessionManager.fetchRollNumber() ?: auth.currentUser?.uid ?: ""
 
             // Create a descriptive message that includes update info
-            val title = update.title // Title is now guaranteed to be non-null
-            val message = "${title}: ${update.content.take(100)}${if (update.content.length > 100) "..." else ""}"
+            // Create a descriptive message that includes update info
+            val title = update.title ?: "New Update" // Safe default
+            val content = update.content ?: ""
+            val message = "$title: ${content.take(100)}${if (content.length > 100) "..." else ""}"
             
             // If there's a document, mention it in the notification
             val fullMessage = if (update.documentUrl != null) {

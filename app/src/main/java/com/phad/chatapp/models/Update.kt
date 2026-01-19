@@ -9,14 +9,16 @@ data class Update(
     val authorId: String = "",
     val authorName: String = "",
     val authorImageUrl: String? = null,
-    val title: String = "", // Changed from String? to String since title is now required
-    val content: String = "",
+    val title: String? = null,
+    val content: String? = null,
     val externalLink: String? = null,
     val documentName: String? = null,
     val documentUrl: String? = null,
     val imageName: String? = null,
     val imageUrl: String? = null,
     val mediaUrl: String? = null, // Keep for backward compatibility
+    val isVideo: Boolean = false, // New field to identify video updates
+    val instagramUrl: String? = null, // Store Instagram Reel/Post URL for native engagement
     val timestamp: Long = 0,
     val updateType: Int = 1 // 1=Teaching Wing, 2=NSS only, 3=Both
 ) : Serializable {
@@ -26,14 +28,16 @@ data class Update(
         authorId = "",
         authorName = "",
         authorImageUrl = null,
-        title = "", // Changed from null to empty string
-        content = "",
+        title = null,
+        content = null,
         externalLink = null,
         documentName = null,
         documentUrl = null,
         imageName = null,
         imageUrl = null,
         mediaUrl = null,
+        isVideo = false, // New field for video updates
+        instagramUrl = null, // New field for Instagram URL
         timestamp = 0,
         updateType = 1
     )
