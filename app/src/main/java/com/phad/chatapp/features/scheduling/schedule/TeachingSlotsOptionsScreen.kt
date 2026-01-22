@@ -131,39 +131,38 @@ fun TeachingSlotsOptionsScreen(
     ) {
         Scaffold(
             topBar = {
-                TopAppBar(
-                        title = {
-                            Text(
-                                "Select Teaching Slots Preset",
-                                style = MaterialTheme.typography.titleLarge.copy(
-                                    fontSize = 22.sp // UI.md title font size
-                                ),
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(start = 8.dp) // UI.md title padding
-                            )
-                        },
-                        navigationIcon = {
-                            IconButton(
-                                onClick = { navController.navigateUp() },
-                                modifier = Modifier
-                                    .padding(8.dp) // UI.md navigation icon padding
-                                    .size(48.dp) // UI.md back button container size
-                            ) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Back",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(28.dp) // UI.md back arrow size
-                                )
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = Color.Transparent // UI.md transparent background
-                        ),
-                        modifier = Modifier.padding(top = 8.dp, bottom = 8.dp), // UI.md TopAppBar padding
-                        windowInsets = WindowInsets(0, 0, 0, 0)
+                // Header layout matching VolunteerPresetsScreen
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp, bottom = 8.dp) // TTW UI plan TopAppBar padding
+                        .padding(start = 4.dp, end = 20.dp), // Less padding at start for Back button
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Back button
+                    IconButton(
+                        onClick = { navController.navigateUp() },
+                        modifier = Modifier.size(48.dp) // TTW UI plan: 48dp touch target
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp) // TTW UI plan: 24dp icon size
+                        )
+                    }
+
+                    // Title
+                    Text(
+                        text = "Teaching Slots Presets",
+                        style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp),
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 8.dp)
                     )
+                }
             },
             containerColor = Color.Transparent,
             snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -368,25 +367,25 @@ fun GroupFrequencyDisplay(
                         horizontalArrangement = Arrangement.spacedBy(6.dp) // Consistent 6dp spacing between chips
                     ) {
                         lineGroups.forEach { (group, count) ->
-                            // Group frequency chip with standardized dimensions
+                            // Group frequency chip - matching VolunteerPresetsScreen styling
                             Surface(
-                                shape = RoundedCornerShape(8.dp), // UI.md corner radius for compact look
-                                color = YellowAccent, // UI.md yellow accent color to match reference
+                                shape = RoundedCornerShape(8.dp), // TTW UI plan: 8dp corner radius
+                                color = YellowAccent, // TTW UI plan: YellowAccent background
                                 modifier = Modifier
                                     .padding(vertical = 2.dp)
-                                    .width(56.dp) // Standardized width for all chips
-                                    .height(28.dp) // Standardized height for all chips
+                                    .width(60.dp) // TTW UI plan: 60dp width
+                                    .height(28.dp) // TTW UI plan: 28dp height
                             ) {
                                 Box(
-                                    contentAlignment = Alignment.Center, // Center text within the standardized chip
+                                    contentAlignment = Alignment.Center, // TTW UI plan: centered text
                                     modifier = Modifier.fillMaxSize()
                                 ) {
                                     Text(
                                         text = "Gp $group: $count",
-                                        style = MaterialTheme.typography.bodySmall, // UI.md typography for secondary info
-                                        color = Color.Black, // Black text on yellow background for contrast
-                                        fontWeight = FontWeight.Medium,
-                                        textAlign = TextAlign.Center, // Center align text
+                                        style = MaterialTheme.typography.bodySmall, // Matching VolunteerPresetsScreen
+                                        color = Color.Black, // TTW UI plan: black text on yellow background
+                                        fontWeight = FontWeight.Medium, // Matching VolunteerPresetsScreen
+                                        textAlign = TextAlign.Center, // TTW UI plan: centered alignment
                                         maxLines = 1, // Ensure single line
                                         overflow = TextOverflow.Ellipsis // Handle overflow gracefully
                                     )

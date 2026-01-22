@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.CardDefaults
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -624,29 +625,27 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
             .background(DarkBackground)
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 20.dp, vertical = 24.dp)
+            modifier = Modifier.fillMaxSize()
+                // Removed padding here to allow custom padding for header and content
         ) {
-            // Top bar with back button and title
+            // Top bar with back button and title - matching ManageVolunteersScreen
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 16.dp),
+                    .padding(top = 16.dp, bottom = 8.dp) // TTW UI plan TopAppBar padding
+                    .padding(start = 4.dp, end = 20.dp), // Less padding at start for Back button
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Back button with 48dp touch target
+                // Back button
                 IconButton(
                     onClick = { navController.navigateUp() },
-                    modifier = Modifier
-                        .size(48.dp)
-                        .padding(end = 8.dp)
+                    modifier = Modifier.size(48.dp) // TTW UI plan: 48dp touch target
                 ) {
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
                         tint = Color.White,
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.size(24.dp) // TTW UI plan: 24dp icon size
                     )
                 }
 
@@ -661,8 +660,28 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
                         .padding(start = 8.dp)
                 )
 
-                // Buttons removed from here
-
+                // Copy Preset button in header - circular yellow button (TTW UI plan pattern)
+                if (preset != null && !isLoading) {
+                    Box(
+                        modifier = Modifier
+                            .padding(top = 2.dp, end = 4.dp)
+                            .size(40.dp) // Circular button size
+                            .clip(CircleShape)
+                            .background(YellowAccent)
+                            .clickable {
+                                loadAvailablePresets()
+                                showCopyDialog = true
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = "Copy Preset",
+                            tint = Color.Black, // Black icon on yellow background
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
             }
 
             // Show loading indicator when loading preset data
@@ -683,7 +702,7 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 16.dp),
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = DarkSurface
@@ -719,71 +738,10 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
                 // Show preset schedule for setting availability
                 Column(
                     modifier = Modifier
-                        .fillMaxSize()
+                        .fillMaxWidth() // Changed from fillMaxSize to allow content-based height
+                        .padding(horizontal = 20.dp) // Restore standard padding for content
                         .verticalScroll(rememberScrollState())
                 ) {
-                        // Copy button positioned first - full width
-                        // Copy buttons row
-                        if (preset != null && !isLoading) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 4.dp, vertical = 8.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                // Copy from Preset Button
-                                StandardButton(
-                                    onClick = {
-                                        loadAvailablePresets()
-                                        showCopyDialog = true
-                                    },
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.ContentCopy,
-                                        contentDescription = "Copy Preset",
-                                        tint = Color.Black,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "Copy Preset",
-                                        fontWeight = FontWeight.Medium,
-                                        color = Color.Black,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-
-                                // Upload Excel Button
-                                StandardButton(
-                                    onClick = {
-                                        try {
-                                            excelLauncher.launch("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                                        } catch (e: Exception) {
-                                            excelLauncher.launch("*/*")
-                                        }
-                                    },
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Icon(
-                                        Icons.Default.UploadFile,
-                                        contentDescription = "Upload Excel",
-                                        tint = Color.Black,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "Upload Excel",
-                                        fontWeight = FontWeight.Medium,
-                                        color = Color.Black,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
-                        }
-
                         // Preset name display
                         Text(
                             text = preset!!.presetName,
@@ -818,14 +776,16 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
                                     Column(
                                         modifier = Modifier
                                             .fillMaxWidth() // Always fill width for horizontal centering
-                                            .padding(8.dp),
+                                            .background(
+                                                YellowAccent.copy(alpha = 0.15f),
+                                                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+                                            ),
                                         horizontalAlignment = Alignment.CenterHorizontally // Always center horizontally
                                     ) {
                                     // Schedule table header with synchronized horizontal scrolling
                                     Row(
                                         modifier = Modifier
                                             .wrapContentWidth() // Only take up space needed for content
-                                            .background(NeutralCardSurface)
                                             .padding(vertical = 8.dp, horizontal = 4.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
@@ -837,7 +797,7 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
                                                 .padding(horizontal = 4.dp),
                                             style = MaterialTheme.typography.titleSmall,
                                             fontWeight = FontWeight.Bold,
-                                            color = Color.White
+                                            color = YellowAccent
                                         )
 
                                         // Horizontally scrollable slot headers using shared scroll state
@@ -848,21 +808,68 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
                                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
                                             // Slot column headers with fixed dimensions
-                                            preset!!.columnNames.forEach { columnName ->
+                                            preset!!.columnNames.forEachIndexed { index, classTime ->
+                                                val freeTime = preset!!.freeGroupTimes.getOrElse(index) { "" }
+
                                                 Column(
                                                     modifier = Modifier
-                                                        .width(80.dp) // Fixed width for consistent sizing
+                                                        .width(100.dp) // Increased width for richer header
                                                         .padding(horizontal = 2.dp),
                                                     horizontalAlignment = Alignment.CenterHorizontally
                                                 ) {
-                                                    Text(
-                                                        text = columnName,
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = Color.White,
-                                                        textAlign = TextAlign.Center,
-                                                        maxLines = 1
-                                                    )
+                                                    Card(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        shape = RoundedCornerShape(8.dp),
+                                                        colors = CardDefaults.cardColors(
+                                                            containerColor = YellowAccent.copy(alpha = 0.1f)
+                                                        )
+                                                    ) {
+                                                        Column(
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .padding(vertical = 6.dp, horizontal = 4.dp),
+                                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                                                        ) {
+                                                            // Class Time
+                                                            Text(
+                                                                text = "Class:",
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                fontWeight = FontWeight.Medium,
+                                                                color = YellowAccent,
+                                                                fontSize = 10.sp
+                                                            )
+                                                            Text(
+                                                                text = classTime,
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = Color.White,
+                                                                textAlign = TextAlign.Center,
+                                                                fontSize = 11.sp,
+                                                                maxLines = 1
+                                                            )
+
+                                                            Spacer(modifier = Modifier.height(4.dp))
+
+                                                            // Free Group Time
+                                                            Text(
+                                                                text = "Free:",
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                fontWeight = FontWeight.Medium,
+                                                                color = YellowAccent,
+                                                                fontSize = 10.sp
+                                                            )
+                                                            Text(
+                                                                text = freeTime.ifEmpty { "--:--" },
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = Color.White,
+                                                                textAlign = TextAlign.Center,
+                                                                fontSize = 11.sp,
+                                                                maxLines = 1
+                                                            )
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
@@ -871,7 +878,11 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
                                         // Schedule table rows
                                         Column(
                                             modifier = Modifier
-                                                .wrapContentWidth() // Only take up space needed for content
+                                                .fillMaxWidth() // Always fill width for horizontal centering
+                                                .background(
+                                                    NeutralCardSurface,
+                                                    shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp)
+                                                )
                                                 .padding(8.dp),
                                             horizontalAlignment = Alignment.CenterHorizontally // Always center horizontally
                                         ) {
@@ -904,7 +915,7 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
                                             daySchedule.slots.forEachIndexed { slotIndex, active ->
                                                 Box(
                                                     modifier = Modifier
-                                                        .width(80.dp) // Fixed width for consistent sizing
+                                                    .width(100.dp) // Match header width
                                                         .height(60.dp) // Fixed height for consistent sizing
                                                     .background(
                                                         color = if (active) {
@@ -986,8 +997,47 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
 
 
 
-                        // Bottom spacing for better layout
-                        Spacer(modifier = Modifier.height(24.dp))
+
+
+                        // Upload Excel button - at bottom of grid
+                        Spacer(modifier = Modifier.height(16.dp))
+                        // Upload Excel Button - centered and compact
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            StandardButton(
+                                onClick = {
+                                    try {
+                                        excelLauncher.launch("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                                    } catch (e: Exception) {
+                                        excelLauncher.launch("*/*")
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth(0.7f) // 70% width for more compact look
+                                    .padding(horizontal = 4.dp, vertical = 8.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.UploadFile,
+                                    contentDescription = "Upload Excel",
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Upload Excel",
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color.Black,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+
+
+                        // Bottom spacing for better layout and FAB clearance
+                        Spacer(modifier = Modifier.height(80.dp))
                 }
         }
 
@@ -1143,15 +1193,15 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
         }
     }
 
-    // Floating Action Button for Save - Bottom Right
+    // Floating Action Button for Save - TTW UI plan specifications
     if (preset != null && !isLoading) {
          FloatingActionButton(
             onClick = { saveAvailabilityData() },
-            containerColor = Color(0xFF4CAF50), // Green
-            contentColor = Color.Black,
+            containerColor = Color(0xFF4CAF50), // TTW UI plan: Green
+            contentColor = Color.White, // TTW UI plan: White icon
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(24.dp)
+                .padding(end = 24.dp, bottom = 48.dp) // TTW UI plan: end=24dp, bottom=48dp
         ) {
             Icon(
                 Icons.Default.Save,
@@ -1181,13 +1231,6 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
             textContentColor = Color.White,
             text = {
                 Column {
-                    Text(
-                        "Select a preset to copy availability data from:",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = Color.White,
-                        modifier = Modifier.padding(bottom = 16.dp)
-                    )
-
                     if (isLoadingPresets) {
                         Box(
                             modifier = Modifier

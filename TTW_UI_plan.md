@@ -3,14 +3,18 @@
 ## 1. Top Header Bar
 The top navigation bar containing the Back button, Title, and Search action.
 
-### Container
+### Container Implementation
+*   **Component Type:** Custom `Row` layout (NOT `TopAppBar`)
+    *   *Reason:* Allows precise control over padding and element alignment
+*   **Structure:** Row containing IconButton, Text with weight(1f), and optional action button
 *   **Vertical Padding:**
     *   **Top:** `16.dp`
     *   **Bottom:** `8.dp`
 *   **Horizontal Padding:**
     *   **Start:** `4.dp`
     *   **End:** `20.dp`
-*   **Alignment:** Vertically Centered
+*   **Alignment:** Vertically Centered (`Alignment.CenterVertically`)
+*   **Width:** `fillMaxWidth()`
 
 ### Components
 
@@ -108,16 +112,17 @@ UI displayed when no results or data are found.
 ---
 
 ## 6. Group Information Chip
-Standard chip for displaying component/group counts (used in Volunteer Presets).
+Standard chip for displaying component/group counts (used in Volunteer Presets and Teaching Slots).
 
 *   **Size:**
-    *   **Width:** `60.dp`.
-    *   **Height:** `28.dp`.
-*   **Shape:** `RoundedCornerShape(8.dp)`.
-*   **Background:** `YellowAccent`.
+    *   **Width:** `60.dp`
+    *   **Height:** `28.dp`
+*   **Shape:** `RoundedCornerShape(8.dp)`
+*   **Background:** `YellowAccent`
 *   **Text:**
-    *   **Alignment:** Centered.
-    *   **Style:** `MaterialTheme.typography.bodyMedium`.
-    *   **Font Weight:** `FontWeight.Bold`.
-    *   **Color:** `Color.Black` (implied by Yellow background contrast).
+    *   **Alignment:** Centered (`textAlign = TextAlign.Center`, `contentAlignment = Alignment.Center`)
+    *   **Style:** `MaterialTheme.typography.bodySmall`
+    *   **Font Weight:** `FontWeight.Medium`
+    *   **Color:** `Color.Black`
+    *   **Max Lines:** `1` with `TextOverflow.Ellipsis`
 

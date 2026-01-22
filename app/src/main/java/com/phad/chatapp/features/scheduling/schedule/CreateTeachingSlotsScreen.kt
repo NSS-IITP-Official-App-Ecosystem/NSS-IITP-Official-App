@@ -788,7 +788,7 @@ fun CreateTeachingSlotsScreen(
                                 }
                             }
                         },
-                        containerColor = SuccessGreen,
+                        containerColor = Color(0xFF4CAF50),
                         contentColor = Color.White,
                         shape = RoundedCornerShape(16.dp)
                     ) {
@@ -805,45 +805,57 @@ fun CreateTeachingSlotsScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 16.dp)
-                    .padding(top = 16.dp)
             ) {
                 // Top bar
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 16.dp),
+                        .padding(top = 16.dp, bottom = 8.dp)
+                        .padding(start = 4.dp, end = 20.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Back button
                     IconButton(
                         onClick = { navController.navigateUp() },
-                        modifier = Modifier.padding(end = 8.dp)
+                        modifier = Modifier.size(48.dp)
                     ) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
-                            tint = Color.White
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
                         )
                     }
 
                     // Title
                     Text(
                         text = if (isEditMode) "Edit Slots Preset" else "Create Slots Preset",
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp),
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 8.dp)
                     )
 
-                    // Copy Button (replaces Save/Create in top bar)
-                    StandardButton(
-                        onClick = { showCopyDialog = true }
-                    ) {
-                        Text(
-                            text = "Copy",
-                            fontWeight = FontWeight.Medium
-                        )
+                    // Copy Button (Circular)
+                    if (!isLoading) {
+                        Box(
+                            modifier = Modifier
+                                .padding(top = 2.dp, end = 4.dp)
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(YellowAccent)
+                                .clickable { showCopyDialog = true },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ContentCopy,
+                                contentDescription = "Copy Preset",
+                                tint = Color.Black,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
                     }
                 }
 
@@ -864,6 +876,7 @@ fun CreateTeachingSlotsScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 16.dp)
                             .padding(bottom = 120.dp), // Extra padding to clear bottom navigation bar
                         verticalArrangement = Arrangement.Top
                     ) {
@@ -897,7 +910,7 @@ fun CreateTeachingSlotsScreen(
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(bottom = 16.dp),
+                                            .padding(bottom = 4.dp),
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
                                         daysOfWeek.forEach { day ->
@@ -915,7 +928,7 @@ fun CreateTeachingSlotsScreen(
                                         }
                                     }
 
-                                    Spacer(modifier = Modifier.height(28.dp))
+                                    Spacer(modifier = Modifier.height(8.dp))
                                 }
 
                                 // Step 2: Number of slots per day - Compact UI
