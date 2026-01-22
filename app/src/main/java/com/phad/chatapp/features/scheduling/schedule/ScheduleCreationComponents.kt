@@ -5,6 +5,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.lazy.items
@@ -27,6 +28,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
@@ -350,8 +352,13 @@ fun VolunteerListItem(
 
                         // Display group and last 4 characters of roll number
                         val rollLast4 = volunteer.rollNo.takeLast(4)
+                        val subjectAbbr = if (volunteer.isAssigned && volunteer.assignedSlot?.assignedSubject != null) {
+                            " • ${volunteer.assignedSlot!!.assignedSubject!!.take(3)}"
+                        } else {
+                            ""
+                        }
                         Text(
-                            text = "Group ${volunteer.group} • $rollLast4",
+                            text = "Group ${volunteer.group} • $rollLast4$subjectAbbr",
                             color = Color(0xFFB0B0B0), // UI.md secondary text color
                             style = MaterialTheme.typography.bodyMedium
                         )
@@ -417,6 +424,7 @@ fun VolunteerListItem(
 /**
  * Panel for assigning a volunteer to a slot
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AssignmentPanel(
     slot: Slot,
@@ -515,9 +523,8 @@ fun AssignmentPanel(
                                 .padding(14.dp), // Reduced padding for compactness
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            // Display full name and full roll number
+                            // Display full name
                             val fullName = slot.assignedVolunteerName ?: "Unknown"
-                            val fullRollNo = slot.assignedVolunteerRollNo ?: ""
 
                             Text(
                                 text = fullName,
@@ -527,31 +534,88 @@ fun AssignmentPanel(
                                 textAlign = TextAlign.Center
                             )
 
-                            if (fullRollNo.isNotEmpty()) {
-                                Text(
-                                    text = fullRollNo,
-                                    color = Color.White.copy(alpha = 0.8f),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Normal,
-                                    textAlign = TextAlign.Center
-                                )
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Roll number and Group in separate yellow cards
+                            Row(
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Roll number card
+                                val fullRollNo = slot.assignedVolunteerRollNo ?: ""
+                                if (fullRollNo.isNotEmpty()) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = YellowAccent,
+                                        modifier = Modifier.padding(horizontal = 4.dp)
+                                    ) {
+                                        Text(
+                                            text = fullRollNo,
+                                            color = Color.Black,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Normal,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                        )
+                                    }
+                                }
+
+                                // Group card
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = YellowAccent,
+                                    modifier = Modifier.padding(horizontal = 4.dp)
+                                ) {
+                                    Text(
+                                        text = "Group ${slot.assignedVolunteerGroup ?: "Unknown"}",
+                                        color = Color.Black,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Normal,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                    )
+                                }
                             }
 
-                            Spacer(modifier = Modifier.height(6.dp)) // Reduced spacing
+                            Spacer(modifier = Modifier.height(12.dp))
 
-                            // Group badge
-                            Surface(
-                                shape = RoundedCornerShape(20.dp),
-                                color = YellowAccent,
-                                modifier = Modifier.wrapContentWidth()
-                            ) {
+                            // Subject preferences display
+                            // Find the volunteer to get their preferences
+                            val assignedVolunteer = volunteers.find { it.id == slot.assignedVolunteerId }
+                            if (assignedVolunteer != null && assignedVolunteer.subjectPreferences.isNotEmpty()) {
+                                // Show subject preferences
                                 Text(
-                                    text = "Group ${slot.assignedVolunteerGroup ?: "Unknown"}",
-                                    color = Color.Black,
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp) // Reduced padding
+                                    text = "Subject Preferences:",
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.padding(bottom = 6.dp)
                                 )
+
+                                // Display preferences in a flow layout
+                                FlowRow(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    maxItemsInEachRow = 4
+                                ) {
+                                    assignedVolunteer.subjectPreferences.forEachIndexed { index, subject ->
+                                        val isAssigned = subject.equals(slot.assignedSubject, ignoreCase = true)
+                                        
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = if (isAssigned) YellowAccent else Color.Transparent,
+                                            border = if (!isAssigned) BorderStroke(1.dp, Color.White.copy(alpha = 0.3f)) else null,
+                                            modifier = Modifier.padding(horizontal = 4.dp)
+                                        ) {
+                                            Text(
+                                                text = subject,
+                                                color = if (isAssigned) Color.Black else Color.White,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = if (isAssigned) FontWeight.Bold else FontWeight.Normal,
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -939,12 +1003,15 @@ fun ManualVolunteerSelectionDialog(
 
 
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
         Card(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxWidth(0.98f) // Increased horizontal width
                 .fillMaxHeight(0.85f) // Take up most of the screen
-                .padding(horizontal = 16.dp), // UI.md screen margins
+                .padding(horizontal = 4.dp), // Reduced horizontal padding for more width
             colors = CardDefaults.cardColors(
                 containerColor = NeutralCardSurface // UI.md standard card background
             ),
@@ -965,14 +1032,14 @@ fun ManualVolunteerSelectionDialog(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 24.dp, vertical = 20.dp), // UI.md header padding
+                            .padding(horizontal = 24.dp, vertical = 20.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column {
                             Text(
                                 text = "Select Volunteer",
-                                style = MaterialTheme.typography.headlineSmall, // Larger header text
+                                style = MaterialTheme.typography.headlineSmall,
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold
                             )
@@ -980,7 +1047,7 @@ fun ManualVolunteerSelectionDialog(
                             Text(
                                 text = "${slot.schoolName} • ${slot.dayName} • ${slot.timeLabel}",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = Color(0xFFB0B0B0), // UI.md secondary text color
+                                color = Color(0xFFB0B0B0),
                                 modifier = Modifier.padding(top = 4.dp)
                             )
                         }
@@ -988,7 +1055,7 @@ fun ManualVolunteerSelectionDialog(
                         IconButton(
                             onClick = onDismiss,
                             modifier = Modifier
-                                .size(48.dp) // UI.md touch target
+                                .size(48.dp)
                                 .background(
                                     Color.White.copy(alpha = 0.1f),
                                     CircleShape
@@ -1111,6 +1178,7 @@ fun EmptyStateCard(
 /**
  * Individual volunteer item for manual selection
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ManualVolunteerSelectionItem(
     volunteer: Volunteer,
@@ -1126,47 +1194,82 @@ fun ManualVolunteerSelectionItem(
             shape = RoundedCornerShape(16.dp), // UI.md standard corner radius
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp) // UI.md standard elevation
         ) {
-            Column(
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 16.dp) // Better padding
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top
             ) {
-                // Display first name only
-                val firstName = volunteer.name.split(" ").firstOrNull() ?: volunteer.name
-                Text(
-                    text = firstName,
-                    color = Color.White,
-                    fontWeight = FontWeight.SemiBold,
-                    style = MaterialTheme.typography.bodyLarge
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
+                // Column 1: Name, Roll and Group
+                Column(
+                    modifier = Modifier.weight(0.4f)
                 ) {
-                    Surface(
-                        color = YellowAccent, // UI.md standard accent color for badges
-                        shape = RoundedCornerShape(8.dp) // Slightly larger corner radius for modern look
-                    ) {
-                        Text(
-                            text = "Group ${volunteer.group}",
-                            color = Color.Black, // UI.md standard: black text on yellow background
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp) // Better padding
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    // Display last 4 characters of roll number
-                    val rollLast4 = volunteer.rollNo.takeLast(4)
+                    // Line 1: Full Name
                     Text(
-                        text = rollLast4,
-                        color = Color(0xFFB0B0B0), // UI.md secondary text color
-                        style = MaterialTheme.typography.bodyMedium
+                        text = volunteer.name,
+                        color = Color.White,
+                        fontWeight = FontWeight.Medium,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Line 2: Roll and Group in separate yellow cards
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Group card
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = YellowAccent
+                        ) {
+                            Text(
+                                text = "Gp ${volunteer.group}",
+                                color = Color.Black,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Normal,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+
+                        // Roll number card
+                        val rollLast4 = volunteer.rollNo.takeLast(4)
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = YellowAccent
+                        ) {
+                            Text(
+                                text = rollLast4,
+                                color = Color.Black,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Normal,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
+
+                // Column 2: Subject preferences in 2-3 lines
+                if (volunteer.subjectPreferences.isNotEmpty()) {
+                    FlowRow(
+                        modifier = Modifier.weight(0.55f),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        maxItemsInEachRow = 4
+                    ) {
+                        volunteer.subjectPreferences.forEach { subject ->
+                            Text(
+                                text = subject.take(3),
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
                 }
             }
         }

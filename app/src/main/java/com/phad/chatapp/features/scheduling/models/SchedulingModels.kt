@@ -10,7 +10,8 @@ import java.time.LocalTime
 data class VolunteerInfo(
     val rollNo: String? = null,
     val name: String = "",
-    val group: String = ""
+    val group: String = "",
+    val classCount: Int = 0  // Number of classes this volunteer can teach
 )
 
 /**

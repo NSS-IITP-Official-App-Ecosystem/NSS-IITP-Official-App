@@ -14,6 +14,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -490,7 +492,8 @@ fun SubjectAssignmentGridScreen(
                                             }
                                         }
                                     },
-                                    localVolunteerSwaps = localVolunteerSwaps[schedule.referenceData.schoolName] ?: emptyMap()
+                                    localVolunteerSwaps = localVolunteerSwaps[schedule.referenceData.schoolName] ?: emptyMap(),
+                                    remainingSubjectCounts = remainingSubjectCounts[schedule.referenceData.schoolName] ?: emptyMap()
                                 )
                             }
                         }
@@ -662,8 +665,11 @@ fun ScheduleGridCard(
     subjectAssignments: Map<Pair<Int, Int>, String>,
     onCellLongPress: (GridCell) -> Unit,
     onCellClick: (GridCell) -> Unit,
-    localVolunteerSwaps: Map<Pair<Int, Int>, GridCell> = emptyMap()
+    localVolunteerSwaps: Map<Pair<Int, Int>, GridCell> = emptyMap(),
+    remainingSubjectCounts: Map<String, Int> = emptyMap()
 ) {
+    var showSubjectInfoDialog by remember { mutableStateOf(false) }
+    
     // Log the current subject assignments for debugging
     LaunchedEffect(subjectAssignments) {
         Log.d("ScheduleGridCard", "Rendering with ${subjectAssignments.size} subject assignments for ${scheduleData.referenceData.schoolName}")
@@ -684,14 +690,33 @@ fun ScheduleGridCard(
                 .fillMaxWidth()
                 .padding(8.dp)
         ) {
-            // Schedule name header
-            Text(
-                text = "${scheduleData.referenceData.schoolName}",
-                style = MaterialTheme.typography.titleMedium,
-                color = YellowAccent,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
-            )
+            // Schedule name header with info button
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp, start = 4.dp, end = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "${scheduleData.referenceData.schoolName}",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = YellowAccent,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                IconButton(
+                    onClick = { showSubjectInfoDialog = true },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Info,
+                        contentDescription = "Show subject information",
+                        tint = YellowAccent,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
 
             // Grid table
             ScheduleTable(
@@ -745,6 +770,16 @@ fun ScheduleGridCard(
                 }
             )
         }
+    }
+    
+    // Subject info dialog
+    if (showSubjectInfoDialog) {
+        SubjectInfoDialog(
+            schoolName = scheduleData.referenceData.schoolName,
+            subjectPreset = scheduleData.subjectPreset,
+            remainingSubjectCounts = remainingSubjectCounts,
+            onDismiss = { showSubjectInfoDialog = false }
+        )
     }
 }
 
@@ -2261,3 +2296,186 @@ private fun InfoPill(text: String, isPrimary: Boolean) {
         )
     }
 }
+
+/**
+ * Dialog displaying subject information for a schedule
+ */
+@Composable
+fun SubjectInfoDialog(
+    schoolName: String,
+    subjectPreset: SubjectPreset,
+    remainingSubjectCounts: Map<String, Int>,
+    onDismiss: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth(0.9f)
+                .wrapContentHeight(),
+            colors = CardDefaults.cardColors(
+                containerColor = NeutralCardSurface
+            ),
+            shape = RoundedCornerShape(16.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp)
+            ) {
+                // Header
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Subject Information",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = schoolName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = YellowAccent,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+
+                // Subject list header
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Subject",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFFB0B0B0),
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = "Remaining",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFFB0B0B0),
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.width(80.dp)
+                    )
+                }
+
+                HorizontalDivider(
+                    modifier = Modifier.padding(bottom = 12.dp),
+                    color = Color(0xFF3A3A3A)
+                )
+
+                // Subject list sorted by remaining count (descending)
+                val sortedSubjects = remainingSubjectCounts.entries
+                    .sortedByDescending { it.value }
+
+                if (sortedSubjects.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No subjects available",
+                            color = Color(0xFFB0B0B0),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(sortedSubjects) { (subjectCode, remainingCount) ->
+                            SubjectInfoItem(
+                                subjectCode = subjectCode,
+                                subjectName = SubjectConstants.SUBJECT_NAMES[subjectCode] ?: subjectCode,
+                                remainingCount = remainingCount
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Individual subject info item
+ */
+@Composable
+fun SubjectInfoItem(
+    subjectCode: String,
+    subjectName: String,
+    remainingCount: Int
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = Color(0xFF1E1E1E)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = subjectName,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color.White,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = subjectCode,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFFB0B0B0)
+                )
+            }
+
+            // Remaining count badge
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = if (remainingCount > 0) YellowAccent else Color(0xFF9E9E9E)
+            ) {
+                Text(
+                    text = remainingCount.toString(),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.Black,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
+        }
+    }
+}
+

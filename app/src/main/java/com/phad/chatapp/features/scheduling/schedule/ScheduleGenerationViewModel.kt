@@ -13,6 +13,7 @@ import com.phad.chatapp.features.scheduling.constants.ScheduleConstants
 import com.phad.chatapp.features.scheduling.models.OptimizedVolunteerAssignment
 import com.phad.chatapp.features.scheduling.models.GroupAvailability
 import com.phad.chatapp.features.scheduling.models.ScheduleReferenceData
+import com.phad.chatapp.features.scheduling.models.SubjectAllocation
 import com.phad.chatapp.features.scheduling.models.VolunteerDetails
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,7 +22,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
 
-private const val TAG = "ScheduleViewModel"
+private const val TAG = "ScheduleGenerationViewModel"
 private const val VOLUNTEER_PRESETS_COLLECTION = "volunteerPresets"
 private const val AVAILABILITY_COLLECTION = "volunteerAvailability"
 private const val TEACHING_SLOT_PRESETS_COLLECTION = "teachingSlotPresets"
@@ -51,11 +52,13 @@ data class Slot(
     val dayName: String,
     val timeLabel: String,
     val availableGroups: List<String>,
+    val subjectPriorities: List<SubjectAllocation> = emptyList(),  // Subjects needed for this slot with priorities
     var tfv: Int = 0,
     var assignedVolunteerId: String? = null,
     var assignedVolunteerName: String? = null,
     var assignedVolunteerGroup: String? = null,
-    var assignedVolunteerRollNo: String? = null
+    var assignedVolunteerRollNo: String? = null,
+    var assignedSubject: String? = null  // Track which subject was assigned
 )
 
 // Volunteer represents a volunteer from the VP preset
@@ -64,6 +67,9 @@ data class Volunteer(
     val name: String,
     val rollNo: String,
     val group: String,
+    var classCount: Int = 0,  // Track remaining classes to assign
+    val interviewScore: Int = 0,  // For ranking volunteers (higher is better)
+    val subjectPreferences: List<String> = emptyList(),  // Array of subject preferences (1st = index 0, 2nd = index 1, etc.)
     var isAssigned: Boolean = false,
     var assignedSlot: Slot? = null
 )
@@ -77,6 +83,7 @@ data class GroupCount(
 
 
 class ScheduleGenerationViewModel : ViewModel() {
+    private val db = FirebaseFirestore.getInstance()
 
     // State
     var isLoading by mutableStateOf(false)
@@ -84,7 +91,7 @@ class ScheduleGenerationViewModel : ViewModel() {
 
     // Selected presets
     private var volunteerPresetId by mutableStateOf("")
-    private var availabilityPresetIds = mutableStateListOf<String>()
+    private val availabilityPresetIds = mutableStateListOf<String>()
 
     // Data
     private val _schools = MutableStateFlow<List<School>>(emptyList())
@@ -109,6 +116,135 @@ class ScheduleGenerationViewModel : ViewModel() {
     // Group counts for TFV calculation
     private val _groupCounts = MutableStateFlow<Map<String, Int>>(emptyMap())
     val groupCounts: StateFlow<Map<String, Int>> = _groupCounts.asStateFlow()
+
+    // NEW: StateFlow for manual selection dialog
+    private val _showManualSelectionDialog = MutableStateFlow(false)
+    val showManualSelectionDialog: StateFlow<Boolean> = _showManualSelectionDialog.asStateFlow()
+
+    private val _dialogAvailableVolunteers = MutableStateFlow<List<Volunteer>>(emptyList())
+    val dialogAvailableVolunteers: StateFlow<List<Volunteer>> = _dialogAvailableVolunteers.asStateFlow()
+
+    private val _dialogSubjectToAssign = MutableStateFlow("")
+    val dialogSubjectToAssign: StateFlow<String> = _dialogSubjectToAssign.asStateFlow()
+    
+    // NEW: Adjacency tracking for same-day slot constraints  
+    // Map: volunteerId → Map<dayName, List<assignedSlots>>
+    // This tracks which volunteers have assignments on which days and their slot details
+    private val volunteerDayAssignments = mutableMapOf<String, MutableMap<String, MutableList<Slot>>>()
+
+    /**
+     * Dismiss the manual selection dialog
+     */
+    fun dismissManualSelectionDialog() {
+        _showManualSelectionDialog.value = false
+        _dialogAvailableVolunteers.value = emptyList()
+        _dialogSubjectToAssign.value = ""
+    }
+
+    /**
+     * Track that a volunteer has been assigned to a slot on a specific day
+     */
+    private fun trackVolunteerDayAssignment(volunteer: Volunteer, slot: Slot) {
+        val volunteerId = volunteer.id
+        val dayName = slot.dayName
+        
+        // Initialize maps if needed
+        if (!volunteerDayAssignments.containsKey(volunteerId)) {
+            volunteerDayAssignments[volunteerId] = mutableMapOf()
+        }
+        if (!volunteerDayAssignments[volunteerId]!!.containsKey(dayName)) {
+            volunteerDayAssignments[volunteerId]!![dayName] = mutableListOf()
+        }
+        
+        // Add this slot to volunteer's day assignments
+        volunteerDayAssignments[volunteerId]!![dayName]!!.add(slot)
+        
+        Log.d(TAG, "📅 Tracked assignment: ${volunteer.name} on $dayName (${slot.timeLabel})")
+    }
+
+    /**
+     * Manually select a volunteer from the dialog
+     */
+    fun selectVolunteerManually(volunteer: Volunteer) {
+        val subject = _dialogSubjectToAssign.value
+        if (subject.isNotEmpty()) {
+            performAssignment(volunteer, subject)
+            dismissManualSelectionDialog()
+        }
+    }
+    
+    /**
+     * Extract school prefix (first 2 characters) from school name
+     * Example: "RP 8G" → "RP", "AM 10B" → "AM"
+     */
+    private fun getSchoolPrefix(schoolName: String): String {
+        return schoolName.trim().take(2)
+    }
+    
+    /**
+     * Check if two time slots are adjacent (consecutive)
+     * Example: "09:00-10:00" and "10:00-11:00" are adjacent
+     */
+    private fun areTimeSlotsAdjacent(time1: String, time2: String): Boolean {
+        // Parse time format: "HH:MM-HH:MM"
+        val time1Parts = time1.split("-")
+        val time2Parts = time2.split("-")
+        
+        if (time1Parts.size != 2 || time2Parts.size != 2) {
+            Log.e(TAG, "Invalid time format: $time1 or $time2")
+            return false
+        }
+        
+        val time1End = time1Parts[1].trim()
+        val time1Start = time1Parts[0].trim()
+        val time2End = time2Parts[1].trim()
+        val time2Start = time2Parts[0].trim()
+        
+        // Check if time1 ends when time2 starts, or time2 ends when time1 starts
+        return time1End == time2Start || time2End == time1Start
+    }
+    
+    /**
+     * Check if a volunteer can be assigned to a slot on a given day
+     * Enforces the adjacency rule: if volunteer already has assignment on this day,
+     * new slot must be same school AND adjacent time
+     */
+    private fun isAdjacentSlotAllowed(volunteer: Volunteer, newSlot: Slot): Boolean {
+        val volunteerId = volunteer.id
+        val dayName = newSlot.dayName
+        
+        // Get existing assignments for this volunteer on this day
+        val existingSlots = volunteerDayAssignments[volunteerId]?.get(dayName)
+        
+        // If no existing assignments on this day, allow assignment
+        if (existingSlots == null || existingSlots.isEmpty()) {
+            Log.d(TAG, "✅ Adjacency check: ${volunteer.name} has no assignments on $dayName - ALLOWED")
+            return true
+        }
+        
+        // Volunteer already has assignment(s) on this day
+        // Check school prefix and time adjacency for each existing slot
+        val newSchoolPrefix = getSchoolPrefix(newSlot.schoolName)
+        
+        for (existingSlot in existingSlots) {
+            val existingSchoolPrefix = getSchoolPrefix(existingSlot.schoolName)
+            
+            // Check if same school
+            if (newSchoolPrefix != existingSchoolPrefix) {
+                Log.d(TAG, "❌ Adjacency check FAILED: Different school ($newSchoolPrefix vs $existingSchoolPrefix)")
+                return false
+            }
+            
+            // Check if adjacent time
+            if (!areTimeSlotsAdjacent(newSlot.timeLabel, existingSlot.timeLabel)) {
+                Log.d(TAG, "❌ Adjacency check FAILED: Not adjacent times (${newSlot.timeLabel} vs ${existingSlot.timeLabel})")
+                return false
+            }
+        }
+        
+        Log.d(TAG, "✅ Adjacency check PASSED: Same school, adjacent time")
+        return true
+    }
 
     /**
      * Initialize the ViewModel with the selected presets
@@ -200,9 +336,20 @@ class ScheduleGenerationViewModel : ViewModel() {
 
             // Get availability data from the same document
             val availabilityMap = doc.get("availability") as? Map<String, Map<String, String>> ?: emptyMap()
+            
+            // NEW: Load subjects from the teaching slot preset
+            val subjectsData = doc.get("subjects") as? List<Map<String, Any>> ?: emptyList()
+            val subjects = subjectsData.map { subjectMap ->
+                SubjectAllocation(
+                    subjectName = subjectMap["subjectName"] as? String ?: "",
+                    classCount = (subjectMap["classCount"] as? Number)?.toInt() ?: 0,
+                    priority = (subjectMap["priority"] as? Number)?.toInt() ?: 0
+                )
+            }
 
             Log.d(TAG, "📋 Loading school from preset: $presetId ($presetName)")
             Log.d(TAG, "📋 Availability map size: ${availabilityMap.size}")
+            Log.d(TAG, "📋 Loaded ${subjects.size} subjects: ${subjects.joinToString { "${it.subjectName}(p${it.priority})" }}")
 
             val days = scheduleData.mapIndexed { index, dayMap ->
                 val dayName = dayMap["day"] as? String ?: "Day $index"
@@ -233,7 +380,8 @@ class ScheduleGenerationViewModel : ViewModel() {
                             schoolName = presetName,
                             dayName = dayName,
                             timeLabel = timeLabel,
-                            availableGroups = groups
+                            availableGroups = groups,
+                            subjectPriorities = subjects  // NEW: Add subjects to each slot
                         )
                     } else null
                 }
@@ -378,14 +526,39 @@ class ScheduleGenerationViewModel : ViewModel() {
 
     /**
      * Process volunteers data from a list of maps
+     * OPTIMIZED: Batch fetch all student details in one query
      */
-    private fun processVolunteersData(volunteersData: List<Map<String, Any>>): List<Volunteer> {
+    private suspend fun processVolunteersData(volunteersData: List<Map<String, Any>>): List<Volunteer> {
         Log.d(TAG, "🔍 Processing ${volunteersData.size} volunteer entries")
+        
+        val db = FirebaseFirestore.getInstance()
+        
+        // Step 1: Extract all roll numbers
+        val rollNumbers = volunteersData.mapNotNull { it["rollNo"] as? String }
+        
+        // Step 2: Batch fetch all student details at once (MUCH FASTER!)
+        val studentDetailsMap = mutableMapOf<String, Map<String, Any>>()
+        try {
+            // Firebase allows max 10 items per 'in' query, so we batch in chunks of 10
+            rollNumbers.chunked(10).forEach { chunk ->
+                val querySnapshot = db.collection(STUDENTS_COLLECTION)
+                    .whereIn("rollNumber", chunk)  // Batch query
+                    .get()
+                    .await()
+                
+                querySnapshot.documents.forEach { doc ->
+                    val rollNo = doc.getString("rollNumber") ?: return@forEach
+                    studentDetailsMap[rollNo] = doc.data ?: emptyMap()
+                }
+            }
+            Log.d(TAG, "📊 Batch fetched details for ${studentDetailsMap.size} students")
+        } catch (e: Exception) {
+            Log.e(TAG, "⚠️ Error batch fetching student details", e)
+        }
 
+        // Step 3: Process volunteers with the cached student data
         val volunteers = volunteersData.mapIndexedNotNull { index, volunteerMap ->
             try {
-                Log.d(TAG, "👤 Processing volunteer $index: $volunteerMap")
-
                 val id = volunteerMap["rollNo"] as? String ?: volunteerMap["id"] as? String
                 if (id == null) {
                     Log.e(TAG, "❌ Volunteer $index is missing 'rollNo' or 'id' field")
@@ -398,26 +571,38 @@ class ScheduleGenerationViewModel : ViewModel() {
                     return@mapIndexedNotNull null
                 }
 
-            // Fix roll number issue: prioritize rollNo field
-            val rollNo = volunteerMap["rollNo"] as? String ?: volunteerMap["rollNumber"] as? String ?: id
-
-            // Handle group which could be a string or an integer
+                val rollNo = volunteerMap["rollNo"] as? String ?: volunteerMap["rollNumber"] as? String ?: id
                 val groupRaw = volunteerMap["group"]
                 if (groupRaw == null) {
                     Log.e(TAG, "❌ Volunteer $index (id: $id, name: $name) is missing 'group' field")
                     return@mapIndexedNotNull null
                 }
 
-            val group = groupRaw.toString()
+                val group = groupRaw.toString()
+                val classCount = (volunteerMap["classCount"] as? Number)?.toInt() ?: 0
+                
+                // Get student details from cached map
+                val studentData = studentDetailsMap[rollNo]
+                val interviewScore = (studentData?.get("interviewScore") as? Number)?.toInt() ?: 0
+                
+                // Get subject preferences array (can be any length)
+                val subjectPreferences = (studentData?.get("subjectPreferences") as? List<*>)
+                    ?.mapNotNull { it as? String }
+                    ?: emptyList()
 
-                Log.d(TAG, "👤 Successfully processed volunteer: $name, Roll Number: $rollNo, Group raw: $groupRaw (${groupRaw.javaClass.name}), Group: $group")
+                if (index < 5) {  // Log first 5 for verification
+                    Log.d(TAG, "👤 Processed: $name, Roll: $rollNo, Group: $group, ClassCount: $classCount, Score: $interviewScore, Subjects: $subjectPreferences")
+                }
 
-            Volunteer(
-                id = id,
-                name = name,
-                rollNo = rollNo,
-                group = group
-            )
+                Volunteer(
+                    id = id,
+                    name = name,
+                    rollNo = rollNo,
+                    group = group,
+                    classCount = classCount,
+                    interviewScore = interviewScore,
+                    subjectPreferences = subjectPreferences
+                )
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Error processing volunteer $index", e)
                 null
@@ -516,24 +701,142 @@ class ScheduleGenerationViewModel : ViewModel() {
     }
 
     /**
-     * Auto assign volunteers to slots based on lowest TFV
+     * Auto assign volunteers to slots using round-robin preference-based approach
+     * NEW ALGORITHM:
+     * - Process ALL unassigned slots at preference level 1 first
+     * - Then process ALL remaining unassigned slots at preference level 2
+     * - Continue for levels 3, 4, 5... until no more preferences or no more slots
      */
     fun autoAssignVolunteers() {
-        // Keep assigning until there are no more slots with non-zero TFV or no more volunteers
-        while (_unassignedVolunteers.value.isNotEmpty()) {
-            val lowestTFVSlot = getLowestTFVSlot() ?: break
-            _currentSlot.value = lowestTFVSlot
-            assignVolunteer()
+        Log.d(TAG, "🚀 Starting auto-assignment with round-robin preference approach")
+        
+        // Find the maximum number of preferences any volunteer has
+        val maxPreferenceLevel = _unassignedVolunteers.value.maxOfOrNull { it.subjectPreferences.size } ?: 0
+        
+        if (maxPreferenceLevel == 0) {
+            Log.e(TAG, "❌ No volunteers have subject preferences - cannot auto-assign")
+            return
         }
+        
+        Log.d(TAG, "📊 Max preference levels to check: $maxPreferenceLevel")
+        
+        // Process each preference level (round) in order
+        for (preferenceLevel in 0 until maxPreferenceLevel) {
+            Log.d(TAG, "\n" + "=".repeat(80))
+            Log.d(TAG, "🔄 STARTING PREFERENCE ROUND ${preferenceLevel + 1}")
+            Log.d(TAG, "=".repeat(80))
+            
+            var assignmentsInThisRound = 0
+            var attemptedInThisRound = 0
+            
+            // Keep trying slots at this preference level until no more assignments happen
+            while (true) {
+                // Get the slot with lowest TFV that still needs assignment
+                val lowestTFVSlot = getLowestTFVSlot()
+                
+                if (lowestTFVSlot == null) {
+                    Log.d(TAG, "✅ No more unassigned slots - auto-assignment complete!")
+                    return
+                }
+                
+                _currentSlot.value = lowestTFVSlot
+                attemptedInThisRound++
+                
+                // Try to assign at THIS preference level only
+                val assigned = assignVolunteer(preferenceLevel)
+                
+                if (assigned) {
+                    assignmentsInThisRound++
+                } else {
+                    // No match at this preference level for this slot - that's OK
+                    // Move it to a higher TFV so we check other slots first
+                    // (This is handled automatically by getLowestTFVSlot filtering)
+                    break  // Move to next slot
+                }
+            }
+            
+            Log.d(TAG, "📈 Round ${preferenceLevel + 1} complete:")
+            Log.d(TAG, "   - Slots attempted: $attemptedInThisRound")
+            Log.d(TAG, "   - Assignments made: $assignmentsInThisRound")
+            
+            // If we made no assignments in this round, later rounds likely won't help either
+            if (assignmentsInThisRound == 0) {
+                Log.d(TAG, "⚠️ No assignments in round ${preferenceLevel + 1} - moving to next preference level")
+                continue  // Try next preference level
+            }
+        }
+        
+        // Check if there are still unassigned slots
+        val remainingSlots = getLowestTFVSlot()
+        if (remainingSlots != null) {
+            Log.d(TAG, "\n⚠️ Auto-assignment exhausted all preference levels")
+            Log.d(TAG, "📋 Some slots remain unassigned - manual intervention required")
+        } else {
+            Log.d(TAG, "\n🎉 All slots successfully assigned!")
+        }
+    }
+    
+    /**
+     * Auto-assign a volunteer to the CURRENT slot only
+     * Tries all preference levels (1st, 2nd, 3rd...) until a match is found
+     * Used when user clicks "Assign Volunteer Automatically" button for a specific slot
+     */
+    fun assignVolunteerToCurrentSlot(): Boolean {
+        val currentSlot = _currentSlot.value
+        if (currentSlot == null) {
+            Log.e(TAG, "No slot selected for assignment")
+            return false
+        }
+        
+        Log.d(TAG, "🎯 Attempting auto-assignment for slot: ${currentSlot.schoolName} ${currentSlot.dayName} ${currentSlot.timeLabel}")
+        
+        // Find max preference levels available
+        val maxPreferenceLevel = _unassignedVolunteers.value.maxOfOrNull { it.subjectPreferences.size } ?: 0
+        
+        // Try each preference level until we find a match
+        for (preferenceLevel in 0 until maxPreferenceLevel) {
+            Log.d(TAG, "   Trying preference level ${preferenceLevel + 1}...")
+            
+            val assigned = assignVolunteer(preferenceLevel)
+            if (assigned) {
+                Log.d(TAG, "   ✅ Successfully assigned at preference level ${preferenceLevel + 1}")
+                return true
+            }
+        }
+        
+        // No matches at any preference level
+        Log.d(TAG, "   ❌ No volunteers available at any preference level")
+        return false
     }
 
     /**
-     * Assign a single volunteer to the lowest TFV slot
+     * Assign a volunteer to the slot with lowest TFV
+     * NEW: Tries automatic assignment first, only shows manual selection if no match found
      */
     fun assignLowestTFVSlot() {
-        val lowestTFVSlot = getLowestTFVSlot() ?: return
-        _currentSlot.value = lowestTFVSlot
-        assignVolunteer()
+        val slot = getLowestTFVSlot()
+        if (slot == null) {
+            Log.d(TAG, "No slots available for assignment")
+            return
+        }
+
+        // Set current slot
+        _currentSlot.value = slot
+        
+        Log.d(TAG, "🎯 Attempting auto-assign for lowest TFV slot: ${slot.schoolName} ${slot.dayName} ${slot.timeLabel} (TFV: ${slot.tfv})")
+        
+        // Try automatic assignment through all preference levels
+        val assigned = assignVolunteerToCurrentSlot()
+        
+        if (!assigned) {
+            // No automatic match found - current slot is already set, so dialog will show
+            Log.d(TAG, "⚠️ No automatic match - manual selection needed")
+            // The UI will show the dialog because _currentSlot is set
+        } else {
+            // Assignment successful - clear current slot to close any dialogs
+            _currentSlot.value = null
+            Log.d(TAG, "✅ Assignment successful!")
+        }
     }
 
     /**
@@ -725,71 +1028,106 @@ class ScheduleGenerationViewModel : ViewModel() {
     }
 
     /**
-     * Assign a volunteer to the currently selected slot
+     * Assign a volunteer to the currently selected slot at a specific preference level
+     * NEW: Round-robin approach - only checks volunteers with matching preference at specified level
+     * 
+     * @param preferenceLevel Which preference level to check (0 = 1st preference, 1 = 2nd, etc.)
+     * @return true if assignment successful, false if no match found at this preference level
      */
-    fun assignVolunteer() {
-        val currentSlot = _currentSlot.value ?: return
+    fun assignVolunteer(preferenceLevel: Int = 0): Boolean {
+        val currentSlot = _currentSlot.value ?: return false
 
         // Get available groups for this slot and expand any ranges
         val rawAvailableGroups = currentSlot.availableGroups
         if (rawAvailableGroups.isEmpty()) {
-            return
+            Log.d(TAG, "❌ No available groups for this slot")
+            return false
         }
 
         // Expand group ranges (e.g., "11-18" becomes ["11", "12", "13", "14", "15", "16", "17", "18"])
         val expandedAvailableGroups = expandAllGroupRanges(rawAvailableGroups)
 
-        Log.d(TAG, "🔍 Raw available groups: $rawAvailableGroups")
-        Log.d(TAG, "🔍 Expanded available groups: $expandedAvailableGroups")
-
-        // Count unassigned volunteers per available group
-        val groupVolunteerCounts = mutableMapOf<String, Int>()
-        val groupToVolunteersMap = mutableMapOf<String, List<Volunteer>>()
-
-        expandedAvailableGroups.forEach { group ->
-            val volunteersInGroup = _unassignedVolunteers.value.filter { it.group == group }
-            groupVolunteerCounts[group] = volunteersInGroup.size
-            groupToVolunteersMap[group] = volunteersInGroup
-
-            Log.d(TAG, "📊 Group $group has ${volunteersInGroup.size} unassigned volunteers")
+        // Get available volunteers from these groups who still have classes to teach
+        val availableVolunteers = _unassignedVolunteers.value.filter { volunteer ->
+            volunteer.classCount > 0 && expandedAvailableGroups.contains(volunteer.group)
         }
 
-        // Find the group with the maximum unassigned volunteers
-        val groupWithMaxVolunteers = groupVolunteerCounts.maxByOrNull { it.value }
-
-        if (groupWithMaxVolunteers == null || groupWithMaxVolunteers.value == 0) {
-            Log.d(TAG, "❌ No available volunteers found for any of the groups: $expandedAvailableGroups")
-            return
+        if (availableVolunteers.isEmpty()) {
+            return false  // No volunteers available
         }
 
-        val selectedGroup = groupWithMaxVolunteers.key
-        Log.d(TAG, "✅ Selected group $selectedGroup with ${groupWithMaxVolunteers.value} volunteers")
+        // Get highest priority subject that still needs classes
+        val subjectToAssign = currentSlot.subjectPriorities
+            .filter { it.classCount > 0 }
+            .minByOrNull { it.priority }
 
-        // Get volunteers from the selected group
-        val volunteersFromSelectedGroup = groupToVolunteersMap[selectedGroup] ?: emptyList()
-
-        if (volunteersFromSelectedGroup.isEmpty()) {
-            return
+        if (subjectToAssign == null) {
+            return false  // All subjects for this slot are fulfilled
         }
 
-        // Select the first volunteer from the selected group
-        val volunteer = volunteersFromSelectedGroup.first()
+        Log.d(TAG, "🎯 [Round ${preferenceLevel + 1}] Slot: ${currentSlot.schoolName} ${currentSlot.dayName} ${currentSlot.timeLabel}")
+        Log.d(TAG, "   Subject: ${subjectToAssign.subjectName} (priority: ${subjectToAssign.priority}, remaining: ${subjectToAssign.classCount})")
 
-        Log.d(TAG, "👤 Assigning volunteer ${volunteer.name} from group $selectedGroup")
+        // NEW: Only check volunteers with matching preference at THIS specific level
+        val matchingVolunteers = availableVolunteers.filter { volunteer ->
+            preferenceLevel < volunteer.subjectPreferences.size &&
+            volunteer.subjectPreferences[preferenceLevel].equals(subjectToAssign.subjectName, ignoreCase = true)
+        }.sortedByDescending { it.interviewScore }  // Highest score first
 
-        // Update the slot
+        if (matchingVolunteers.isEmpty()) {
+            // No matches at this preference level - that's OK in round-robin approach
+            return false
+        }
+
+        Log.d(TAG, "   ✅ Found ${matchingVolunteers.size} volunteers with ${subjectToAssign.subjectName} as preference #${preferenceLevel + 1}")
+
+        // NEW: Try each matching volunteer, checking adjacency constraints
+        for (volunteer in matchingVolunteers) {
+            // Check if adjacency rule allows this assignment
+            if (!isAdjacentSlotAllowed(volunteer, currentSlot)) {
+                Log.d(TAG, "   ⏭️ Skipping ${volunteer.name} - adjacency constraint violated")
+                continue  // Try next volunteer
+            }
+
+            // Adjacency check passed - perform assignment!
+            Log.d(TAG, "   👤 Assigning: ${volunteer.name} (score: ${volunteer.interviewScore}, pref #${preferenceLevel + 1})")
+            
+            performAssignment(volunteer, subjectToAssign.subjectName)
+            
+            // NEW: Track this assignment for future adjacency checks
+            trackVolunteerDayAssignment(volunteer, currentSlot)
+            
+            return true
+        }
+
+        // All matching volunteers failed adjacency check
+        Log.d(TAG, "   ⚠️ All ${matchingVolunteers.size} matching volunteers failed adjacency check")
+        return false
+    }
+
+    /**
+     * Internal method to perform the actual assignment
+     */
+    private fun performAssignment(volunteer: Volunteer, subject: String) {
+        val currentSlot = _currentSlot.value ?: return
+
+        // Update slot with assignment
         val updatedSlot = currentSlot.copy(
             assignedVolunteerId = volunteer.id,
             assignedVolunteerName = volunteer.name,
             assignedVolunteerGroup = volunteer.group,
-            assignedVolunteerRollNo = volunteer.rollNo
+            assignedVolunteerRollNo = volunteer.rollNo,
+            assignedSubject = subject  // NEW: Track assigned subject
         )
 
-        // Update volunteer
+        // Update volunteer - decrement class count
         val updatedVolunteer = volunteer.copy(
-            isAssigned = true,
+            classCount = volunteer.classCount - 1,  // NEW: Decrement
+            isAssigned = if (volunteer.classCount - 1 == 0) true else volunteer.isAssigned,  // Only mark fully assigned if no classes left
             assignedSlot = updatedSlot
         )
+
+        Log.d(TAG, "📝 Updated volunteer ${volunteer.name}: classCount ${volunteer.classCount} -> ${updatedVolunteer.classCount}")
 
         // Update slots list
         _slots.value = _slots.value.map {
@@ -797,9 +1135,7 @@ class ScheduleGenerationViewModel : ViewModel() {
                 it.dayIndex == currentSlot.dayIndex &&
                 it.schoolId == currentSlot.schoolId) {
                 updatedSlot
-            } else {
-                it
-            }
+            } else it
         }
 
         // Update volunteers list
@@ -808,10 +1144,19 @@ class ScheduleGenerationViewModel : ViewModel() {
         }
 
         // Update assigned/unassigned lists
-        _assignedVolunteers.value = _assignedVolunteers.value + updatedVolunteer
-        _unassignedVolunteers.value = _unassignedVolunteers.value.filter { it.id != volunteer.id }
+        if (updatedVolunteer.classCount == 0) {
+            // Volunteer has no more classes - move to assigned
+            _assignedVolunteers.value = _assignedVolunteers.value + updatedVolunteer
+            _unassignedVolunteers.value = _unassignedVolunteers.value.filter { it.id != volunteer.id }
+            Log.d(TAG, "✅ Volunteer ${volunteer.name} fully assigned (no more classes)")
+        } else {
+            // Volunteer still has classes - update in unassigned list
+            _unassignedVolunteers.value = _unassignedVolunteers.value.map {
+                if (it.id == volunteer.id) updatedVolunteer else it
+            }
+            Log.d(TAG, "📊 Volunteer ${volunteer.name} still has ${updatedVolunteer.classCount} classes remaining")
+        }
 
-        // Update current slot
         _currentSlot.value = updatedSlot
 
         // Decrement the group count for the assigned volunteer's group
@@ -821,12 +1166,34 @@ class ScheduleGenerationViewModel : ViewModel() {
         if (currentCount > 0) {
             updatedGroupCounts[volunteerGroup] = currentCount - 1
             _groupCounts.value = updatedGroupCounts
+            Log.d(TAG, "📊 Updated group counts: Group $volunteerGroup count reduced to ${currentCount - 1}")
+        }
 
-            Log.d(TAG, "📊 Updated group counts after assignment: Group $volunteerGroup count reduced to ${currentCount - 1}")
+        // Decrement subject class count in the slot
+        val updatedSubjectPriorities = currentSlot.subjectPriorities.map { subj ->
+            if (subj.subjectName == subject) {
+                val decremented = subj.copy(classCount = subj.classCount - 1)
+                Log.d(TAG, "📚 Subject ${subj.subjectName}: classCount ${subj.classCount} -> ${decremented.classCount}")
+                decremented
+            } else subj
+        }
+        
+        // Update current slot with decremented subject counts
+        _currentSlot.value = updatedSlot.copy(subjectPriorities = updatedSubjectPriorities)
+        
+        // Also update in the main slots list
+        _slots.value = _slots.value.map {
+            if (it.slotIndex == currentSlot.slotIndex &&
+                it.dayIndex == currentSlot.dayIndex &&
+                it.schoolId == currentSlot.schoolId) {
+                updatedSlot.copy(subjectPriorities = updatedSubjectPriorities)
+            } else it
         }
 
         // Recalculate TFV for all slots
         calculateTFV()
+        
+        Log.d(TAG, "✅ Assignment complete!")
     }
 
     /**

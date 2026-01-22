@@ -173,7 +173,7 @@ fun TeachingSlotsOptionsScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
-                    .padding(horizontal = 20.dp, vertical = 16.dp) // UI.md content spacing: 20dp horizontal, 16dp vertical
+                    .padding(horizontal = 20.dp, vertical = 4.dp) // Reduced vertical padding to minimize space between header and cards
             ) {
 
 
@@ -283,7 +283,7 @@ fun TeachingSlotsOptionsScreen(
                                         .fillMaxWidth()
                                         .weight(1f),
                                     verticalArrangement = Arrangement.spacedBy(16.dp), // UI.md card spacing
-                                    contentPadding = PaddingValues(vertical = 16.dp) // UI.md content padding
+                                    contentPadding = PaddingValues(vertical = 4.dp) // Reduced vertical padding to minimize space between header and cards
                                 ) {
                                     items(presets.size) { index ->
                                         val preset = presets[index]

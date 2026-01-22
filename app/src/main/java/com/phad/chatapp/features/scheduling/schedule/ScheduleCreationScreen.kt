@@ -274,7 +274,7 @@ fun ScheduleCreationScreen(
                     slot = slot,
                     volunteers = volunteers,
                     onAssignManual = { volunteer -> viewModel.assignSpecificVolunteer(volunteer) },
-                    onAssignAutomatic = { viewModel.assignVolunteer() },
+                    onAssignAutomatic = { viewModel.assignVolunteerToCurrentSlot() },
                     onClose = { viewModel.selectSlot(null) }
                 )
             }

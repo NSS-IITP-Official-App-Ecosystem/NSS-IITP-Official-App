@@ -315,8 +315,8 @@ fun VolunteerPresetsScreen(navController: NavController) {
 
         // Get all selected presets data
         val selectedPresets = presets.filter { it.id in selectedPresetIds }
-        val mergedVolunteers = mutableListOf<com.project.thephadproject.models.VolunteerInfo>()
-        val seenRollNumbers = mutableSetOf<String>()
+        // Use a map to track volunteers by roll number for merging
+        val mergedVolunteersMap = mutableMapOf<String, com.project.thephadproject.models.VolunteerInfo>()
         var duplicateCount = 0
 
         // Counter to track completed preset data fetches
@@ -332,18 +332,25 @@ fun VolunteerPresetsScreen(navController: NavController) {
                         val rollNo = volunteerMap["rollNo"] as? String ?: ""
                         val name = volunteerMap["name"] as? String ?: ""
                         val group = volunteerMap["group"] as? String ?: ""
+                        // Extract classCount, default to 0 if missing
+                        val classCountObj = volunteerMap["classCount"]
+                        val classCount = (classCountObj as? Number)?.toInt() ?: 0
 
                         if (rollNo.isNotEmpty()) {
-                            if (seenRollNumbers.contains(rollNo)) {
+                            if (mergedVolunteersMap.containsKey(rollNo)) {
+                                // Update existing volunteer: sum class counts
+                                val existing = mergedVolunteersMap[rollNo]!!
+                                mergedVolunteersMap[rollNo] = existing.copy(
+                                    classCount = existing.classCount + classCount
+                                )
                                 duplicateCount++
                             } else {
-                                seenRollNumbers.add(rollNo)
-                                mergedVolunteers.add(
-                                    com.project.thephadproject.models.VolunteerInfo(
-                                        rollNo = rollNo,
-                                        name = name,
-                                        group = group
-                                    )
+                                // Add new volunteer
+                                mergedVolunteersMap[rollNo] = com.project.thephadproject.models.VolunteerInfo(
+                                    rollNo = rollNo,
+                                    name = name,
+                                    group = group,
+                                    classCount = classCount
                                 )
                             }
                         }
@@ -353,16 +360,21 @@ fun VolunteerPresetsScreen(navController: NavController) {
 
                     // When all fetches are complete, create the merged preset
                     if (completedFetches == totalFetches) {
-                        // Calculate group counts
-                        val groupCounts = mergedVolunteers
+                        val mergedVolunteersList = mergedVolunteersMap.values.toList()
+                        
+                        // Calculate total volunteer count (sum of all class counts)
+                        val totalVolunteerCount = mergedVolunteersList.sumOf { it.classCount }
+
+                        // Calculate group counts (sum of class counts per group)
+                        val groupCounts = mergedVolunteersList
                             .groupBy { it.group }
-                            .mapValues { it.value.size }
+                            .mapValues { entry -> entry.value.sumOf { it.classCount } }
 
                         val mergedPresetData = hashMapOf(
                             "name" to mergedName,
-                            "volunteerCount" to mergedVolunteers.size,
+                            "volunteerCount" to totalVolunteerCount,
                             "groupCounts" to groupCounts,
-                            "volunteers" to mergedVolunteers
+                            "volunteers" to mergedVolunteersList
                         )
 
                         FirebaseManager.getInstance().setDocument(
@@ -373,7 +385,7 @@ fun VolunteerPresetsScreen(navController: NavController) {
                                 loadPresets(false)
                                 coroutineScope.launch {
                                     val message = if (duplicateCount > 0) {
-                                        "Preset merged successfully. $duplicateCount duplicate volunteers were skipped."
+                                        "Preset merged successfully. Class counts merged for $duplicateCount duplicates."
                                     } else {
                                         "Preset merged successfully"
                                     }
@@ -412,7 +424,8 @@ fun VolunteerPresetsScreen(navController: NavController) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 16.dp), // UI.md header spacing
+                        .padding(top = 16.dp, bottom = 8.dp) // UI.md TopAppBar padding
+                        .padding(start = 4.dp, end = 20.dp), // Less padding at start for Back button
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Back button
@@ -424,7 +437,7 @@ fun VolunteerPresetsScreen(navController: NavController) {
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
                             tint = Color.White,
-                            modifier = Modifier.size(28.dp) // UI.md icon size
+                            modifier = Modifier.size(24.dp) // UI.md icon size
                         )
                     }
 
@@ -439,22 +452,30 @@ fun VolunteerPresetsScreen(navController: NavController) {
                             .padding(start = 8.dp)
                     )
 
-                    // "New" button - only show when data is loaded and not in loading state
-                    if (!isLoading && (presets.isNotEmpty() || (!isLoading && presets.isEmpty()))) {
-                        StandardButton(
-                            onClick = {
-                                newPresetName = ""
-                                presetToRename = null
-                                showRenameDialog = true
-                            }
+                    // Merge Presets Button (Header Action) - only show when 2 or more presets exist
+                    if (!isLoading && presets.size >= 2) {
+                        Box(
+                            modifier = Modifier
+                                .padding(top = 2.dp, end = 4.dp)
+                                .size(40.dp) // Circular button size
+                                .clip(CircleShape)
+                                .background(YellowAccent)
+                                .clickable {
+                                    selectedPresetsForMerge = setOf()
+                                    showMergeSelectionDialog = true
+                                },
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                "New",
-                                fontWeight = FontWeight.Medium
+                            Icon(
+                                imageVector = Icons.Default.CallMerge,
+                                contentDescription = "Merge Presets",
+                                tint = Color.Black, // Black icon on yellow background
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                     }
                 }
+
         },
         containerColor = Color.Transparent,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -471,7 +492,7 @@ fun VolunteerPresetsScreen(navController: NavController) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(horizontal = 20.dp, vertical = 24.dp) // UI.md spacing
+                            .padding(horizontal = 20.dp, vertical = 8.dp) // Reduced vertical spacing to minimize gap between header and content
                     ) {
                         // Show loading indicator, error, or preset list with enhanced transitions
                         when {
@@ -570,25 +591,9 @@ fun VolunteerPresetsScreen(navController: NavController) {
                                             )
 
                                             Spacer(modifier = Modifier.height(24.dp))
-
-                                            StandardButton(
-                                                onClick = {
-                                                    newPresetName = ""
-                                                    presetToRename = null
-                                                    showRenameDialog = true
-                                                }
-                                            ) {
-                                                Icon(
-                                                    Icons.Default.Add,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.size(20.dp)
-                                                )
-                                                Spacer(modifier = Modifier.width(8.dp))
-                                                Text(
-                                                    "Create New Preset",
-                                                    fontWeight = FontWeight.Medium
-                                                )
-                                            }
+                                            
+                                            // FAB is used for creation now, just show text or arrow pointing to it?
+                                            // Or keep text simple.
                                         }
                                     }
                             }
@@ -597,29 +602,7 @@ fun VolunteerPresetsScreen(navController: NavController) {
                                     Column(
                                         modifier = Modifier.fillMaxSize()
                                     ) {
-                                        // Merge Presets button - only show when 2 or more presets exist
-                                        if (presets.size >= 2) {
-                                            StandardButton(
-                                                onClick = {
-                                                    selectedPresetsForMerge = setOf()
-                                                    showMergeSelectionDialog = true
-                                                },
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(bottom = 16.dp)
-                                            ) {
-                                                Icon(
-                                                    Icons.Default.CallMerge,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.size(20.dp)
-                                                )
-                                                Spacer(modifier = Modifier.width(8.dp))
-                                                Text(
-                                                    "Merge Presets",
-                                                    fontWeight = FontWeight.Medium
-                                                )
-                                            }
-                                        }
+                                        // Merge Button removed from here, moved to Header
 
                                         LazyColumn(
                                             modifier = Modifier.fillMaxSize(),
@@ -645,6 +628,26 @@ fun VolunteerPresetsScreen(navController: NavController) {
                                 }
                             }
                         }
+                    }
+                } // End of Column
+
+                // Floating Action Button for New Preset (Manual positioning to match ManageVolunteersScreen)
+                if (!isLoading) {
+                    FloatingActionButton(
+                        onClick = {
+                            navController.navigate("manageVolunteers/new_preset")
+                        },
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 24.dp, bottom = 48.dp), // Margin from edges
+                        containerColor = Color(0xFF4CAF50), // Green color
+                        contentColor = Color.White
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "New Preset",
+                            modifier = Modifier.size(24.dp)
+                        )
                     }
                 }
             }
@@ -791,7 +794,7 @@ fun VolunteerPresetsScreen(navController: NavController) {
             },
             title = {
                 Text(
-                    text = "Select Presets to Merge",
+                    text = "Select Presets (2+) to Merge",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -804,12 +807,7 @@ fun VolunteerPresetsScreen(navController: NavController) {
                 Column(
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        text = "Select 2 or more presets to merge:",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFFB0B0B0),
-                        modifier = Modifier.padding(bottom = 16.dp)
-                    )
+
 
                     LazyColumn(
                         modifier = Modifier.heightIn(max = 300.dp),
@@ -1093,29 +1091,29 @@ fun PresetCard(
 
 @Composable
 fun GroupChip(group: String, count: Int) {
-    val chipText = "Gp $group: $count"
-
-    Box(
+    // Group frequency chip with standardized dimensions matching TeachingSlotsOptionsScreen
+    Surface(
+        shape = RoundedCornerShape(8.dp), // UI.md corner radius for compact look
+        color = YellowAccent, // UI.md yellow accent color to match reference
         modifier = Modifier
-            .height(28.dp)
-            .defaultMinSize(minWidth = 60.dp) // Ensure minimum width for all chips
-            .background(
-                color = YellowAccent, // UI.md primary accent color
-                shape = RoundedCornerShape(4.dp)
-            )
-            .padding(horizontal = 6.dp, vertical = 4.dp),
-        contentAlignment = Alignment.Center
+            .padding(vertical = 2.dp)
+            .width(60.dp) // Standardized width for all chips
+            .height(28.dp) // Standardized height for all chips
     ) {
-        Text(
-            text = chipText,
-            style = MaterialTheme.typography.bodySmall.copy(
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium
-            ),
-            color = Color.Black, // Black text on yellow background per UI.md
-            maxLines = 1,
-            overflow = TextOverflow.Visible // Ensure text is not cut off
-        )
+        Box(
+            contentAlignment = Alignment.Center, // Center text within the standardized chip
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Text(
+                text = "Gp $group: $count",
+                style = MaterialTheme.typography.bodySmall, // UI.md typography for secondary info
+                color = Color.Black, // Black text on yellow background for contrast
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center, // Center align text
+                maxLines = 1, // Ensure single line
+                overflow = TextOverflow.Ellipsis // Handle overflow gracefully
+            )
+        }
     }
 }
 

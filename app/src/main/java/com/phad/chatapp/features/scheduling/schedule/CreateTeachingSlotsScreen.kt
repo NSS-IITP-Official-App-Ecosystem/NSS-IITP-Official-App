@@ -3,6 +3,7 @@ package com.phad.chatapp.features.scheduling.schedule
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,6 +36,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -74,6 +77,7 @@ import kotlinx.coroutines.tasks.await
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import kotlin.math.roundToInt
 
 // Standardized Button Design System
 object StandardButtonDefaults {
@@ -463,13 +467,14 @@ fun CreateTeachingSlotsScreen(
                         selectedDays = days
                         teachingSchedule = loadedSchedule
                         
-                        // Get subjects
+                        // Get subjects and sort by priority
                         val subjectsData = document.get("subjects") as? List<Map<String, Any>> ?: emptyList()
                         subjectsList = subjectsData.mapNotNull { map ->
                             val name = map["subjectName"] as? String
                             val count = (map["classCount"] as? Number)?.toInt() ?: 0
-                            if (name != null) SubjectAllocation(name, count) else null
-                        }
+                            val priority = (map["priority"] as? Number)?.toInt() ?: 0
+                            if (name != null) SubjectAllocation(name, count, priority) else null
+                        }.sortedBy { it.priority }
                     } else {
                         Log.e("CreateTeachingSlotsScreen", "Document does not exist for ID: $id")
                         saveErrorMessage = "Preset not found"
@@ -690,11 +695,12 @@ fun CreateTeachingSlotsScreen(
             )
         }
         
-        // Convert subjectsList to saveable format
-        val subjectsData = subjectsList.map { subject ->
+        // Convert subjectsList to saveable format with priority
+        val subjectsData = subjectsList.mapIndexed { index, subject ->
             mapOf(
                 "subjectName" to subject.subjectName,
-                "classCount" to subject.classCount
+                "classCount" to subject.classCount,
+                "priority" to (index + 1)  // Priority starts from 1
             )
         }
 
@@ -1022,56 +1028,17 @@ fun CreateTeachingSlotsScreen(
                                     if (subjectsList.isNotEmpty()) {
                                         Spacer(modifier = Modifier.height(12.dp))
                                         
-                                        // Display subjects in rows of 3
-                                        val rows = subjectsList.chunked(3)
-                                        rows.forEachIndexed { index, rowSubjects ->
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
-                                                rowSubjects.forEach { subject ->
-                                                    val shortName = if (subject.subjectName.length > 3) 
-                                                        subject.subjectName.take(3) 
-                                                    else subject.subjectName
-                                                    
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .weight(1f)
-                                                            .background(
-                                                                color = Color.White.copy(alpha = 0.1f),
-                                                                shape = RoundedCornerShape(8.dp)
-                                                            )
-                                                            .border(
-                                                                width = 1.dp,
-                                                                color = YellowAccent.copy(alpha = 0.3f),
-                                                                shape = RoundedCornerShape(8.dp)
-                                                            )
-                                                            .padding(vertical = 8.dp, horizontal = 4.dp),
-                                                        contentAlignment = Alignment.Center
-                                                    ) {
-                                                        Text(
-                                                            text = "$shortName : ${subject.classCount}",
-                                                            color = Color.White,
-                                                            style = MaterialTheme.typography.bodyMedium,
-                                                            fontWeight = FontWeight.Bold,
-                                                            maxLines = 1,
-                                                            overflow = TextOverflow.Clip
-                                                        )
-                                                    }
-                                                }
-                                                
-                                                // Fill empty spaces if last row has fewer than 3 items
-                                                if (rowSubjects.size < 3) {
-                                                    repeat(3 - rowSubjects.size) {
-                                                        Spacer(modifier = Modifier.weight(1f))
-                                                    }
-                                                }
+                                        DraggableSubjectGrid(
+                                            subjects = subjectsList,
+                                            onReorder = { fromIndex, toIndex ->
+                                                val mutableList = subjectsList.toMutableList()
+                                                // Simple swap operation
+                                                val temp = mutableList[fromIndex]
+                                                mutableList[fromIndex] = mutableList[toIndex]
+                                                mutableList[toIndex] = temp
+                                                subjectsList = mutableList
                                             }
-                                            
-                                            if (index < rows.size - 1) {
-                                                Spacer(modifier = Modifier.height(8.dp))
-                                            }
-                                        }
+                                        )
                                     } else {
                                         Spacer(modifier = Modifier.height(8.dp))
                                         Text(
@@ -2446,6 +2413,91 @@ fun CopyPresetDialog(
                 ) {
                     Text("Cancel", color = Color.White)
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun DraggableSubjectGrid(
+    subjects: List<SubjectAllocation>,
+    onReorder: (fromIndex: Int, toIndex: Int) -> Unit
+) {
+    var selectedIndex by remember { mutableStateOf<Int?>(null) }
+    
+    // Chunk subjects into rows of 3
+    val rows = subjects.chunked(3)
+    
+    Column(modifier = Modifier.fillMaxWidth()) {
+        rows.forEachIndexed { rowIndex, rowSubjects ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                rowSubjects.forEachIndexed { colIndex, subject ->
+                    val globalIndex = rowIndex * 3 + colIndex
+                    val isSelected = selectedIndex == globalIndex
+                    val shortName = if (subject.subjectName.length > 3) 
+                        subject.subjectName.take(3) 
+                    else subject.subjectName
+                    
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .background(
+                                color = if (isSelected) 
+                                    YellowAccent  // Selected: yellow background
+                                else 
+                                    Color.White.copy(alpha = 0.1f),  // Unselected: transparent white
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .border(
+                                width = if (isSelected) 2.dp else 1.dp,
+                                color = if (isSelected)
+                                    YellowAccent
+                                else
+                                    YellowAccent.copy(alpha = 0.3f),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .pointerInput(globalIndex, subjects.size, selectedIndex) {
+                                detectTapGestures(
+                                    onLongPress = {
+                                        // Long press to select
+                                        selectedIndex = globalIndex
+                                    },
+                                    onTap = {
+                                        // Click to swap with selected
+                                        if (selectedIndex != null && selectedIndex != globalIndex) {
+                                            onReorder(selectedIndex!!, globalIndex)
+                                            selectedIndex = null
+                                        }
+                                    }
+                                )
+                            }
+                            .padding(vertical = 8.dp, horizontal = 4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "$shortName : ${subject.classCount}",
+                            color = if (isSelected) Color.Black else Color.White,  // Selected: black text, Unselected: white text
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Clip
+                        )
+                    }
+                }
+                
+                // Fill empty spaces if last row has fewer than 3 items
+                if (rowSubjects.size < 3) {
+                    repeat(3 - rowSubjects.size) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+            
+            if (rowIndex < rows.size - 1) {
+                Spacer(modifier = Modifier.height(8.dp))
             }
         }
     }
