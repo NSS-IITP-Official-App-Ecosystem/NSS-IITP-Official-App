@@ -3,12 +3,17 @@ package com.phad.chatapp.utils
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Bundle
 import android.os.Process
+import android.provider.Settings
 import android.util.Log
+import com.google.firebase.analytics.FirebaseAnalytics
 import java.io.BufferedReader
 import java.io.File
 import java.io.FileReader
+import java.security.MessageDigest
 
 /**
  * Utility class for detecting if the app is running in a cloned environment
@@ -44,49 +49,98 @@ object CloneDetectionUtils {
      */
     fun getCloneDetectionDetails(context: Context): CloneDetectionResult {
         try {
-            // Method 1: Check package name for known clone app patterns
+            // Method 0: APK Signature Verification (MOST IMPORTANT - Check first!)
+            // This is the most reliable method as cloners cannot replicate your signing certificate
+            val signatureCheck = checkAppSignature(context)
+            if (signatureCheck.isCloned) {
+                Log.w(TAG, "Clone detected via signature: ${signatureCheck.reason}")
+                logCloneDetectionEvent(context, signatureCheck)
+                return signatureCheck
+            }
+            
+            // Method 1: Check installer package
+            val installerCheck = checkInstallerPackage(context)
+            if (installerCheck.isCloned) {
+                Log.w(TAG, "Clone detected via installer: ${installerCheck.reason}")
+                logCloneDetectionEvent(context, installerCheck)
+                return installerCheck
+            }
+            
+            // Method 2: Native Library Detection
+            val nativeLibCheck = checkNativeLibraries(context)
+            if (nativeLibCheck.isCloned) {
+                Log.w(TAG, "Clone detected via native libraries: ${nativeLibCheck.reason}")
+                logCloneDetectionEvent(context, nativeLibCheck)
+                return nativeLibCheck
+            }
+            
+            // Method 3: ClassLoader Detection
+            val classLoaderCheck = checkClassLoader()
+            if (classLoaderCheck.isCloned) {
+                Log.w(TAG, "Clone detected via ClassLoader: ${classLoaderCheck.reason}")
+                logCloneDetectionEvent(context, classLoaderCheck)
+                return classLoaderCheck
+            }
+            
+            // Method 4: Stack Trace Analysis
+            val stackTraceCheck = checkStackTrace()
+            if (stackTraceCheck.isCloned) {
+                Log.w(TAG, "Clone detected via stack trace: ${stackTraceCheck.reason}")
+                logCloneDetectionEvent(context, stackTraceCheck)
+                return stackTraceCheck
+            }
+            
+            // Method 5: Hardware Consistency Check
+            val hardwareCheck = checkHardwareConsistency(context)
+            if (hardwareCheck.isCloned) {
+                Log.w(TAG, "Clone detected via hardware check: ${hardwareCheck.reason}")
+                logCloneDetectionEvent(context, hardwareCheck)
+                return hardwareCheck
+            }
+            
+            // Method 6: Check package name for known clone app patterns
             val packageNameCheck = checkPackageNamePatterns(context)
             if (packageNameCheck.isCloned) {
                 Log.w(TAG, "Clone detected via package name: ${packageNameCheck.reason}")
                 return packageNameCheck
             }
             
-            // Method 2: Check installation directory path
+            // Method 7: Check installation directory path
             val pathCheck = checkInstallationPath(context)
             if (pathCheck.isCloned) {
                 Log.w(TAG, "Clone detected via installation path: ${pathCheck.reason}")
                 return pathCheck
             }
             
-            // Method 3: Check if running in multiple user profile
+            // Method 8: Check if running in multiple user profile
             val multiUserCheck = checkMultipleUserProfile(context)
             if (multiUserCheck.isCloned) {
                 Log.w(TAG, "Clone detected via multi-user: ${multiUserCheck.reason}")
                 return multiUserCheck
             }
             
-            // Method 4: Check application flags and system app status
+            // Method 9: Check application flags and system app status
             val appFlagsCheck = checkApplicationFlags(context)
             if (appFlagsCheck.isCloned) {
                 Log.w(TAG, "Clone detected via app flags: ${appFlagsCheck.reason}")
                 return appFlagsCheck
             }
             
-            // Method 5: Check process name
+            // Method 10: Check process name
             val processCheck = checkProcessName(context)
             if (processCheck.isCloned) {
                 Log.w(TAG, "Clone detected via process name: ${processCheck.reason}")
                 return processCheck
             }
             
-            // Method 6: Check for known clone app files/directories
+            // Method 11: Check for known clone app files/directories
             val filesCheck = checkCloneAppFiles()
             if (filesCheck.isCloned) {
                 Log.w(TAG, "Clone detected via files: ${filesCheck.reason}")
                 return filesCheck
             }
             
-            // Method 7: Check system properties and environment
+            // Method 12: Check system properties and environment
             val systemPropsCheck = checkSystemProperties()
             if (systemPropsCheck.isCloned) {
                 Log.w(TAG, "Clone detected via system properties: ${systemPropsCheck.reason}")
@@ -94,18 +148,28 @@ object CloneDetectionUtils {
             }
             
             Log.d(TAG, "No clone environment detected")
-            return CloneDetectionResult(
+            val result = CloneDetectionResult(
                 isCloned = false,
                 reason = "App appears to be running in normal environment"
             )
             
+            // Log to Firebase Analytics
+            logCloneDetectionEvent(context, result)
+            
+            return result
+            
         } catch (e: Exception) {
             Log.e(TAG, "Error during clone detection", e)
             // In case of error, fail open (don't block) to avoid false positives
-            return CloneDetectionResult(
+            val result = CloneDetectionResult(
                 isCloned = false,
                 reason = "Detection error: ${e.message}"
             )
+            
+            // Log error to Firebase Analytics
+            logCloneDetectionEvent(context, result)
+            
+            return result
         }
     }
     
@@ -452,5 +516,387 @@ object CloneDetectionUtils {
         } catch (e: Exception) {
             Log.e(TAG, "Error logging detection details", e)
         }
+    }
+    
+    /**
+     * Log clone detection event to Firebase Analytics
+     * Tracks which methods are detecting clones and how often
+     */
+    private fun logCloneDetectionEvent(context: Context, result: CloneDetectionResult) {
+        try {
+            val analytics = FirebaseAnalytics.getInstance(context)
+            
+            val params = Bundle().apply {
+                putString("detection_result", if (result.isCloned) "cloned" else "legitimate")
+                putString("detection_method", result.detectionMethod ?: "none")
+                putString("detection_reason", result.reason)
+                putString("app_data_dir", context.applicationInfo.dataDir)
+                putString("installer_package", try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        context.packageManager.getInstallSourceInfo(context.packageName).installingPackageName ?: "null"
+                    } else {
+                        @Suppress("DEPRECATION")
+                        context.packageManager.getInstallerPackageName(context.packageName) ?: "null"
+                    }
+                } catch (e: Exception) { "error" })
+                putInt("user_id", getUserId())
+                putBoolean("is_cloned", result.isCloned)
+            }
+            
+            // Log the event
+            analytics.logEvent("clone_detection_check", params)
+            
+            // If clone detected, log a separate event for easier tracking
+            if (result.isCloned) {
+                val cloneParams = Bundle().apply {
+                    putString("method", result.detectionMethod ?: "unknown")
+                    putString("reason_summary", result.reason.take(100)) // Limit length
+                }
+                analytics.logEvent("clone_app_blocked", cloneParams)
+                
+                Log.d(TAG, "📊 Firebase Analytics: Clone app blocked - Method: ${result.detectionMethod}")
+            } else {
+                Log.d(TAG, "📊 Firebase Analytics: Legitimate app verified")
+            }
+            
+        } catch (e: Exception) {
+            Log.w(TAG, "Error logging to Firebase Analytics", e)
+        }
+    }
+    
+    // ==================== ENHANCED DETECTION METHODS ====================
+    
+    /**
+     * Method 0: APK Signature Verification (MOST RELIABLE)
+     * Verify that the app is signed with the expected certificate.
+     * Cloner apps cannot replicate your signing certificate.
+     */
+    private fun checkAppSignature(context: Context): CloneDetectionResult {
+        try {
+            val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                context.packageManager.getPackageInfo(
+                    context.packageName,
+                    PackageManager.GET_SIGNING_CERTIFICATES
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(
+                    context.packageName,
+                    PackageManager.GET_SIGNATURES
+                )
+            }
+
+            val signatureHash = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                // Android P+ uses SigningInfo
+                val signatures = packageInfo.signingInfo
+                if (signatures?.hasMultipleSigners() == true) {
+                    signatures.apkContentsSigners?.firstOrNull()
+                } else {
+                    signatures?.signingCertificateHistory?.firstOrNull()
+                }?.let { getSignatureHash(it.toByteArray()) }
+            } else {
+                // Android N and below use Signature array
+                @Suppress("DEPRECATION")
+                packageInfo.signatures?.firstOrNull()?.let { 
+                    getSignatureHash(it.toByteArray()) 
+                }
+            }
+
+            // Expected signature hashes
+            // Debug certificate (from your keytool output)
+            val debugCertificateHash = "fd632490dc4e7a426a401d61b14da2f0b72949a09bd344a03b5f793665c716ed"
+            
+            // TODO: Add your RELEASE certificate hash here when you build for production
+            // Get it using: keytool -list -v -keystore your-release.keystore -alias your-alias
+            val releaseCertificateHash = "f17cb7278858d5109a26037b2bb47cd6d5b9e3d7e031b22aa97b03d4ee34d5aa"
+            
+            val validHashes = listOf(
+                debugCertificateHash.lowercase(),
+                releaseCertificateHash.lowercase()
+            )
+            
+            if (signatureHash != null) {
+                val hashLowercase = signatureHash.lowercase()
+                Log.d(TAG, "App signature hash: $hashLowercase")
+                
+                // Check if current signature matches any valid hash
+                val isValid = validHashes.any { expectedHash ->
+                    // Also check partial match since we extracted from your keytool output
+                    hashLowercase.contains(expectedHash) || expectedHash.contains(hashLowercase)
+                }
+                
+                if (isValid) {
+                    Log.d(TAG, "✓ App signature verified successfully")
+                    return CloneDetectionResult(
+                        isCloned = false,
+                        reason = "Signature verification passed"
+                    )
+                } else {
+                    Log.w(TAG, "x App signature mismatch! Got: $hashLowercase")
+                    return CloneDetectionResult(
+                        isCloned = true,
+                        reason = "App signature does not match official certificate. This appears to be a tampered or cloned version.",
+                        detectionMethod = "APK Signature Verification"
+                    )
+                }
+            } else {
+                Log.w(TAG, "✗ Unable to extract app signature")
+                return CloneDetectionResult(
+                    isCloned = true,
+                    reason = "Unable to verify app signature",
+                    detectionMethod = "APK Signature Verification"
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking app signature", e)
+            // Fail secure: if we can't verify, assume it's potentially cloned
+            return CloneDetectionResult(
+                isCloned = true,
+                reason = "SignatureJSONException verification failed: ${e.message}",
+                detectionMethod = "APK Signature Verification"
+            )
+        }
+    }
+
+    /**
+     * Calculate SHA-256 hash of signature bytes
+     */
+    private fun getSignatureHash(signature: ByteArray): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        val hash = digest.digest(signature)
+        return hash.joinToString("") { "%02x".format(it) }
+    }
+    
+    /**
+     * Method 1: Installer Package Verification
+     * Check if app was installed from Google Play Store or legitimate source
+     */
+    private fun checkInstallerPackage(context: Context): CloneDetectionResult {
+        try {
+            val installerPackage = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                context.packageManager.getInstallSourceInfo(context.packageName).installingPackageName
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getInstallerPackageName(context.packageName)
+            }
+            
+            Log.d(TAG, "Installer package: ${installerPackage ?: "null (sideloaded)"}")
+            
+            // Legitimate sources
+            val legitimateInstallers = listOf(
+                "com.android.vending",        // Google Play Store
+                "com.google.android.feedback", // Google internal testing
+                "com.android.packageinstaller", // System installer (for updates)
+                null                           // Allow null during development/sideload
+            )
+            
+            // Check for suspicious installers (clone apps install cloned apps)
+            val suspiciousInstallers = listOf(
+                "parallel", "clone", "dual", "virtual", "space", "multi", "sandbox",
+                "2accounts", "island", "shelter"
+            )
+            
+            installerPackage?.let { installer ->
+                for (pattern in suspiciousInstallers) {
+                    if (installer.contains(pattern, ignoreCase = true)) {
+                        return CloneDetectionResult(
+                            isCloned = true,
+                            reason = "App installed via clone app: $installer",
+                            detectionMethod = "Installer Package"
+                        )
+                    }
+                }
+            }
+            
+            // In production, you may want to block null installers (sideloaded)
+            // For now, we just log it
+            if (installerPackage == null) {
+                Log.w(TAG, "App was sideloaded (no installer package) - allowing for development")
+            }
+            
+        } catch (e: Exception) {
+            Log.w(TAG, "Error checking installer package", e)
+        }
+        
+        return CloneDetectionResult(isCloned = false, reason = "Installer check passed")
+    }
+    
+    /**
+     * Method 2: Native Library Detection
+     * Check for suspicious native libraries that indicate virtualization
+     */
+    private fun checkNativeLibraries(context: Context): CloneDetectionResult {
+        try {
+            val nativeLibDir = context.applicationInfo.nativeLibraryDir
+            val libDir = File(nativeLibDir)
+            
+            if (!libDir.exists() || !libDir.isDirectory) {
+                return CloneDetectionResult(isCloned = false, reason = "Native lib check skipped")
+            }
+            
+            // List all .so files
+            val soFiles = libDir.listFiles { file -> file.extension == "so" }
+            
+            // Suspicious library name patterns used by clone/virtual apps
+            val suspiciousLibPatterns = listOf(
+                "epic",      // Epic Games (virtualizes apps)
+                "virtual",   // VirtualApp framework
+                "va_",       // VirtualApp abbreviated (prefix)
+                "xposed",    // Xposed framework
+                "substrate", // Substrate (hooking framework)
+                "lody",      // Lody Virtual App creator
+                "hook",      // General hooking libraries
+                "inject"     // Code injection libraries
+            )
+            
+            soFiles?.forEach { soFile ->
+                val fileName = soFile.name.lowercase()
+                for (pattern in suspiciousLibPatterns) {
+                    if (fileName.contains(pattern)) {
+                        Log.w(TAG, "Suspicious native library found: ${soFile.name}")
+                        return CloneDetectionResult(
+                            isCloned = true,
+                            reason = "Suspicious native library detected: ${soFile.name}",
+                            detectionMethod = "Native Library Detection"
+                        )
+                    }
+                }
+            }
+            
+            Log.d(TAG, "Native libraries (${soFiles?.size ?: 0}): ${soFiles?.joinToString(", ") { it.name }}")
+            
+        } catch (e: Exception) {
+            Log.w(TAG, "Error checking native libraries", e)
+        }
+        
+        return CloneDetectionResult(isCloned = false, reason = "Native lib check passed")
+    }
+    
+    /**
+     * Method 3: ClassLoader Detection
+     * Detect custom ClassLoaders used by virtualization frameworks
+     */
+    private fun checkClassLoader(): CloneDetectionResult {
+        try {
+            val classLoader = CloneDetectionUtils::class.java.classLoader
+            val classLoaderName = classLoader?.javaClass?.name ?: "null"
+            
+            Log.d(TAG, "ClassLoader: $classLoaderName")
+            
+            // Normal Android apps use PathClassLoader or DexClassLoader
+            val suspiciousClassLoaders = listOf(
+                "de.robv.android.xposed",    // Xposed
+                "com.lody.virtual",          // VirtualApp
+                "com.pspace.vandroid",       // Parallel Space
+                "bin.mt.plus",               // MT Manager
+                "io.va.exposed",             // VirtualApp exposed variant
+                "com.swift.sandhook",        // SandHook framework
+                "me.weishu"                  // VirtualXposed/Epic
+            )
+            
+            for (pattern in suspiciousClassLoaders) {
+                if (classLoaderName.contains(pattern, ignoreCase = true)) {
+                    return CloneDetectionResult(
+                        isCloned = true,
+                        reason = "Suspicious ClassLoader detected: $classLoaderName",
+                        detectionMethod = "ClassLoader Detection"
+                    )
+                }
+            }
+            
+        } catch (e: Exception) {
+            Log.w(TAG, "Error checking ClassLoader", e)
+        }
+        
+        return CloneDetectionResult(isCloned = false, reason = "ClassLoader check passed")
+    }
+    
+    /**
+     * Method 4: Stack Trace Analysis
+     * Analyze stack trace for signs of hooking or virtualization
+     */
+    private fun checkStackTrace(): CloneDetectionResult {
+        try {
+            val stackTrace = Thread.currentThread().stackTrace
+            val stackString = stackTrace.joinToString("\n") { it.toString() }
+            
+            // Suspicious package patterns in stack trace
+            val suspiciousPatterns = listOf(
+                "de.robv.android.xposed",
+                "com.lody.virtual",
+                "com.pspace",
+                "io.va.exposed",
+                "com.swift.sandhook",
+                "me.weishu",
+                "bin.mt.plus",
+                "epic.android"
+            )
+            
+            for (pattern in suspiciousPatterns) {
+                if (stackString.contains(pattern, ignoreCase = true)) {
+                    Log.w(TAG, "Suspicious framework detected in stack trace: $pattern")
+                    return CloneDetectionResult(
+                        isCloned = true,
+                        reason = "Suspicious framework detected in stack trace",
+                        detectionMethod = "Stack Trace Analysis"
+                    )
+                }
+            }
+            
+        } catch (e: Exception) {
+            Log.w(TAG, "Error analyzing stack trace", e)
+        }
+        
+        return CloneDetectionResult(isCloned = false, reason = "Stack trace check passed")
+    }
+    
+    /**
+     * Method 5: Hardware ID Verification
+     * Enhanced hardware verification with cross-checks for fake/cloned IDs
+     */
+    @SuppressLint("HardwareIds")
+    private fun checkHardwareConsistency(context: Context): CloneDetectionResult {
+        try {
+            // Get Android ID
+            val androidId = Settings.Secure.getString(
+                context.contentResolver,
+                Settings.Secure.ANDROID_ID
+            )
+            
+            // Known fake Android IDs used by emulators/cloners
+            val fakeIds = listOf(
+                "9774d56d682e549c",  // Default emulator ID
+                "0123456789abcdef",  // Common fake ID
+                "1234567890abcdef",  // Another common fake
+                null,
+                ""
+            )
+            
+            if (androidId in fakeIds) {
+                Log.w(TAG, "Suspicious or fake Android ID detected: $androidId")
+                return CloneDetectionResult(
+                    isCloned = true,
+                    reason = "Suspicious or fake Android ID detected",
+                    detectionMethod = "Hardware ID Verification"
+                )
+            }
+            
+            // Check if Build.SERIAL is accessible and valid
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+                @Suppress("DEPRECATION")
+                val serial = Build.SERIAL
+                if (serial == "unknown" || serial == "0" || serial.isNullOrEmpty()) {
+                    Log.w(TAG, "Suspicious device serial: $serial")
+                    // Don't block based on this alone, just log
+                }
+            }
+            
+            Log.d(TAG, "Android ID: $androidId")
+            
+        } catch (e: Exception) {
+            Log.w(TAG, "Error checking hardware IDs", e)
+        }
+        
+        return CloneDetectionResult(isCloned = false, reason = "Hardware check passed")
     }
 }
