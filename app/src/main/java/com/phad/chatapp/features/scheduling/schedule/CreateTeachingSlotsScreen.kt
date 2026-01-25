@@ -132,6 +132,134 @@ fun StandardButton(
     )
 }
 
+// Swipe Wheel Picker Component
+@Composable
+fun SwipeWheelPicker(
+    items: List<String>,
+    selectedIndex: Int,
+    onSelectedIndexChange: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    itemHeight: Int = 48
+) {
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = selectedIndex)
+    val coroutineScope = rememberCoroutineScope()
+    
+    // Detect when scrolling stops and snap to nearest item
+    LaunchedEffect(listState.isScrollInProgress) {
+        if (!listState.isScrollInProgress) {
+            val firstVisibleIndex = listState.firstVisibleItemIndex
+            val firstVisibleOffset = listState.firstVisibleItemScrollOffset
+            
+            // Determine which item to snap to
+            val snapToIndex = if (firstVisibleOffset > itemHeight / 2) {
+                (firstVisibleIndex + 1).coerceIn(0, items.size - 1)
+            } else {
+                firstVisibleIndex
+            }
+            
+            if (snapToIndex != selectedIndex) {
+                onSelectedIndexChange(snapToIndex)
+            }
+            listState.animateScrollToItem(snapToIndex)
+        }
+    }
+    
+    Box(
+        modifier = modifier
+            .height((itemHeight * 3).dp)
+            .width(70.dp)
+    ) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(vertical = itemHeight.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            items(items.size) { index ->
+                val isSelected = index == selectedIndex
+                Box(
+                    modifier = Modifier
+                        .height(itemHeight.dp)
+                        .fillMaxWidth()
+                        .clickable {
+                            onSelectedIndexChange(index)
+                            coroutineScope.launch {
+                                listState.animateScrollToItem(index)
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = items[index],
+                        fontSize = if (isSelected) 28.sp else 18.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        color = if (isSelected) YellowAccent else Color.White.copy(alpha = 0.5f),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+        
+        // Selection indicator
+        Box(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .fillMaxWidth()
+                .height(itemHeight.dp)
+                .border(
+                    width = 2.dp,
+                    color = YellowAccent.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(8.dp)
+                )
+        )
+    }
+}
+
+// Time Wheel Picker combining Hour and Minute wheels
+@Composable
+fun TimeWheelPicker(
+    hour: Int,
+    minute: Int,
+    onTimeChange: (Int, Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val hours = (0..23).map { String.format("%02d", it) }
+    val minutes = (0..59).map { String.format("%02d", it) }
+    
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+        // Hour picker
+        SwipeWheelPicker(
+            items = hours,
+            selectedIndex = hour,
+            onSelectedIndexChange = { newHour ->
+                onTimeChange(newHour, minute)
+            }
+        )
+        
+        // Colon separator
+        Text(
+            text = ":",
+            fontSize = 32.sp,
+            fontWeight = FontWeight.Bold,
+            color = YellowAccent,
+            modifier = Modifier.padding(horizontal = 8.dp)
+        )
+        
+        // Minute picker
+        SwipeWheelPicker(
+            items = minutes,
+            selectedIndex = minute,
+            onSelectedIndexChange = { newMinute ->
+                onTimeChange(hour, newMinute)
+            }
+        )
+    }
+}
+
 // Data structure for time slot information with both class and free group times
 data class ColumnTimeInfo(
     val classTime: String = "",
@@ -197,9 +325,9 @@ fun CreateTeachingSlotsScreen(
     var sectionExpanded by remember { mutableStateOf(false) }
 
     // Dropdown options
-    val schoolCodes = listOf("RP", "AM", "UB", "FA", "KV", "TPS")
+    val schoolCodes = listOf("RP", "AM", "DP", "UB", "FA", "KV", "TPS")
     val classes = listOf("6", "7", "8", "9", "10", "11", "12")
-    val sections = listOf("B", "G", "N")
+    val sections = listOf("B", "G", "N", "A", "B", "C")
 
     // Generate preset name from selections
     val generatedPresetName = if (selectedSchoolCode.isNotEmpty() && selectedClass.isNotEmpty() && selectedSection.isNotEmpty()) {
@@ -775,32 +903,7 @@ fun CreateTeachingSlotsScreen(
                     hostState = snackbarHostState,
                     modifier = Modifier.padding(bottom = 90.dp)
                 ) 
-            },
-            floatingActionButton = {
-                if (teachingSchedule.isNotEmpty()) {
-                    FloatingActionButton(
-                        onClick = {
-                            if (validateSchedule()) {
-                                if (isEditMode && presetNameInput.isNotEmpty()) {
-                                    savePreset()
-                                } else {
-                                    showSaveDialog = true
-                                }
-                            }
-                        },
-                        containerColor = Color(0xFF4CAF50),
-                        contentColor = Color.White,
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Save,
-                            contentDescription = if (isEditMode) "Save" else "Create",
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                }
-            },
-
+            }
         ) { _ ->
             Column(
                 modifier = Modifier
@@ -1293,8 +1396,38 @@ fun CreateTeachingSlotsScreen(
                             }
                         }
                     }
+            }
+        }
+
+        // Manually positioned FAB (TTW_UI_plan.md spec)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(end = 24.dp, bottom = 48.dp),
+            contentAlignment = Alignment.BottomEnd
+        ) {
+            if (teachingSchedule.isNotEmpty()) {
+                FloatingActionButton(
+                    onClick = {
+                        if (validateSchedule()) {
+                            if (isEditMode && presetNameInput.isNotEmpty()) {
+                                savePreset()
+                            } else {
+                                showSaveDialog = true
+                            }
+                        }
+                    },
+                    containerColor = Color(0xFF4CAF50),
+                    contentColor = Color.White
+                ) {
+                    Icon(
+                        Icons.Default.Save,
+                        contentDescription = if (isEditMode) "Save" else "Create",
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
             }
+        }
 
         // Dialog for setting time range
         if (showRenameColumnDialog) {
@@ -1498,39 +1631,6 @@ fun CreateTeachingSlotsScreen(
                             }
                         }
 
-                        // Preview
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = YellowAccent.copy(alpha = 0.1f)
-                            ),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Text(
-                                    "Preview:",
-                                    color = YellowAccent,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.Medium
-                                )
-                                Text(
-                                    "Class: " + String.format("%02d:%02d-%02d:%02d", classTimeStartHour, classTimeStartMinute, classTimeEndHour, classTimeEndMinute),
-                                    color = Color.White,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    "Free Group: " + String.format("%02d:%02d-%02d:%02d", freeGroupTimeStartHour, freeGroupTimeStartMinute, freeGroupTimeEndHour, freeGroupTimeEndMinute),
-                                    color = Color.White,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-
                         // Error message
                         timePickerError?.let { error ->
                             Card(
@@ -1583,11 +1683,8 @@ fun CreateTeachingSlotsScreen(
 
         // Class Time Start Picker Dialog
         if (showClassTimeStartPicker) {
-            val dialogTimePickerState = rememberTimePickerState(
-                initialHour = classTimeStartHour,
-                initialMinute = classTimeStartMinute,
-                is24Hour = true
-            )
+            var tempHour by remember { mutableStateOf(classTimeStartHour) }
+            var tempMinute by remember { mutableStateOf(classTimeStartMinute) }
             
             AlertDialog(
                 onDismissRequest = { showClassTimeStartPicker = false },
@@ -1604,32 +1701,21 @@ fun CreateTeachingSlotsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        TimePicker(
-                            state = dialogTimePickerState,
-                            colors = TimePickerDefaults.colors(
-                                clockDialColor = SurfaceElevated,
-                                clockDialSelectedContentColor = Color.Black,
-                                clockDialUnselectedContentColor = Color.White,
-                                selectorColor = YellowAccent,
-                                containerColor = SurfaceElevated,
-                                periodSelectorBorderColor = YellowAccent,
-                                periodSelectorSelectedContainerColor = YellowAccent,
-                                periodSelectorUnselectedContainerColor =Color.Transparent,
-                                periodSelectorSelectedContentColor = Color.Black,
-                                periodSelectorUnselectedContentColor = Color.White,
-                                timeSelectorSelectedContainerColor = YellowAccent,
-                                timeSelectorUnselectedContainerColor = Color.Transparent,
-                                timeSelectorSelectedContentColor = Color.Black,
-                                timeSelectorUnselectedContentColor = Color.White
-                            )
+                        TimeWheelPicker(
+                            hour = tempHour,
+                            minute = tempMinute,
+                            onTimeChange = { h, m ->
+                                tempHour = h
+                                tempMinute = m
+                            }
                         )
                     }
                 },
                 confirmButton = {
                     StandardButton(
                         onClick = {
-                            classTimeStartHour = dialogTimePickerState.hour
-                            classTimeStartMinute = dialogTimePickerState.minute
+                            classTimeStartHour = tempHour
+                            classTimeStartMinute = tempMinute
                             timePickerError = null
                             showClassTimeStartPicker = false
                         }
@@ -1652,11 +1738,8 @@ fun CreateTeachingSlotsScreen(
 
         // Class Time End Picker Dialog
         if (showClassTimeEndPicker) {
-            val dialogTimePickerState = rememberTimePickerState(
-                initialHour = classTimeEndHour,
-                initialMinute = classTimeEndMinute,
-                is24Hour = true
-            )
+            var tempHour by remember { mutableStateOf(classTimeEndHour) }
+            var tempMinute by remember { mutableStateOf(classTimeEndMinute) }
             
             AlertDialog(
                 onDismissRequest = { showClassTimeEndPicker = false },
@@ -1673,32 +1756,21 @@ fun CreateTeachingSlotsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        TimePicker(
-                            state = dialogTimePickerState,
-                            colors = TimePickerDefaults.colors(
-                                clockDialColor = SurfaceElevated,
-                                clockDialSelectedContentColor = Color.Black,
-                                clockDialUnselectedContentColor = Color.White,
-                                selectorColor = YellowAccent,
-                                containerColor = SurfaceElevated,
-                                periodSelectorBorderColor = YellowAccent,
-                                periodSelectorSelectedContainerColor = YellowAccent,
-                                periodSelectorUnselectedContainerColor = Color.Transparent,
-                                periodSelectorSelectedContentColor = Color.Black,
-                                periodSelectorUnselectedContentColor = Color.White,
-                                timeSelectorSelectedContainerColor = YellowAccent,
-                                timeSelectorUnselectedContainerColor = Color.Transparent,
-                                timeSelectorSelectedContentColor = Color.Black,
-                                timeSelectorUnselectedContentColor = Color.White
-                            )
+                        TimeWheelPicker(
+                            hour = tempHour,
+                            minute = tempMinute,
+                            onTimeChange = { h, m ->
+                                tempHour = h
+                                tempMinute = m
+                            }
                         )
                     }
                 },
                 confirmButton = {
                     StandardButton(
                         onClick = {
-                            classTimeEndHour = dialogTimePickerState.hour
-                            classTimeEndMinute = dialogTimePickerState.minute
+                            classTimeEndHour = tempHour
+                            classTimeEndMinute = tempMinute
                             timePickerError = null
                             showClassTimeEndPicker = false
                         }
@@ -1721,11 +1793,8 @@ fun CreateTeachingSlotsScreen(
 
         // Free Group Time Start Picker Dialog
         if (showFreeGroupTimeStartPicker) {
-            val dialogTimePickerState = rememberTimePickerState(
-                initialHour = freeGroupTimeStartHour,
-                initialMinute = freeGroupTimeStartMinute,
-                is24Hour = true
-            )
+            var tempHour by remember { mutableStateOf(freeGroupTimeStartHour) }
+            var tempMinute by remember { mutableStateOf(freeGroupTimeStartMinute) }
             
             AlertDialog(
                 onDismissRequest = { showFreeGroupTimeStartPicker = false },
@@ -1742,32 +1811,21 @@ fun CreateTeachingSlotsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        TimePicker(
-                            state = dialogTimePickerState,
-                            colors = TimePickerDefaults.colors(
-                                clockDialColor = SurfaceElevated,
-                                clockDialSelectedContentColor = Color.Black,
-                                clockDialUnselectedContentColor = Color.White,
-                                selectorColor = YellowAccent,
-                                containerColor = SurfaceElevated,
-                                periodSelectorBorderColor = YellowAccent,
-                                periodSelectorSelectedContainerColor = YellowAccent,
-                                periodSelectorUnselectedContainerColor = Color.Transparent,
-                                periodSelectorSelectedContentColor = Color.Black,
-                                periodSelectorUnselectedContentColor = Color.White,
-                                timeSelectorSelectedContainerColor = YellowAccent,
-                                timeSelectorUnselectedContainerColor = Color.Transparent,
-                                timeSelectorSelectedContentColor = Color.Black,
-                                timeSelectorUnselectedContentColor = Color.White
-                            )
+                        TimeWheelPicker(
+                            hour = tempHour,
+                            minute = tempMinute,
+                            onTimeChange = { h, m ->
+                                tempHour = h
+                                tempMinute = m
+                            }
                         )
                     }
                 },
                 confirmButton = {
                     StandardButton(
                         onClick = {
-                            freeGroupTimeStartHour = dialogTimePickerState.hour
-                            freeGroupTimeStartMinute = dialogTimePickerState.minute
+                            freeGroupTimeStartHour = tempHour
+                            freeGroupTimeStartMinute = tempMinute
                             timePickerError = null
                             showFreeGroupTimeStartPicker = false
                         }
@@ -1790,11 +1848,8 @@ fun CreateTeachingSlotsScreen(
 
         // Free Group Time End Picker Dialog
         if (showFreeGroupTimeEndPicker) {
-            val dialogTimePickerState = rememberTimePickerState(
-                initialHour = freeGroupTimeEndHour,
-                initialMinute = freeGroupTimeEndMinute,
-                is24Hour = true
-            )
+            var tempHour by remember { mutableStateOf(freeGroupTimeEndHour) }
+            var tempMinute by remember { mutableStateOf(freeGroupTimeEndMinute) }
             
             AlertDialog(
                 onDismissRequest = { showFreeGroupTimeEndPicker = false },
@@ -1811,32 +1866,21 @@ fun CreateTeachingSlotsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        TimePicker(
-                            state = dialogTimePickerState,
-                            colors = TimePickerDefaults.colors(
-                                clockDialColor = SurfaceElevated,
-                                clockDialSelectedContentColor = Color.Black,
-                                clockDialUnselectedContentColor = Color.White,
-                                selectorColor = YellowAccent,
-                                containerColor = SurfaceElevated,
-                                periodSelectorBorderColor = YellowAccent,
-                                periodSelectorSelectedContainerColor = YellowAccent,
-                                periodSelectorUnselectedContainerColor = Color.Transparent,
-                                periodSelectorSelectedContentColor = Color.Black,
-                                periodSelectorUnselectedContentColor = Color.White,
-                                timeSelectorSelectedContainerColor = YellowAccent,
-                                timeSelectorUnselectedContainerColor = Color.Transparent,
-                                timeSelectorSelectedContentColor = Color.Black,
-                                timeSelectorUnselectedContentColor = Color.White
-                            )
+                        TimeWheelPicker(
+                            hour = tempHour,
+                            minute = tempMinute,
+                            onTimeChange = { h, m ->
+                                tempHour = h
+                                tempMinute = m
+                            }
                         )
                     }
                 },
                 confirmButton = {
                     StandardButton(
                         onClick = {
-                            freeGroupTimeEndHour = dialogTimePickerState.hour
-                            freeGroupTimeEndMinute = dialogTimePickerState.minute
+                            freeGroupTimeEndHour = tempHour
+                            freeGroupTimeEndMinute = tempMinute
                             timePickerError = null
                             showFreeGroupTimeEndPicker = false
                         }
@@ -1942,37 +1986,6 @@ fun CreateTeachingSlotsScreen(
                                     .weight(1f)
                                     .widthIn(min = 170.dp) // Further increased minimum width for full word visibility
                             )
-                        }
-
-                        // Enhanced preview section
-                        if (generatedPresetName.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(20.dp)) // Increased spacing
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = YellowAccent
-                                ),
-                                shape = RoundedCornerShape(12.dp),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(16.dp)
-                                ) {
-                                    Text(
-                                        text = "Preview:",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = Color.Black,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = generatedPresetName,
-                                        style = MaterialTheme.typography.titleLarge,
-                                        color = Color.Black,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
                         }
 
                         // Fallback text input for legacy names
@@ -2377,58 +2390,82 @@ fun CopyPresetDialog(
         }
     }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(max = 600.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = DarkSurface)
-        ) {
-            Column(modifier = Modifier.padding(24.dp)) {
-                Text(
-                    "Copy From Preset",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                "Copy From Preset",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+        },
+        containerColor = NeutralCardSurface,
+        titleContentColor = Color.White,
+        textContentColor = Color.White,
+        text = {
+            Column {
                 if (isLoading) {
                     Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
                          CircularProgressIndicator(color = YellowAccent)
                     }
+                } else if (presets.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
+                        Text(
+                            "No presets available",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFFB0B0B0)
+                        )
+                    }
                 } else {
                     LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.heightIn(max = 400.dp)
                     ) {
                         itemsIndexed(presets) { _, preset ->
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable { onPresetSelected(preset) },
-                                colors = CardDefaults.cardColors(containerColor = NeutralCardSurface),
-                                shape = RoundedCornerShape(12.dp)
+                                colors = CardDefaults.cardColors(containerColor = DarkSurface),
+                                shape = RoundedCornerShape(12.dp),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                             ) {
                                 Column(modifier = Modifier.padding(16.dp)) {
-                                     Text(preset.name, color = YellowAccent, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                     Text(
+                                         preset.name,
+                                         color = Color.White,
+                                         style = MaterialTheme.typography.titleSmall,
+                                         fontWeight = FontWeight.Bold
+                                     )
+                                     Text(
+                                         text = "${preset.days.size} days, ${preset.slotCount} slots",
+                                         style = MaterialTheme.typography.bodySmall,
+                                         color = Color(0xFFB0B0B0),
+                                         modifier = Modifier.padding(top = 4.dp)
+                                     )
                                 }
                             }
                         }
                     }
                 }
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                Button(
-                    onClick = onDismiss,
-                    modifier = Modifier.align(Alignment.End),
-                    colors = ButtonDefaults.buttonColors(containerColor = NeutralGray)
-                ) {
-                    Text("Cancel", color = Color.White)
-                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = YellowAccent
+                )
+            ) {
+                Text(
+                    "Cancel",
+                    fontWeight = FontWeight.Medium
+                )
             }
         }
-    }
+    )
 }
 
 @Composable
@@ -2512,19 +2549,6 @@ fun DraggableSubjectGrid(
             if (rowIndex < rows.size - 1) {
                 Spacer(modifier = Modifier.height(8.dp))
             }
-        }
-    }
-}
-
-@Preview(showBackground = true, backgroundColor = 0xFF121212, widthDp = 360, heightDp = 740)
-@Composable
-fun CreateTeachingSlotsScreenPreview() {
-    SchedulingTheme {
-        Surface(
-            color = DarkBackground,
-            modifier = Modifier.fillMaxSize()
-        ) {
-            CreateTeachingSlotsScreen(rememberNavController())
         }
     }
 }

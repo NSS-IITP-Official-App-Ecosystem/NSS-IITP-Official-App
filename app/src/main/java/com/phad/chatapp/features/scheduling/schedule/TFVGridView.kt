@@ -309,7 +309,7 @@ fun TFVScheduleView(
         verticalArrangement = Arrangement.spacedBy(16.dp), // UI.md card spacing
         contentPadding = PaddingValues(
             top = 16.dp,
-            bottom = 100.dp // Extra padding to avoid bottom navigation bar
+            bottom = 150.dp // Extra padding to avoid bottom navigation bar and FABs
         )
     ) {
         // Process each school
@@ -445,7 +445,7 @@ fun TableScheduleView(
                 allSlotTimes.forEach { timeLabel ->
                     Box(
                         modifier = Modifier
-                            .width(80.dp) // Fixed width for consistent sizing
+                            .width(96.dp) // Fixed width for consistent sizing
                             .padding(horizontal = 2.dp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -528,7 +528,7 @@ fun TableRow(
                     TableCell(
                         slot = slot,
                         modifier = Modifier
-                            .width(80.dp) // Fixed width for consistent sizing
+                            .width(96.dp) // Fixed width for consistent sizing
                             .padding(horizontal = 2.dp),
                         onClick = { onSlotClick(slot) }
                     )
@@ -536,7 +536,7 @@ fun TableRow(
                     // Empty cell with fixed dimensions
                     Box(
                         modifier = Modifier
-                            .width(80.dp) // Fixed width for consistent sizing
+                            .width(96.dp) // Fixed width for consistent sizing
                             .height(48.dp)
                             .padding(horizontal = 2.dp)
                             .background(Color(0xFF1E1E1E), RoundedCornerShape(4.dp))
@@ -600,9 +600,11 @@ fun TableCell(
                     )
                 }
             } else {
-                // Display first name and last 4 digits of roll number for assigned slots
+                // Display first name and last 4 digits of roll number + Subject for assigned slots
                 val firstName = slot.assignedVolunteerName?.split(" ")?.firstOrNull() ?: "Volunteer"
                 val rollLast4 = slot.assignedVolunteerRollNo?.takeLast(4) ?: ""
+                val subjectAbbr = slot.assignedSubject?.take(3) ?: ""
+                val secondLine = if (subjectAbbr.isNotEmpty() && rollLast4.isNotEmpty()) "$rollLast4 $subjectAbbr" else rollLast4 + subjectAbbr
 
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -618,9 +620,9 @@ fun TableCell(
                         overflow = TextOverflow.Ellipsis
                     )
 
-                    if (rollLast4.isNotEmpty()) {
+                    if (secondLine.isNotEmpty()) {
                         Text(
-                            text = rollLast4,
+                            text = secondLine,
                             style = MaterialTheme.typography.labelSmall, // Even smaller font for roll number
                             color = Color.White.copy(alpha = 0.8f), // Slightly transparent
                             fontWeight = FontWeight.Normal,

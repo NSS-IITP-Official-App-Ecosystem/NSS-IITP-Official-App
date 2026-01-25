@@ -28,7 +28,7 @@ data class OptimizedVolunteerAssignment(
     val subjectPreference1: String = "", // First subject preference
     val subjectPreference2: String = "", // Second subject preference
     val subjectPreference3: String = "", // Third subject preference
-    val subjectCode: String? = null      // Assigned subject code
+    val assignedSubject: String? = null      // Assigned subject code
 )
 
 /**
