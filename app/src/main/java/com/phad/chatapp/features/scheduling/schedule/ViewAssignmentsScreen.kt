@@ -1585,149 +1585,89 @@ private suspend fun loadAssignments(): List<SubjectAssignmentDetails> {
     val result = mutableListOf<SubjectAssignmentDetails>()
     
     try {
-        // Get all documents from the subjectAssignments collection
-        val snapshot = db.collection(FirestoreCollection.SUBJECT_ASSIGNMENTS).get().await()
-        Log.d("ViewAssignmentsScreen", "Found ${snapshot.documents.size} documents in subjectAssignments collection")
+        // Get all documents from the generatedSchedules collection
+        val snapshot = db.collection(FirestoreCollection.GENERATED_SCHEDULES).get().await()
+        Log.d("ViewAssignmentsScreen", "Found ${snapshot.documents.size} documents in generatedSchedules collection")
         
         // Process each document (each represents a schedule)
         for (document in snapshot.documents) {
             val data = document.data ?: continue
             
-            // Parse raw assignment data
-            val scheduleName = data["scheduleName"] as? String ?: document.id
+            // Parse schedule name
+            val scheduleName = data["name"] as? String ?: data["scheduleName"] as? String ?: document.id
             Log.d("ViewAssignmentsScreen", "Processing schedule: $scheduleName with document ID: ${document.id}")
             
-            val assignments = (data["assignments"] as? List<Map<String, Any>>)?.map { assignment ->
+            // Get assignments list
+            // Check for optimizedAssignments first (used by new generator), fallback to assignments
+            val assignmentsList = (data["optimizedAssignments"] as? List<Map<String, Any>>) 
+                ?: (data["assignments"] as? List<Map<String, Any>>)
+            
+            val assignments = assignmentsList?.map { assignment ->
                 AssignmentEntry(
                     dayIndex = (assignment["dayIndex"] as? Number)?.toInt() ?: 0,
                     slotIndex = (assignment["slotIndex"] as? Number)?.toInt() ?: 0,
                     volunteerName = assignment["volunteerName"] as? String ?: "",
                     volunteerRollNo = assignment["volunteerRollNo"] as? String ?: "",
                     volunteerGroup = assignment["volunteerGroup"] as? String ?: "",
-                    subjectCode = assignment["subjectCode"] as? String ?: ""
+                    // Try assignedSubject first, then subjectCode
+                    subjectCode = (assignment["assignedSubject"] as? String) ?: (assignment["subjectCode"] as? String) ?: ""
                 )
             } ?: emptyList()
             
             Log.d("ViewAssignmentsScreen", "Found ${assignments.size} assignments for $scheduleName")
             
-            // Get schedule reference data to map day/slot indices to names
-            val scheduleDoc = db.collection(FirestoreCollection.GENERATED_SCHEDULES)
-                .whereEqualTo("name", scheduleName)
-                .get()
-                .await()
-                .documents
-                .firstOrNull()
+            // Get reference data directly from the document for day/slot names
+            val referenceData = data["referenceData"] as? Map<String, Any>
+            val dayNames = (referenceData?.get("dayNames") as? List<String>) ?: emptyList()
+            val slotNames = (referenceData?.get("timeSlotNames") as? List<String>) ?: emptyList()
             
-            if (scheduleDoc != null) {
-                val referenceData = scheduleDoc.get("referenceData") as? Map<String, Any>
-                val dayNames = (referenceData?.get("dayNames") as? List<String>) ?: emptyList()
-                val slotNames = (referenceData?.get("timeSlotNames") as? List<String>) ?: emptyList()
+            Log.d("ViewAssignmentsScreen", "Schedule data: days=${dayNames.size}, slots=${slotNames.size}")
+            
+            for (assignment in assignments) {
+                 // Skip entries without subject code
+                if (assignment.subjectCode.isBlank()) continue
                 
-                Log.d("ViewAssignmentsScreen", "Schedule data found: days=${dayNames.size}, slots=${slotNames.size}")
+                // Parse schedule name
+                var schoolName = ""
+                var classAndSection = ""
                 
-                // Process each assignment
-                for (assignment in assignments) {
-                    // Skip entries without subject code
-                    if (assignment.subjectCode.isBlank()) continue
-                    
-                    // Extract school name and class+section from schedule name
-                    // Handle different possible formats:
-                    // "AM 10N" -> school="AM", classAndSection="10N"
-                    // "AM-10N" -> school="AM", classAndSection="10N"
-                    // "AM" -> school="AM", classAndSection=""
-                    var schoolName = ""
-                    var classAndSection = ""
-                    
-                    if (scheduleName.contains(" ")) {
-                        // Format with space: "AM 10N"
-                        val parts = scheduleName.split(" ", limit = 2)
-                        schoolName = parts[0].trim()
-                        classAndSection = if (parts.size > 1) parts[1].trim() else ""
-                    } else if (scheduleName.contains("-")) {
-                        // Format with dash: "AM-10N"
-                        val parts = scheduleName.split("-", limit = 2)
-                        schoolName = parts[0].trim()
-                        classAndSection = if (parts.size > 1) parts[1].trim() else ""
-                    } else {
-                        // No separator, assume it's just the school name
-                        schoolName = scheduleName.trim()
-                    }
-                    
-                    Log.d("ViewAssignmentsScreen", "Parsed school=$schoolName, section=$classAndSection from $scheduleName")
-                    
-                    // Get day and slot names
-                    val dayName = if (assignment.dayIndex < dayNames.size) dayNames[assignment.dayIndex] else "Day ${assignment.dayIndex}"
-                    val slotName = if (assignment.slotIndex < slotNames.size) slotNames[assignment.slotIndex] else "Slot ${assignment.slotIndex}"
-                    
-                    // Get full subject name
-                    val subjectName = SubjectConstants.SUBJECT_NAMES[assignment.subjectCode] ?: assignment.subjectCode
-                    
-                    // Create assignment details
-                    val details = SubjectAssignmentDetails(
-                        volunteerName = assignment.volunteerName,
-                        volunteerRollNo = assignment.volunteerRollNo,
-                        volunteerGroup = assignment.volunteerGroup,
-                        subjectCode = assignment.subjectCode,
-                        subjectName = subjectName,
-                        dayName = dayName,
-                        slotName = slotName,
-                        schoolName = schoolName,
-                        classAndSection = classAndSection
-                    )
-                    
-                    result.add(details)
-                    Log.d("ViewAssignmentsScreen", "Added assignment: ${details.volunteerName}, ${details.subjectName}, ${details.dayName}, ${details.schoolName} ${details.classAndSection}")
+                if (scheduleName.contains(" ")) {
+                    val parts = scheduleName.split(" ", limit = 2)
+                    schoolName = parts[0].trim()
+                    classAndSection = if (parts.size > 1) parts[1].trim() else ""
+                } else if (scheduleName.contains("-")) {
+                    val parts = scheduleName.split("-", limit = 2)
+                    schoolName = parts[0].trim()
+                    classAndSection = if (parts.size > 1) parts[1].trim() else ""
+                } else {
+                    schoolName = scheduleName.trim()
                 }
-            } else {
-                Log.w("ViewAssignmentsScreen", "Could not find schedule document for $scheduleName")
                 
-                // Even if we can't find the schedule document, try to create assignments with default values
-                for (assignment in assignments) {
-                    // Skip entries without subject code
-                    if (assignment.subjectCode.isBlank()) continue
-                    
-                    // Parse schedule name same as above
-                    var schoolName = ""
-                    var classAndSection = ""
-                    
-                    if (scheduleName.contains(" ")) {
-                        val parts = scheduleName.split(" ", limit = 2)
-                        schoolName = parts[0].trim()
-                        classAndSection = if (parts.size > 1) parts[1].trim() else ""
-                    } else if (scheduleName.contains("-")) {
-                        val parts = scheduleName.split("-", limit = 2)
-                        schoolName = parts[0].trim()
-                        classAndSection = if (parts.size > 1) parts[1].trim() else ""
-                    } else {
-                        schoolName = scheduleName.trim()
-                    }
-                    
-                    // Use default day/slot names based on indices
-                    val dayName = "Day ${assignment.dayIndex + 1}"
-                    val slotName = "Slot ${assignment.slotIndex + 1}"
-                    
-                    val subjectName = SubjectConstants.SUBJECT_NAMES[assignment.subjectCode] ?: assignment.subjectCode
-                    
-                    val details = SubjectAssignmentDetails(
-                        volunteerName = assignment.volunteerName,
-                        volunteerRollNo = assignment.volunteerRollNo,
-                        volunteerGroup = assignment.volunteerGroup,
-                        subjectCode = assignment.subjectCode,
-                        subjectName = subjectName,
-                        dayName = dayName,
-                        slotName = slotName,
-                        schoolName = schoolName,
-                        classAndSection = classAndSection
-                    )
-                    
-                    result.add(details)
-                    Log.d("ViewAssignmentsScreen", "Added assignment with default values: ${details.volunteerName}, ${details.subjectName}, ${details.dayName}, ${details.schoolName} ${details.classAndSection}")
-                }
+                // Get day and slot names with defaults if list is too short or empty
+                val dayName = if (assignment.dayIndex < dayNames.size) dayNames[assignment.dayIndex] else "Day ${assignment.dayIndex + 1}"
+                val slotName = if (assignment.slotIndex < slotNames.size) slotNames[assignment.slotIndex] else "Slot ${assignment.slotIndex + 1}"
+                
+                val subjectName = SubjectConstants.SUBJECT_NAMES[assignment.subjectCode] ?: assignment.subjectCode
+                
+                val details = SubjectAssignmentDetails(
+                    volunteerName = assignment.volunteerName,
+                    volunteerRollNo = assignment.volunteerRollNo,
+                    volunteerGroup = assignment.volunteerGroup,
+                    subjectCode = assignment.subjectCode,
+                    subjectName = subjectName,
+                    dayName = dayName,
+                    slotName = slotName,
+                    schoolName = schoolName,
+                    classAndSection = classAndSection
+                )
+                
+                result.add(details)
             }
         }
         
         Log.d("ViewAssignmentsScreen", "Total assignments loaded: ${result.size}")
-        // Define standard day order for sortinggit a
+        
+        // Define standard day order for sorting
         val standardDayOrder = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
         
         return result.sortedWith(compareBy<SubjectAssignmentDetails> { assignment -> 

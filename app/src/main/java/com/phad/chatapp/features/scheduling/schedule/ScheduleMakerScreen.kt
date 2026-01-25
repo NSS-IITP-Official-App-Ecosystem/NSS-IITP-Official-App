@@ -27,6 +27,7 @@ import androidx.navigation.NavController
 import com.phad.chatapp.features.scheduling.ui.theme.*
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.ViewList
@@ -103,6 +104,13 @@ fun ScheduleMakerScreen(navController: NavController) {
                         title = "Manage Volunteers",
                         description = "Select volunteers for teaching sessions",
                         onClick = { navController.navigate("volunteerPresets") }
+                    )
+
+                    StaggeredMenuButton(
+                        icon = Icons.Filled.Person, // Using Person icon for students
+                        title = "Manage Students",
+                        description = "View students and update scores",
+                        onClick = { navController.navigate("manageStudents") }
                     )
 
                     StaggeredMenuButton(

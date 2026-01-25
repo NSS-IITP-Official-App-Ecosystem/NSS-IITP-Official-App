@@ -25,7 +25,7 @@ android {
         applicationId = "com.phad.chatapp"
         minSdk = 26
         targetSdk = 35
-        versionCode = 39
+        versionCode = 45
         versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

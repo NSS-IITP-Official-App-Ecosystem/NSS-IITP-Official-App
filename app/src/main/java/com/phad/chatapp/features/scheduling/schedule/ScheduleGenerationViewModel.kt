@@ -1881,9 +1881,7 @@ class ScheduleGenerationViewModel : ViewModel() {
                     "dayIndex" to assignment.dayIndex,
                     "slotIndex" to assignment.slotIndex,
                     "interviewScore" to assignment.interviewScore,
-                    "subjectPreference1" to assignment.subjectPreference1,
-                    "subjectPreference2" to assignment.subjectPreference2,
-                    "subjectPreference3" to assignment.subjectPreference3
+                    "assignedSubject" to assignment.assignedSubject
                 )
             }
         )

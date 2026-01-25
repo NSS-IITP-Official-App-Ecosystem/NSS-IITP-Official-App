@@ -114,6 +114,7 @@ fun ProfileScreen(
     // New admin-only export button
     onExportAttendanceClick: () -> Unit = {},
     onEventHistoryClick: () -> Unit = {},
+    onManageStudentsClick: () -> Unit = {},
     onChangeSubjectsClick: () -> Unit = {},
     onSwitchInterfaceClick: () -> Unit,
     onSem1HoursClick: () -> Unit,
@@ -262,6 +263,7 @@ fun ProfileScreen(
                                 onRefresh = onRefreshClick,
                                 onExportAttendance = onExportAttendanceClick,
                                 onEventHistory = onEventHistoryClick,
+                                onManageStudents = onManageStudentsClick,
                                 onChangeSubjects = onChangeSubjectsClick,
                                 onFaqs = onFaqsClick,
                                 onLogout = { showLogoutDialog = true },
@@ -808,6 +810,7 @@ fun ProfileMenu(
     onRefresh: () -> Unit,
     onExportAttendance: () -> Unit,
     onEventHistory: () -> Unit,
+    onManageStudents: () -> Unit,
     onChangeSubjects: () -> Unit,
     onFaqs: () -> Unit,
     onLogout: () -> Unit,
@@ -853,6 +856,24 @@ fun ProfileMenu(
                 leadingIcon = {
                     Icon(
                         painter = painterResource(id = R.drawable.ic_calendar),
+                        contentDescription = null,
+                        tint = Color(0xFF444343)
+                    )
+                }
+            )
+        }
+
+        // Manage Students - only for Teaching Wing interface
+        if (isAdmin && currentInterface == "Teaching Wing") {
+            DropdownMenuItem(
+                text = { Text("Manage Students", color = Color(0xFF444343)) },
+                onClick = {
+                    onManageStudents()
+                    onDismiss()
+                },
+                leadingIcon = {
+                     Icon(
+                        imageVector = Icons.Default.Person,
                         contentDescription = null,
                         tint = Color(0xFF444343)
                     )

@@ -102,6 +102,9 @@ fun AppNavigation(
             val presetId = backStackEntry.arguments?.getString("presetId") ?: ""
             ManageVolunteersScreen(navController = navController, presetId = presetId)
         }
+        composable("manageStudents") {
+            com.phad.chatapp.features.scheduling.schedule.AdminStudentListScreen(navController = navController)
+        }
         composable("setAvailability") {
             SetAvailabilityScreen(navController = navController)
         }

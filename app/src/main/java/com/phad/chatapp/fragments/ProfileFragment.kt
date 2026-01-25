@@ -105,6 +105,12 @@ class ProfileFragment : Fragment() {
                         val intent = Intent(requireContext(), com.phad.chatapp.features.home.faqs.ui.FaqActivity::class.java)
                         startActivity(intent)
                     },
+                    onManageStudentsClick = {
+                        val bundle = android.os.Bundle().apply {
+                            putString("startDestination", "manageStudents")
+                        }
+                        findNavController().navigate(R.id.schedulingFragment, bundle)
+                    },
                     onChangeSubjectsClick = {
                         // Navigate to scheduling fragment with arguments
                         val bundle = android.os.Bundle().apply {

@@ -62,7 +62,7 @@ data class GridCell(
     val volunteerName: String,
     val volunteerRollNo: String,
     val volunteerGroup: String,
-    val subjectCode: String? = null,
+    val assignedSubject: String? = null,
     val isHighlighted: Boolean = false,
     val scheduleId: String = "", // Track which schedule this cell belongs to
     val scheduleName: String = "", // Track schedule name for display
@@ -224,8 +224,8 @@ fun SubjectAssignmentGridScreen(
                 val assignmentsForSchedule = mutableMapOf<Pair<Int, Int>, String>()
                 
                 schedule.volunteerAssignments.forEach { assignment ->
-                    if (assignment.subjectCode != null) {
-                        assignmentsForSchedule[assignment.dayIndex to assignment.slotIndex] = assignment.subjectCode
+                    if (assignment.assignedSubject != null) {
+                        assignmentsForSchedule[assignment.dayIndex to assignment.slotIndex] = assignment.assignedSubject
                     }
                 }
                 
@@ -391,7 +391,7 @@ fun SubjectAssignmentGridScreen(
                                                         cell.volunteerName == currentTopTalent.volunteerName &&
                                                         cell.volunteerRollNo == currentTopTalent.volunteerRollNo
 
-                                        if (cell.subjectCode == null || isTopTalent) {
+                                        if (cell.assignedSubject == null || isTopTalent) {
                                             // Store the current top talent before selection (already captured above)
                                             
                                             // Check if this is the top talent cell
@@ -734,7 +734,7 @@ fun ScheduleGridCard(
                     val effectiveCell = if (inMemorySubject != null) {
                         // Create a new cell with the in-memory subject assignment
                         Log.d("ScheduleGridCard", "Cell has in-memory subject: $inMemorySubject")
-                        cell.copy(subjectCode = inMemorySubject)
+                        cell.copy(assignedSubject = inMemorySubject)
                     } else {
                         cell
                     }
@@ -746,11 +746,11 @@ fun ScheduleGridCard(
                                     effectiveCell.volunteerRollNo == currentTopTalent.volunteerRollNo
 
                     // Allow long press if the effective cell has no subject OR if it's the top talent
-                    if (effectiveCell.subjectCode == null || isTopTalent) {
+                    if (effectiveCell.assignedSubject == null || isTopTalent) {
                         Log.d("ScheduleGridCard", "Long press allowed on ${effectiveCell.volunteerName} (isTopTalent: $isTopTalent)")
                         onCellLongPress(effectiveCell)
                     } else {
-                        Log.d("ScheduleGridCard", "Long press denied - subject assigned: ${effectiveCell.subjectCode}")
+                        Log.d("ScheduleGridCard", "Long press denied - subject assigned: ${effectiveCell.assignedSubject}")
                     }
                 },
                 onCellClick = { cell ->
@@ -761,7 +761,7 @@ fun ScheduleGridCard(
                     val effectiveCell = if (inMemorySubject != null) {
                         // Create a new cell with the in-memory subject assignment
                         Log.d("ScheduleGridCard", "Cell has in-memory subject: $inMemorySubject")
-                        cell.copy(subjectCode = inMemorySubject)
+                        cell.copy(assignedSubject = inMemorySubject)
                     } else {
                         cell
                     }
@@ -813,7 +813,7 @@ fun ScheduleTable(
         val swappedCell = localVolunteerSwaps[key]
         
         // Use in-memory subject assignments if available, otherwise use the one from the original data
-        val cellSubjectCode = subjectAssignments[key] ?: assignment.subjectCode
+        val cellSubjectCode = subjectAssignments[key] ?: assignment.assignedSubject
         
         // Log subject assignment for debugging
         Log.d("SubjectAssignmentGrid", "Creating cell at ($key) for ${if (swappedCell != null) swappedCell.volunteerName else assignment.volunteerName}, Subject: $cellSubjectCode")
@@ -829,7 +829,7 @@ fun ScheduleTable(
                 volunteerName = swappedCell.volunteerName,
                 volunteerRollNo = swappedCell.volunteerRollNo,
                 volunteerGroup = swappedCell.volunteerGroup,
-                subjectCode = cellSubjectCode,
+                assignedSubject = cellSubjectCode,
                 isHighlighted = isHighlightedForSwap,
                 scheduleId = "", // Will be set when we have access to schedule ID
                 scheduleName = scheduleName,
@@ -847,7 +847,7 @@ fun ScheduleTable(
                 volunteerName = assignment.volunteerName,
                 volunteerRollNo = assignment.volunteerRollNo,
                 volunteerGroup = assignment.volunteerGroup,
-                subjectCode = cellSubjectCode,
+                assignedSubject = cellSubjectCode,
                 isHighlighted = isHighlightedForSwap,
                 scheduleId = "", // Will be set when we have access to schedule ID
                 scheduleName = scheduleName,
@@ -994,6 +994,7 @@ fun ScheduleTable(
                                                         volunteerName = "",
                                                         volunteerRollNo = "",
                                                         volunteerGroup = "",
+                                                        assignedSubject = null, // Added assignedSubject
                                                         scheduleId = "",
                                                         scheduleName = scheduleName,
                                                         interviewScore = 0,
@@ -1031,7 +1032,7 @@ fun VolunteerCell(
         }
     }
 
-    val hasSubject = cell.subjectCode != null
+    val hasSubject = cell.assignedSubject != null
 
     val containerColor = when {
         isTopTalent -> Color(0xFF4CAF50)
@@ -1093,7 +1094,7 @@ fun VolunteerCell(
             if (hasSubject) {
                 // If subject is assigned, show roll + subject code in brackets
                 Text(
-                    text = "$last4Digits (${cell.subjectCode})",
+                    text = "$last4Digits (${cell.assignedSubject})",
                     color = subTextColor,
                     style = MaterialTheme.typography.labelSmall,
                     textAlign = TextAlign.Center
@@ -1212,7 +1213,7 @@ private fun parseScheduleDocument(data: Map<String, Any>): Triple<ScheduleRefere
                 subjectPreference1 = assignment["subjectPreference1"] as? String ?: "",
                 subjectPreference2 = assignment["subjectPreference2"] as? String ?: "",
                 subjectPreference3 = assignment["subjectPreference3"] as? String ?: "",
-                subjectCode = assignment["subjectCode"] as? String
+                assignedSubject = assignment["assignedSubject"] as? String
             )
         })
     } else {
@@ -1237,7 +1238,7 @@ private fun parseScheduleDocument(data: Map<String, Any>): Triple<ScheduleRefere
                         subjectPreference1 = assignment["subjectPreference1"] as? String ?: "",
                         subjectPreference2 = assignment["subjectPreference2"] as? String ?: "",
                         subjectPreference3 = assignment["subjectPreference3"] as? String ?: "",
-                        subjectCode = assignment["subjectCode"] as? String
+                        assignedSubject = assignment["assignedSubject"] as? String
                     )
                 )
             }
@@ -1269,7 +1270,7 @@ private fun parseSubjectPresetDocument(data: Map<String, Any>): SubjectPreset {
 
 private fun getSubjectForCell(assignment: OptimizedVolunteerAssignment, subjectPreset: SubjectPreset): String? {
     // Return the assigned subject code if it exists in the assignment
-    return assignment.subjectCode
+    return assignment.assignedSubject
 }
 
 // Helper function to find valid swap cells across all schedules
@@ -1286,8 +1287,8 @@ private fun findValidSwapCellsAcrossSchedules(
     } ?: return validCells
 
     // Immediate check for subject on selected cell
-    if (selectedCell.subjectCode != null) {
-        Log.d("SubjectAssignmentGrid", "Selected cell has subject assigned, can't swap: ${selectedCell.subjectCode}")
+    if (selectedCell.assignedSubject != null) {
+        Log.d("SubjectAssignmentGrid", "Selected cell has subject assigned, can't swap: ${selectedCell.assignedSubject}")
         return validCells
     }
 
@@ -1317,10 +1318,10 @@ private fun findValidSwapCellsAcrossSchedules(
             val inMemorySubjectCode = inMemoryAssignments?.get(cellKey)
             
             // Consider a cell to have a subject if either the database or in-memory assignment has it
-            val hasSubjectAssigned = assignment.subjectCode != null || inMemorySubjectCode != null
+            val hasSubjectAssigned = assignment.assignedSubject != null || inMemorySubjectCode != null
             
             if (hasSubjectAssigned) {
-                Log.d("SubjectAssignmentGrid", "Cell at $cellKey has subject: ${assignment.subjectCode ?: inMemorySubjectCode}, skipping")
+                Log.d("SubjectAssignmentGrid", "Cell at $cellKey has subject: ${assignment.assignedSubject ?: inMemorySubjectCode}, skipping")
                 return@forEach  // Skip this cell entirely if it has a subject assigned
             }
             
@@ -1398,7 +1399,7 @@ private suspend fun performLocalVolunteerSwap(
         Log.d("SubjectAssignmentGrid", "Performing local swap between ${selectedCell.scheduleName}(${selectedCell.dayIndex},${selectedCell.slotIndex}) and ${targetCell.scheduleName}(${targetCell.dayIndex},${targetCell.slotIndex})")
 
         // Do an immediate check for subjects before proceeding
-        if (selectedCell.subjectCode != null || targetCell.subjectCode != null) {
+        if (selectedCell.assignedSubject != null || targetCell.assignedSubject != null) {
             Log.e("SubjectAssignmentGrid", "Cannot swap cells with assigned subjects (early check)")
             return false
         }
@@ -1443,7 +1444,7 @@ private suspend fun performLocalVolunteerSwap(
                 volunteerName = originalVolunteer.volunteerName,
                 volunteerRollNo = originalVolunteer.volunteerRollNo,
                 volunteerGroup = originalVolunteer.volunteerGroup,
-                subjectCode = null,
+                assignedSubject = null,
                 scheduleId = "",
                 scheduleName = selectedCell.scheduleName,
                 interviewScore = originalVolunteer.interviewScore,
@@ -1476,7 +1477,7 @@ private suspend fun performLocalVolunteerSwap(
                 volunteerName = originalVolunteer.volunteerName,
                 volunteerRollNo = originalVolunteer.volunteerRollNo,
                 volunteerGroup = originalVolunteer.volunteerGroup,
-                subjectCode = null,
+                assignedSubject = null,
                 scheduleId = "",
                 scheduleName = targetCell.scheduleName,
                 interviewScore = originalVolunteer.interviewScore,
@@ -1556,13 +1557,13 @@ private suspend fun saveSubjectAssignments(
                         subjectPreference1 = swappedVolunteer.subjectPreference1,
                         subjectPreference2 = swappedVolunteer.subjectPreference2,
                         subjectPreference3 = swappedVolunteer.subjectPreference3,
-                        subjectCode = subjectCode
+                        assignedSubject = subjectCode
                     )
                 } else {
                     // Use original volunteer
                     schedule.volunteerAssignments.find { 
                         it.dayIndex == dayIndex && it.slotIndex == slotIndex 
-                    }?.copy(subjectCode = subjectCode) ?: continue
+                    }?.copy(assignedSubject = subjectCode) ?: continue
                 }
                 
                 assignmentsList.add(
@@ -1572,7 +1573,7 @@ private suspend fun saveSubjectAssignments(
                         "volunteerName" to volunteerAssignment.volunteerName,
                         "volunteerRollNo" to volunteerAssignment.volunteerRollNo,
                         "volunteerGroup" to volunteerAssignment.volunteerGroup,
-                        "subjectCode" to subjectCode
+                        "assignedSubject" to subjectCode
                     )
                 )
             }
@@ -1590,7 +1591,7 @@ private suspend fun saveSubjectAssignments(
                         "volunteerName" to swappedVolunteer.volunteerName,
                         "volunteerRollNo" to swappedVolunteer.volunteerRollNo,
                         "volunteerGroup" to swappedVolunteer.volunteerGroup,
-                        "subjectCode" to ""  // Changed from null to empty string
+                        "assignedSubject" to ""  // Changed from null to empty string
                     )
                 )
             }
@@ -1636,7 +1637,7 @@ fun VolunteerDetailsDialog(
             volunteerName = assignment.volunteerName,
             volunteerRollNo = assignment.volunteerRollNo,
             volunteerGroup = assignment.volunteerGroup,
-            subjectCode = assignment.subjectCode,
+            assignedSubject = assignment.assignedSubject,
             isHighlighted = cell.isHighlighted,
             scheduleId = cell.scheduleId,
             scheduleName = cell.scheduleName,
@@ -1768,7 +1769,7 @@ fun VolunteerDetailsDialog(
                     }
 
                     // Subject assignment (if any)
-                    currentCell.subjectCode?.let { subject ->
+                    currentCell.assignedSubject?.let { subject ->
                         Spacer(modifier = Modifier.height(8.dp))
                         DetailRow("Assigned Subject", subject)
                     }
@@ -1835,7 +1836,7 @@ private fun findCurrentCellData(cell: GridCell, scheduleData: List<ScheduleGridD
         volunteerName = assignment.volunteerName,
         volunteerRollNo = assignment.volunteerRollNo,
         volunteerGroup = assignment.volunteerGroup,
-        subjectCode = assignment.subjectCode,
+        assignedSubject = assignment.assignedSubject,
         isHighlighted = cell.isHighlighted,
         scheduleId = cell.scheduleId,
         scheduleName = cell.scheduleName,
@@ -1871,7 +1872,7 @@ private fun findTopTalentWithoutSubject(
             
             // Check for subject assignment in both the original data and the in-memory assignments
             val hasSubjectInMemory = subjectAssignments[scheduleName]?.get(cellKey) != null
-            val originalSubject = assignment.subjectCode
+            val originalSubject = assignment.assignedSubject
             
             if (swappedCell != null) {
                 // Use the swapped volunteer data
@@ -1896,7 +1897,7 @@ private fun findTopTalentWithoutSubject(
                         volunteerName = assignment.volunteerName,
                         volunteerRollNo = assignment.volunteerRollNo,
                         volunteerGroup = assignment.volunteerGroup,
-                        subjectCode = null, // Explicitly set to null since we're checking for unassigned volunteers
+                        assignedSubject = null, // Explicitly set to null since we're checking for unassigned volunteers
                         isHighlighted = false,
                         scheduleId = "",
                         scheduleName = scheduleName,
@@ -1991,7 +1992,7 @@ fun SubjectAssignmentDialog(
                 subjectPreference1 = assignment.subjectPreference1,
                 subjectPreference2 = assignment.subjectPreference2,
                 subjectPreference3 = assignment.subjectPreference3,
-                subjectCode = cell.subjectCode // Keep subject code from original cell passed in
+                assignedSubject = cell.assignedSubject // Keep subject code from original cell passed in
             )
         } ?: cell
     }
@@ -2058,7 +2059,7 @@ fun SubjectAssignmentDialog(
                             )
                         }
                         Spacer(modifier = Modifier.height(8.dp))
-                        if (currentCell.subjectCode != null) {
+                        if (currentCell.assignedSubject != null) {
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(16.dp))
@@ -2066,8 +2067,8 @@ fun SubjectAssignmentDialog(
                                     .padding(horizontal = 16.dp, vertical = 4.dp)
                             ) {
                                 Text(
-                                    text = SubjectConstants.SUBJECT_NAMES[currentCell.subjectCode]
-                                        ?: currentCell.subjectCode!!,
+                                    text = SubjectConstants.SUBJECT_NAMES[currentCell.assignedSubject]
+                                        ?: currentCell.assignedSubject!!,
                                     color = Color.Black,
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Bold
@@ -2129,8 +2130,8 @@ fun SubjectAssignmentDialog(
                         ).filter { it.isNotEmpty() }
                         preferences.forEachIndexed { index, pref ->
                             // Highlight if this is the assigned subject or if it matches the subject preference
-                            val isPrimary = pref == currentCell.subjectCode || 
-                                (currentCell.subjectCode != null && pref == currentCell.subjectCode)
+                            val isPrimary = pref == currentCell.assignedSubject || 
+                                (currentCell.assignedSubject != null && pref == currentCell.assignedSubject)
                             InfoPill(text = pref, isPrimary = isPrimary) // Removed index numbers
                         }
                     }
@@ -2202,7 +2203,7 @@ fun SubjectAssignmentDialog(
                             ) {
                                 rowSubjects.forEach { (subjectCode, _) ->
                                     val remainingCount = remainingSubjectCounts[subjectCode] ?: 0
-                                    val isCurrentlyAssigned = currentCell.subjectCode == subjectCode
+                                    val isCurrentlyAssigned = currentCell.assignedSubject == subjectCode
                                     val isAvailable = remainingCount > 0 || isCurrentlyAssigned
 
                                     Card(
@@ -2273,7 +2274,7 @@ fun SubjectAssignmentDialog(
                     ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(if (currentCell.subjectCode != null) "Close" else "Cancel")
+                    Text(if (currentCell.assignedSubject != null) "Close" else "Cancel")
                 }
             }
         }
@@ -2415,7 +2416,7 @@ fun SubjectInfoDialog(
                     ) {
                         items(sortedSubjects) { (subjectCode, remainingCount) ->
                             SubjectInfoItem(
-                                subjectCode = subjectCode,
+                                assignedSubject = subjectCode,
                                 subjectName = SubjectConstants.SUBJECT_NAMES[subjectCode] ?: subjectCode,
                                 remainingCount = remainingCount
                             )
@@ -2432,7 +2433,7 @@ fun SubjectInfoDialog(
  */
 @Composable
 fun SubjectInfoItem(
-    subjectCode: String,
+    assignedSubject: String,
     subjectName: String,
     remainingCount: Int
 ) {
@@ -2456,7 +2457,7 @@ fun SubjectInfoItem(
                     fontWeight = FontWeight.Medium
                 )
                 Text(
-                    text = subjectCode,
+                    text = assignedSubject,
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFFB0B0B0)
                 )
