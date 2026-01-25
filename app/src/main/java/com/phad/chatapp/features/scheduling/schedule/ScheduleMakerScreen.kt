@@ -112,12 +112,7 @@ fun ScheduleMakerScreen(navController: NavController) {
                         onClick = { navController.navigate("scheduleGeneration") }
                     )
 
-                    StaggeredMenuButton(
-                        icon = Icons.Default.School,
-                        title = "Assign Subject",
-                        description = "Assign subjects to sessions",
-                        onClick = { navController.navigate("subjectAssignment") }
-                    )
+
 
                     // View Assignments button
                     OutlinedButton(
