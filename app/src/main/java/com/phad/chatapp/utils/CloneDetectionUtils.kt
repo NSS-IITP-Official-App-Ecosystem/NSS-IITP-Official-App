@@ -58,15 +58,23 @@ object CloneDetectionUtils {
                 return signatureCheck
             }
             
-            // Method 1: Check installer package
+            // Method 1: Installer Package Verification
             val installerCheck = checkInstallerPackage(context)
             if (installerCheck.isCloned) {
                 Log.w(TAG, "Clone detected via installer: ${installerCheck.reason}")
                 logCloneDetectionEvent(context, installerCheck)
                 return installerCheck
             }
+
+            // Method 2: File Token Consistency Check (New)
+            val tokenCheck = checkFileTokenConsistency(context)
+            if (tokenCheck.isCloned) {
+                 Log.w(TAG, "Clone detected via token consistency: ${tokenCheck.reason}")
+                 logCloneDetectionEvent(context, tokenCheck)
+                 return tokenCheck
+            }
             
-            // Method 2: Native Library Detection
+            // Method 3: Native Library Detection
             val nativeLibCheck = checkNativeLibraries(context)
             if (nativeLibCheck.isCloned) {
                 Log.w(TAG, "Clone detected via native libraries: ${nativeLibCheck.reason}")
@@ -98,28 +106,61 @@ object CloneDetectionUtils {
                 return hardwareCheck
             }
             
-            // Method 6: Check package name for known clone app patterns
+            // Method 6: Check for installed cloner apps on device
+            // Some sophisticated cloners preserve signature but are detectable by their presence
+            val clonerAppsCheck = checkForInstalledClonerApps(context)
+            if (clonerAppsCheck.isCloned) {
+                Log.w(TAG, "Clone detected via installed cloner apps: ${clonerAppsCheck.reason}")
+                logCloneDetectionEvent(context, clonerAppsCheck)
+                return clonerAppsCheck
+            }
+
+            // Method 7: Check Memory Maps for suspicious hooking libraries
+            // This detects the actual engine (Xposed, Frida, etc.) even if package name is spoofed
+            val memoryMapCheck = checkMemoryMaps()
+            if (memoryMapCheck.isCloned) {
+                // Allow official emulators (Android Studio) to bypass this specific check
+                // This prevents development/testing blocks while keeping the check active for real devices
+                if (isOfficialEmulator()) {
+                     Log.i(TAG, "Official emulator detected: Ignoring memory map check failure (Result: ${memoryMapCheck.reason})")
+                } else {
+                    Log.w(TAG, "Clone detected via memory maps: ${memoryMapCheck.reason}")
+                    logCloneDetectionEvent(context, memoryMapCheck)
+                    return memoryMapCheck
+                }
+            }
+
+            // Method 8: Check Shared User ID
+            val uidCheck = checkSharedUid(context)
+            if (uidCheck.isCloned) {
+                 Log.w(TAG, "Clone detected via Shared UID: ${uidCheck.reason}")
+                 logCloneDetectionEvent(context, uidCheck)
+                 return uidCheck
+            }
+
+            
+            // Method 9: Check package name for known clone app patterns
             val packageNameCheck = checkPackageNamePatterns(context)
             if (packageNameCheck.isCloned) {
                 Log.w(TAG, "Clone detected via package name: ${packageNameCheck.reason}")
                 return packageNameCheck
             }
             
-            // Method 7: Check installation directory path
+            // Method 10: Check installation directory path
             val pathCheck = checkInstallationPath(context)
             if (pathCheck.isCloned) {
                 Log.w(TAG, "Clone detected via installation path: ${pathCheck.reason}")
                 return pathCheck
             }
             
-            // Method 8: Check if running in multiple user profile
+            // Method 11: Check if running in multiple user profile
             val multiUserCheck = checkMultipleUserProfile(context)
             if (multiUserCheck.isCloned) {
                 Log.w(TAG, "Clone detected via multi-user: ${multiUserCheck.reason}")
                 return multiUserCheck
             }
             
-            // Method 9: Check application flags and system app status
+            // Method 12: Check application flags and system app status
             val appFlagsCheck = checkApplicationFlags(context)
             if (appFlagsCheck.isCloned) {
                 Log.w(TAG, "Clone detected via app flags: ${appFlagsCheck.reason}")
@@ -606,13 +647,16 @@ object CloneDetectionUtils {
             // Debug certificate (from your keytool output)
             val debugCertificateHash = "fd632490dc4e7a426a401d61b14da2f0b72949a09bd344a03b5f793665c716ed"
             
-            // TODO: Add your RELEASE certificate hash here when you build for production
-            // Get it using: keytool -list -v -keystore your-release.keystore -alias your-alias
-            val releaseCertificateHash = "f17cb7278858d5109a26037b2bb47cd6d5b9e3d7e031b22aa97b03d4ee34d5aa"
+            // Internal release certificate (detected from actual build via logcat)
+            val internalReleaseCertificateHash = "cdbada0a0f7cdac8fddbc8ac2995020f8a29f1078c3e7357c4c20c6f61312c0a"
+            
+            // Play Store release certificate (from keytool if different from internal)
+            val playStoreReleaseCertificateHash = "f17cb7278858d5109a26037b2bb47cd6d5b9e3d7e031b22aa97b03d4ee34d5aa"
             
             val validHashes = listOf(
                 debugCertificateHash.lowercase(),
-                releaseCertificateHash.lowercase()
+                internalReleaseCertificateHash.lowercase(),
+                playStoreReleaseCertificateHash.lowercase()
             )
             
             if (signatureHash != null) {
@@ -669,7 +713,7 @@ object CloneDetectionUtils {
     
     /**
      * Method 1: Installer Package Verification
-     * Check if app was installed from Google Play Store or legitimate source
+     * Strict Whitelist: Only allow Play Store, System, or ADB (null)
      */
     private fun checkInstallerPackage(context: Context): CloneDetectionResult {
         try {
@@ -682,43 +726,102 @@ object CloneDetectionUtils {
             
             Log.d(TAG, "Installer package: ${installerPackage ?: "null (sideloaded)"}")
             
-            // Legitimate sources
-            val legitimateInstallers = listOf(
-                "com.android.vending",        // Google Play Store
-                "com.google.android.feedback", // Google internal testing
-                "com.android.packageinstaller", // System installer (for updates)
-                null                           // Allow null during development/sideload
+            // Strictly Allowed Installers
+            val allowedInstallers = listOf(
+                "com.android.vending",          // Google Play Store
+                "com.google.android.feedback",   // Google internal
+                "com.android.packageinstaller",  // System Package Installer
+                "com.google.android.packageinstaller", // Google Package Installer
+                "com.miui.packageinstaller",     // Xiaomi System Installer (optional, but safe)
+                "com.samsung.android.packageinstaller" // Samsung System Inataller
             )
             
-            // Check for suspicious installers (clone apps install cloned apps)
-            val suspiciousInstallers = listOf(
-                "parallel", "clone", "dual", "virtual", "space", "multi", "sandbox",
-                "2accounts", "island", "shelter"
-            )
-            
-            installerPackage?.let { installer ->
-                for (pattern in suspiciousInstallers) {
-                    if (installer.contains(pattern, ignoreCase = true)) {
-                        return CloneDetectionResult(
-                            isCloned = true,
-                            reason = "App installed via clone app: $installer",
-                            detectionMethod = "Installer Package"
-                        )
-                    }
-                }
+            // If installer is NOT null and NOT in whitelist -> BLOCK IT
+            if (installerPackage != null && !allowedInstallers.contains(installerPackage)) {
+                return CloneDetectionResult(
+                    isCloned = true,
+                    reason = "Unauthorized installer detected: $installerPackage. Expected Play Store or System.",
+                    detectionMethod = "Installer Package Verification"
+                )
             }
             
-            // In production, you may want to block null installers (sideloaded)
-            // For now, we just log it
-            if (installerPackage == null) {
-                Log.w(TAG, "App was sideloaded (no installer package) - allowing for development")
-            }
+            // Allow null (ADB/Standard Sideload)
+            // But if it was installed by a known cloner (even if not in blacklist before), it's caught above.
             
         } catch (e: Exception) {
             Log.w(TAG, "Error checking installer package", e)
         }
         
         return CloneDetectionResult(isCloned = false, reason = "Installer check passed")
+    }
+
+    /**
+     * Method 2: File Token Consistency
+     * Checks if Internal Storage and External Storage are consistent.
+     * Cloners often sandbox Internal Storage (filesDir) but share External Storage.
+     */
+    private fun checkFileTokenConsistency(context: Context): CloneDetectionResult {
+        try {
+            val tokenFileName = ".nss_auth_token"
+            
+            // 1. Internal Storage Token
+            val internalFile = File(context.filesDir, tokenFileName)
+            var internalToken: String? = null
+            if (internalFile.exists()) {
+                internalToken = internalFile.readText().trim()
+            }
+
+            // 2. External Service Token (if available)
+            // We use getExternalFilesDir because it's app-private but on external storage
+            // Cloners often remap this or share it differently than internal
+            val externalDir = context.getExternalFilesDir(null)
+            if (externalDir != null) {
+                val externalFile = File(externalDir, tokenFileName)
+                var externalToken: String? = null
+                if (externalFile.exists()) {
+                    externalToken = externalFile.readText().trim()
+                }
+
+                Log.d(TAG, "Token Check: Internal=$internalToken, External=$externalToken")
+
+                // CASE A: Mismatch (One exists, other doesn't OR values differ)
+                // If legit app, we write to both at same time. They should sync.
+                if (internalToken != null && externalToken != null && internalToken != externalToken) {
+                     return CloneDetectionResult(
+                        isCloned = true,
+                        reason = "Storage inconsistency detected (Tokens mismatch)",
+                        detectionMethod = "File Token Check"
+                    )
+                }
+                
+                // CASE B: External exists but Internal is empty
+                // This is the "Dead Giveaway" for cloners that share SD card but sandbox internal data
+                // The REAL app wrote the token to SD card previously. The CLONE (sandbox) sees empty internal.
+                // But the CLONE sees the SHARED SD card file.
+                if (internalToken == null && externalToken != null) {
+                     return CloneDetectionResult(
+                        isCloned = true,
+                        reason = "Storage inconsistency detected (External token exists without Internal)",
+                        detectionMethod = "File Token Check"
+                    )
+                }
+
+                // Setup for next time: If both missing, or just internal exists (maybe cleared data?), ensure sync
+                if (internalToken == null && externalToken == null) {
+                    val newToken = java.util.UUID.randomUUID().toString()
+                    internalFile.writeText(newToken)
+                    externalFile.writeText(newToken)
+                    Log.d(TAG, "Generated new consistency tokens")
+                } else if (internalToken != null && externalToken == null) {
+                    // Internal exists, Exernal missing (maybe user deleted folder). Re-sync.
+                    externalFile.writeText(internalToken)
+                }
+            }
+
+        } catch (e: Exception) {
+            Log.w(TAG, "Error checking file tokens", e)
+        }
+        return CloneDetectionResult(isCloned = false, reason = "Token check passed")
     }
     
     /**
@@ -897,6 +1000,197 @@ object CloneDetectionUtils {
             Log.w(TAG, "Error checking hardware IDs", e)
         }
         
+
         return CloneDetectionResult(isCloned = false, reason = "Hardware check passed")
+    }
+
+    /**
+     * Method 6: Checking Memory Maps (/proc/self/maps)
+     * This scans the process's memory mapping for suspicious libraries or frameworks
+     * widely used by cloning and hooking engines (Xposed, Frida, Substrate, etc.).
+     * This is very hard for cloners to generic spoof without breaking functionality.
+     */
+    /**
+     * Method 7: Check Memory Maps for suspicious hooking libraries
+     * This scans the process's memory mapping for suspicious libraries or frameworks
+     * widely used by cloning and hooking engines (Xposed, Frida, Substrate, etc.).
+     * This is very hard for cloners to generic spoof without breaking functionality.
+     */
+    private fun checkMemoryMaps(): CloneDetectionResult {
+        try {
+            val file = File("/proc/self/maps")
+            if (!file.exists() || !file.canRead()) {
+                 // If we can't read our own maps, something is restricting us (typical of sandboxes)
+                 return CloneDetectionResult(
+                    isCloned = true, 
+                    reason = "Unable to read /proc/self/maps", 
+                    detectionMethod = "Memory Maps Security"
+                )
+            }
+
+            val suspiciousTerms = listOf(
+                "Xposed", "xposed",
+                "Substrate", "substrate",
+                "Frida", "frida",
+                "lody", "virtual", // VirtualApp/Lody
+                "sandhook", "SandHook",
+                "edxp", "EdXposed",
+                "magisk", "Magisk",
+                "riru", "Riru", 
+                "lsposed", "LSPosed",
+                "com.saurik", // Cydia Substrate
+                "yahfa", // YAHFA hooking
+                "epic", // Epic hooking
+                "blackbox", // BlackBox
+                "io.va.exposed" // VirtualApp exposed
+            )
+            
+            BufferedReader(FileReader(file)).use { reader ->
+                var line: String?
+                while (reader.readLine().also { line = it } != null) {
+                    val currentLine = line ?: continue
+                    for (term in suspiciousTerms) {
+                        if (currentLine.contains(term, ignoreCase = true)) {
+                            Log.w(TAG, "Suspicious memory map detected: $term in line: $currentLine")
+                             return CloneDetectionResult(
+                                isCloned = true,
+                                reason = "Suspicious memory map detected: $term",
+                                detectionMethod = "Memory Maps Analysis"
+                            )
+                        }
+                    }
+                }
+            }
+            Log.d(TAG, "Memory maps check passed")
+
+        } catch (e: Exception) {
+            Log.w(TAG, "Error checking memory maps app", e)
+        }
+        
+        return CloneDetectionResult(isCloned = false, reason = "Memory maps check passed")
+    }
+
+    /**
+     * Check if the device is an official Android Studio/Google emulator
+     * Used to bypass certain aggressive checks that false-positive on official dev tools
+     */
+    private fun isOfficialEmulator(): Boolean {
+        return try {
+            val isGenericInfo = Build.FINGERPRINT.startsWith("google/sdk_gphone") ||
+                               Build.FINGERPRINT.startsWith("unknown") ||
+                               Build.MODEL.contains("google_sdk") ||
+                               Build.MODEL.contains("Emulator") ||
+                               Build.MODEL.contains("Android SDK built for x86") ||
+                               Build.MANUFACTURER.contains("Google") && Build.PRODUCT.startsWith("sdk_gphone") ||
+                               Build.BRAND == "google" && Build.DEVICE.startsWith("generic")
+
+            Log.d(TAG, "Emulator check: isOfficial=$isGenericInfo (Model=${Build.MODEL}, Manuf=${Build.MANUFACTURER})")
+            isGenericInfo
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Method 7: Check Shared User ID
+     * Legitimate apps (unless signed with system platform keys) typically don't share UIDs.
+     * Cloners might force a shared UID.
+     */
+    private fun checkSharedUid(context: Context): CloneDetectionResult {
+        try {
+            val packageManager = context.packageManager
+            val currentPkg = context.packageName
+            val pkgInfo = packageManager.getPackageInfo(currentPkg, 0)
+            
+            // Unless you explicitly defined android:sharedUserId in your Manifest, this should be null.
+            if (pkgInfo.sharedUserId != null) {
+                 return CloneDetectionResult(
+                    isCloned = true,
+                    reason = "Unexpected Shared User ID detected: ${pkgInfo.sharedUserId}",
+                    detectionMethod = "UID Validation"
+                )
+            }
+            
+            Log.d(TAG, "Shared UID check passed")
+            
+        } catch (e: Exception) {
+            Log.w(TAG, "Error checking Shared UID", e)
+        }
+        
+        return CloneDetectionResult(isCloned = false, reason = "UID check passed")
+    }
+
+    /**
+     * Method 8: Check for Installed Cloner Apps
+     * Detects if known cloner apps are installed on the device
+     * Sophisticated cloners like CloneApp preserve signatures but are still detectable
+     */
+    private fun checkForInstalledClonerApps(context: Context): CloneDetectionResult {
+        try {
+            val packageManager = context.packageManager
+            
+            // Known cloner app package names (comprehensive list)
+            val knownClonerPackages = listOf(
+                // Most common/sophisticated cloners
+                "com.pengyou.cloneapp",              // CloneApp by szpy tech
+                "com.pengyou.cloneapp.pro",          // CloneApp Pro
+                "com.szpy.cloneapp",                 // CloneApp older pkg
+                "com.szpy.cloneapp.pro",             // CloneApp Pro older pkg
+                "com.parallel.space.lite",        // Parallel Space Lite
+                "com.lbe.parallel.intl",          // Parallel Space
+                "com.lbe.parallel",               // Parallel Space
+                "com.excelliance.multiaccounts",  // Multi Accounts/2Accounts
+                "com.jumobile.multiapp",          // Multiple Accounts
+                "com.oasisfeng.island",           // Island
+                "com.ludashi.dualspace",          // Dual Space
+                "com.jiubang.commerce.gomultiple", // GO Multiple
+                "com.lody.virtual",               // VirtualXposed
+                "com.excean.parallelspace",       // Parallel Space variants
+                "io.va.exposed",                  // VirtualApp
+                "com.pspace.vandroid",            // Parallel Space Android
+                "com.applisto.appcloner",         // App Cloner
+                "com.noxgroup.app.multi",         // Multi Space
+                "com.triggertrap.seek.you.cloneapp", // You CloneApp
+                "you.cloneapp",                   // You CloneApp variant
+                "com.mad.multiapp",               // Multi App
+                "com.gizmoquip.multi",            // Multi accounts
+                "com.beantech.multipleaccounts",  // Multiple Accounts
+                "com.appsinnova.android.dualapp", // Dual App
+                "com.jiubang.goscreenlock",       // GO Multiple variants
+                "com.polestar.super.clone",       // Super Clone
+                "com.excelliance.multiaccount",   // Multi Account
+                "com.cloneapp.parallelspace.dualspace" // Clone App
+            )
+            
+            val installedCloners = mutableListOf<String>()
+            
+            // Check each known cloner package
+            for (packageName in knownClonerPackages) {
+                try {
+                    packageManager.getPackageInfo(packageName, 0)
+                    // If we get here, the package is installed
+                    installedCloners.add(packageName)
+                    Log.w(TAG, "Detected installer cloner app: $packageName")
+                } catch (e: PackageManager.NameNotFoundException) {
+                    // Package not installed, this is expected
+                }
+            }
+            
+            if (installedCloners.isNotEmpty()) {
+                val clonerList = installedCloners.joinToString(", ")
+                return CloneDetectionResult(
+                    isCloned = true,
+                    reason = "Cloner app(s) detected on device: $clonerList",
+                    detectionMethod = "Installed Cloner Apps Detection"
+                )
+            }
+            
+            Log.d(TAG, "No known cloner apps detected on device")
+            
+        } catch (e: Exception) {
+            Log.w(TAG, "Error checking for cloner apps", e)
+        }
+        
+        return CloneDetectionResult(isCloned = false, reason = "Cloner apps check passed")
     }
 }

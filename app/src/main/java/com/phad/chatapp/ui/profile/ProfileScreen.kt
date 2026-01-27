@@ -1,6 +1,9 @@
 package com.phad.chatapp.ui.profile
 
 import android.util.Log
+import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -102,7 +105,7 @@ data class ProfileUiState(
     val isRefreshing: Boolean = false
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ProfileScreen(
     modifier: Modifier = Modifier,
@@ -124,6 +127,7 @@ fun ProfileScreen(
     teachingWing: Boolean
 ) {
     // Menu state
+    val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
     
@@ -228,7 +232,26 @@ fun ProfileScreen(
                         ),
                         contentDescription = if (currentInterface == "NSS") "NSS Logo" else "Teaching Wing Logo",
                         colorFilter = if (currentInterface == "NSS") null else null,
-                        modifier = Modifier.size(48.dp),
+                        modifier = Modifier
+                            .size(48.dp)
+                            .combinedClickable(
+                                onClick = {},
+                                onLongClick = {
+                                    try {
+                                        val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+                                        val version = pInfo.versionName
+                                        val verCode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                                            pInfo.longVersionCode
+                                        } else {
+                                            @Suppress("DEPRECATION")
+                                            pInfo.versionCode.toLong()
+                                        }
+                                        Toast.makeText(context, "Version: $version ($verCode)", Toast.LENGTH_SHORT).show()
+                                    } catch (e: Exception) {
+                                        Log.e("ProfileScreen", "Error getting version info", e)
+                                    }
+                                }
+                            ),
                         contentScale = ContentScale.Fit
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
