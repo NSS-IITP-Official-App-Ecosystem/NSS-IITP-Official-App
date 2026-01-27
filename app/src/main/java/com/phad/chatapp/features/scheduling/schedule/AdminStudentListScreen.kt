@@ -22,6 +22,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
@@ -44,7 +46,8 @@ private const val TAG = "AdminStudentListScreen"
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminStudentListScreen(
-    navController: NavController
+    navController: NavController,
+    onBackClick: () -> Unit = {}
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
@@ -98,6 +101,11 @@ fun AdminStudentListScreen(
                 isLoading = false
             }
         )
+    }
+
+    // Sort students by score descending 
+    val sortedStudents = remember(filteredStudents) {
+        filteredStudents.sortedByDescending { it.interviewScore }
     }
 
     // Filter Logic
@@ -168,7 +176,11 @@ fun AdminStudentListScreen(
                                 isSearchActive = false
                                 searchQuery = ""
                             } else {
-                                navController.navigateUp() 
+                                if (navController.previousBackStackEntry != null) {
+                                    navController.popBackStack()
+                                } else {
+                                    onBackClick()
+                                }
                             }
                         },
                         modifier = Modifier.size(48.dp)
@@ -266,9 +278,9 @@ fun AdminStudentListScreen(
                             .fillMaxSize()
                             .padding(horizontal = 20.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
-                        contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)
+                        contentPadding = PaddingValues(top = 8.dp, bottom = 100.dp)
                     ) {
-                        items(filteredStudents, key = { it.id }) { student ->
+                        items(sortedStudents, key = { it.id }) { student ->
                             StudentCard(
                                 student = student,
                                 onClick = {
@@ -382,20 +394,41 @@ fun StudentCard(
                     text = student.name,
                     style = MaterialTheme.typography.titleMedium,
                     color = Color.White,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 4.dp)
                 )
-                Text(
-                    text = student.rollNumber,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFFB0B0B0)
-                )
-                 if (student.academicGroup.isNotEmpty()) {
+                
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text(
-                        text = "Group: ${student.academicGroup}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF808080),
-                        modifier = Modifier.padding(top = 2.dp)
+                        text = student.rollNumber,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFFB0B0B0),
+                        modifier = Modifier.padding(end = 8.dp)
                     )
+                    
+                    if (student.academicGroup.isNotEmpty()) {
+                        // Group Information Chip
+                        Box(
+                            modifier = Modifier
+                                .width(60.dp)
+                                .height(28.dp)
+                                .background(YellowAccent, RoundedCornerShape(8.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Group: ${student.academicGroup}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium,
+                                color = Color.Black,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
                 }
             }
             

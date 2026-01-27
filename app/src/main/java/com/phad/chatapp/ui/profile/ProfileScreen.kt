@@ -414,14 +414,14 @@ fun ProfileScreen(
                                 
                                 // Display Preference List
                                 if (state.subjectPreferences.isNotEmpty()) {
-                                    Spacer(modifier = Modifier.height(8.dp))
+
                                     state.subjectPreferences.forEachIndexed { index, subject ->
                                         Text(
                                             text = "${index + 1}. $subject",
-                                            color = onSurfaceColor.copy(alpha = 0.9f),
-                                            fontSize = 14.sp,
-                                            fontWeight = FontWeight.Normal,
-                                            modifier = Modifier.padding(start = 8.dp, bottom = 4.dp)
+                                            color = onSurfaceColor,
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            modifier = Modifier.padding(bottom = 4.dp)
                                         )
                                     }
                                 }

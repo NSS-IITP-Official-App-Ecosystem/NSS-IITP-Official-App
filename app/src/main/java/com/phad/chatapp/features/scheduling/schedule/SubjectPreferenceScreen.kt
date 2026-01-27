@@ -160,108 +160,121 @@ fun SubjectPreferenceScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 20.dp, vertical = 24.dp)
         ) {
             // Header
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 16.dp),
+                    .padding(top = 16.dp, bottom = 8.dp)
+                    .padding(start = 4.dp, end = 20.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onBackClick) {
+                IconButton(
+                    onClick = onBackClick,
+                    modifier = Modifier.size(48.dp)
+                ) {
                     Icon(
                         imageVector = Icons.Default.ArrowBack,
                         contentDescription = "Back",
-                        tint = MaterialTheme.colorScheme.onBackground
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp)
                     )
                 }
                 
                 Text(
                     text = "Subject Preference",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    textAlign = TextAlign.Center,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f).padding(end = 48.dp)
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = Color.White,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 8.dp)
                 )
             }
 
-            if (errorMessage != null) {
-                Text(text = errorMessage!!, color = Color.Red, modifier = Modifier.padding(16.dp))
-            }
-
-            if (isLoading) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Color(0xFFFFD600))
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 20.dp)
+            ) {
+                if (errorMessage != null) {
+                    Text(text = errorMessage!!, color = Color.Red, modifier = Modifier.padding(16.dp))
                 }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    // Section 1: Your Preferences
-                    item {
-                        Text(
-                            text = "Your Preferences",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Color(0xFFFFD600),
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
-                    }
 
-                    if (preferenceSubjects.isEmpty()) {
+                if (isLoading) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = Color(0xFFFFD600))
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // Section 1: Your Preferences
                         item {
                             Text(
-                                text = "No subjects added to preference yet.",
-                                color = Color.Gray,
-                                modifier = Modifier.padding(bottom = 16.dp)
+                                text = "Your Preferences",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color(0xFFFFD600),
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(bottom = 8.dp)
                             )
                         }
-                    }
 
-                    itemsIndexed(preferenceSubjects, key = { _, item -> "pref_${item.id}" }) { index, subject ->
-                        PreferenceItem(
-                            subject = subject,
-                            index = index + 1,
-                            isFirst = index == 0,
-                            isLast = index == preferenceSubjects.size - 1,
-                            onUp = { moveUp(index) },
-                            onDown = { moveDown(index) },
-                            onRemove = { removeSubject(subject.id) }
-                        )
-                    }
+                        if (preferenceSubjects.isEmpty()) {
+                            item {
+                                Text(
+                                    text = "No subjects added to preference yet.",
+                                    color = Color.Gray,
+                                    modifier = Modifier.padding(bottom = 16.dp)
+                                )
+                            }
+                        }
 
-                    // Section 2: Available Subjects
-                    item {
-                        Spacer(modifier = Modifier.height(24.dp))
-                        Text(
-                            text = "Available Subjects",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
-                    }
+                        itemsIndexed(preferenceSubjects, key = { _, item -> "pref_${item.id}" }) { index, subject ->
+                            PreferenceItem(
+                                subject = subject,
+                                index = index + 1,
+                                isFirst = index == 0,
+                                isLast = index == preferenceSubjects.size - 1,
+                                onUp = { moveUp(index) },
+                                onDown = { moveDown(index) },
+                                onRemove = { removeSubject(subject.id) }
+                            )
+                        }
 
-                    if (availableSubjects.isEmpty()) {
+                        // Section 2: Available Subjects
                         item {
+                            Spacer(modifier = Modifier.height(24.dp))
                             Text(
-                                text = "All existing subjects are in your list.",
-                                color = Color.Gray
+                                text = "Available Subjects",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(bottom = 8.dp)
                             )
                         }
-                    }
 
-                    items(availableSubjects, key = { "avail_${it.id}" }) { subject ->
-                        AvailableSubjectItem(
-                            subject = subject,
-                            onAdd = { addSubject(subject.id) }
-                        )
-                    }
+                        if (availableSubjects.isEmpty()) {
+                            item {
+                                Text(
+                                    text = "All existing subjects are in your list.",
+                                    color = Color.Gray
+                                )
+                            }
+                        }
 
-                    item { Spacer(modifier = Modifier.height(80.dp)) }
+                        items(availableSubjects, key = { "avail_${it.id}" }) { subject ->
+                            AvailableSubjectItem(
+                                subject = subject,
+                                onAdd = { addSubject(subject.id) }
+                            )
+                        }
+
+                        item { Spacer(modifier = Modifier.height(80.dp)) }
+                    }
                 }
             }
         }

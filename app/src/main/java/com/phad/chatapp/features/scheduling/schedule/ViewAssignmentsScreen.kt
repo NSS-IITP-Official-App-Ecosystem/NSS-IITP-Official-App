@@ -17,15 +17,17 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
+import androidx.compose.ui.Modifier 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.window.Dialog
 import androidx.navigation.NavController
@@ -206,17 +208,18 @@ fun ViewAssignmentsScreen(navController: NavController) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 8.dp)
-                        .padding(bottom = 4.dp),
+                        .padding(top = 16.dp, bottom = 8.dp)
+                        .padding(start = 4.dp, end = 20.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(
                         onClick = { navController.navigateUp() },
-                        modifier = Modifier.size(42.dp)
+                        modifier = Modifier.size(48.dp)
                     ) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
+                            modifier = Modifier.size(24.dp),
                             tint = Color.White
                         )
                     }
@@ -262,29 +265,30 @@ fun ViewAssignmentsScreen(navController: NavController) {
                     } else {
                         Text(
                             text = "View Assignments",
-                            style = MaterialTheme.typography.titleLarge,
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold
+                            ),
                             color = Color.White,
-                            fontWeight = FontWeight.Bold,
                             modifier = Modifier
-                                .padding(start = 4.dp)
+                                .padding(start = 8.dp)
                                 .weight(1f)
                         )
                         if (!isLoading) {
-                            // Replace IconButton with a Button that looks like the save button
-                            Button(
-                                onClick = { searchActive = true },
-                                shape = RoundedCornerShape(8.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = YellowAccent,
-                                    contentColor = Color.Black
-                                ),
+                            // Circular Search Button
+                            Box(
                                 modifier = Modifier
-                                    .padding(4.dp)
+                                    .padding(top = 2.dp, end = 4.dp)
+                                    .size(40.dp)
+                                    .background(YellowAccent, androidx.compose.foundation.shape.CircleShape)
+                                    .clickable { searchActive = true },
+                                contentAlignment = Alignment.Center
                             ) {
-                                Text(
-                                    text = "Search",
-                                    fontWeight = FontWeight.Medium,
-                                    style = MaterialTheme.typography.labelMedium
+                                Icon(
+                                    imageVector = Icons.Filled.Search,
+                                    contentDescription = "Search",
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(24.dp)
                                 )
                             }
                         }
@@ -419,7 +423,6 @@ fun ViewAssignmentsScreen(navController: NavController) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(horizontal = 20.dp)
         ) {
             if (isLoading) {
                 CircularProgressIndicator(
@@ -442,7 +445,7 @@ fun ViewAssignmentsScreen(navController: NavController) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(24.dp),
-                    contentPadding = PaddingValues(top = 16.dp, bottom = 100.dp)
+                    contentPadding = PaddingValues(top = 16.dp, bottom = 100.dp, start = 20.dp, end = 20.dp)
                 ) {
                     // Group assignments by section
                     val groupedAssignments = filteredAssignments
@@ -514,49 +517,41 @@ fun ViewAssignmentsScreen(navController: NavController) {
                 }
             }
             
-            // Export to PDF button
+            // Export to PDF FAB
             if (!isLoading && filteredAssignments.isNotEmpty()) {
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 80.dp)
-                        .fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Button(
-                        onClick = {
-                            if (!isExporting) {
-                                isExporting = true
-                                coroutineScope.launch {
-                                    try {
-                                        val result = generateAndSharePDF(context, filteredAssignments, selectedSchool)
-                                        isExporting = false
-                                        snackbarHostState.showSnackbar(result)
-                                    } catch (e: Exception) {
-                                        isExporting = false
-                                        snackbarHostState.showSnackbar("Export failed: ${e.message}")
-                                    }
+                FloatingActionButton(
+                    onClick = {
+                        if (!isExporting) {
+                            isExporting = true
+                            coroutineScope.launch {
+                                try {
+                                    val result = generateAndSharePDF(context, filteredAssignments, selectedSchool)
+                                    isExporting = false
+                                    snackbarHostState.showSnackbar(result)
+                                } catch (e: Exception) {
+                                    isExporting = false
+                                    snackbarHostState.showSnackbar("Export failed: ${e.message}")
                                 }
                             }
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = YellowAccent,
-                            contentColor = Color.Black
-                        ),
-                        enabled = !isExporting,
-                        modifier = Modifier.padding(vertical = 16.dp)
-                    ) {
-                        if (isExporting) {
-                            CircularProgressIndicator(
-                                color = Color.Black,
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
                         }
-                        Text(
-                            text = if (isExporting) "Exporting..." else "Export to PDF",
-                            fontWeight = FontWeight.Bold
+                    },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 24.dp, bottom = 48.dp),
+                    containerColor = Color(0xFF4CAF50),
+                    contentColor = Color.White
+                ) {
+                    if (isExporting) {
+                        CircularProgressIndicator(
+                            color = Color.White,
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.Share, // Using Share as generic export icon
+                            contentDescription = "Export to PDF",
+                            modifier = Modifier.size(24.dp)
                         )
                     }
                 }
@@ -799,7 +794,7 @@ fun AssignmentCell(
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
                         Text(
-                            text = "$last4Digits (${assignment.subjectCode})",
+                            text = "$last4Digits ${assignment.subjectCode.take(3)}",
                             color = when {
                                 searchActive && !isHighlighted -> Color(0xFFAA9955)
                                 else -> Color.Black

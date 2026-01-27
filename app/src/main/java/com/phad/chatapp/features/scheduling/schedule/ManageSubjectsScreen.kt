@@ -133,13 +133,7 @@ fun ManageSubjectsScreen(
                     )
                 }
 
-                Text(
-                    text = "Manage subjects for teaching sessions",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(bottom = 16.dp, start = 20.dp, end = 20.dp)
-                )
+
 
                 // Error message
                 errorMessage?.let { error ->

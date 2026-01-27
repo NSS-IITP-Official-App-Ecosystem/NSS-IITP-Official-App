@@ -106,12 +106,7 @@ fun ScheduleMakerScreen(navController: NavController) {
                         onClick = { navController.navigate("volunteerPresets") }
                     )
 
-                    StaggeredMenuButton(
-                        icon = Icons.Filled.Person, // Using Person icon for students
-                        title = "Manage Students",
-                        description = "View students and update scores",
-                        onClick = { navController.navigate("manageStudents") }
-                    )
+
 
                     StaggeredMenuButton(
                         icon = Icons.Default.ViewList,
