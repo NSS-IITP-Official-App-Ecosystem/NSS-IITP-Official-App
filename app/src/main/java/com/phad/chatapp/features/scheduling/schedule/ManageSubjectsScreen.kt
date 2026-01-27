@@ -8,7 +8,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -92,50 +92,44 @@ fun ManageSubjectsScreen(
         modifier = Modifier.fillMaxSize(),
         color = DarkBackground
     ) {
-        Scaffold(
-            containerColor = DarkBackground,
-            floatingActionButton = {
-                FloatingActionButton(
-                    onClick = { showAddDialog = true },
-                    containerColor = Color(0xFFFFD600),
-                    contentColor = Color.Black
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "Add Subject"
-                    )
-                }
-            }
-        ) { paddingValues ->
+        Box(
+            modifier = Modifier.fillMaxSize()
+        ) {
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .padding(horizontal = 20.dp, vertical = 24.dp),
+                    .fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Header Section
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 16.dp),
+                        .padding(top = 16.dp, bottom = 8.dp)
+                        .padding(start = 4.dp, end = 20.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = onBackClick) {
+                    IconButton(
+                        onClick = onBackClick,
+                        modifier = Modifier.size(48.dp)
+                    ) {
                         Icon(
-                            imageVector = Icons.Default.ArrowBack,
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.onBackground
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
                         )
                     }
                     
                     Text(
                         text = "Add or Delete Subjects",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        textAlign = TextAlign.Center,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f).padding(end = 48.dp) // Balance the back button space
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = Color.White,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 8.dp)
                     )
                 }
 
@@ -144,7 +138,7 @@ fun ManageSubjectsScreen(
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(bottom = 16.dp)
+                    modifier = Modifier.padding(bottom = 16.dp, start = 20.dp, end = 20.dp)
                 )
 
                 // Error message
@@ -152,6 +146,7 @@ fun ManageSubjectsScreen(
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .padding(horizontal = 20.dp)
                             .padding(bottom = 16.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = Color(0xFFD32F2F).copy(alpha = 0.1f)
@@ -203,7 +198,7 @@ fun ManageSubjectsScreen(
                     }
                     else -> {
                         LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             items(subjects) { subject ->
@@ -222,6 +217,21 @@ fun ManageSubjectsScreen(
                         }
                     }
                 }
+            }
+
+            // Floating Action Button
+            FloatingActionButton(
+                onClick = { showAddDialog = true },
+                containerColor = Color(0xFFFFD600),
+                contentColor = Color.Black,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 24.dp, bottom = 48.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Add Subject"
+                )
             }
         }
     }

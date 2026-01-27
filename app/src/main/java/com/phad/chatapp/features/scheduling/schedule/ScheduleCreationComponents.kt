@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.*
 import androidx.compose.material3.Badge
@@ -45,30 +46,32 @@ fun VolunteersListDialog(
     volunteers: List<Volunteer>,
     onDismiss: () -> Unit
 ) {
-    var filterAssigned by remember { mutableStateOf(false) }
-    var filterUnassigned by remember { mutableStateOf(false) }
-    var selectedGroup by remember { mutableStateOf<String?>(null) }
+    var filterMode by remember { mutableStateOf(0) } // 0=All, 1=Assigned, 2=Unassigned
+    
+    // Multi-select state
+    var selectedGroups by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var showGroupGridDialog by remember { mutableStateOf(false) }
+    
     var sortByGroup by remember { mutableStateOf(false) }
 
     // Get all unique groups
     val groups = volunteers.map { it.group }.distinct().sortedWith(compareBy {
-        // Try to parse as int for numerical sorting, fall back to string if not a number
         try {
             it.toInt()
         } catch (e: NumberFormatException) {
-            Int.MAX_VALUE // Non-numeric groups will be placed at the end
+            Int.MAX_VALUE
         }
     })
 
     // Filter volunteers based on criteria
     val filteredVolunteers = volunteers.filter { volunteer ->
-        val assignmentMatch = when {
-            filterAssigned && !filterUnassigned -> volunteer.isAssigned
-            !filterAssigned && filterUnassigned -> !volunteer.isAssigned
-            else -> true
+        val assignmentMatch = when (filterMode) {
+            1 -> volunteer.isAssigned // Assigned
+            2 -> !volunteer.isAssigned // Unassigned
+            else -> true // All
         }
 
-        val groupMatch = selectedGroup?.let { volunteer.group == it } ?: true
+        val groupMatch = if (selectedGroups.isEmpty()) true else selectedGroups.contains(volunteer.group)
 
         assignmentMatch && groupMatch
     }.let { filtered ->
@@ -90,11 +93,13 @@ fun VolunteersListDialog(
         }
     }
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
         Card(
             modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(max = 600.dp),
+                .fillMaxSize(0.95f),
             colors = CardDefaults.cardColors(
                 containerColor = NeutralCardSurface // UI.md standard card background
             ),
@@ -134,155 +139,115 @@ fun VolunteersListDialog(
                             }
                         }
 
-                        // Filters - Optimized for single row layout
+                        // Top Control Row: Filter Toggle | Group Dropdown | Sort
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(bottom = 16.dp), // UI.md element spacing
-                            horizontalArrangement = Arrangement.spacedBy(6.dp) // Reduced spacing for better fit
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            // Assignment filters
-                            FilterChip(
-                                selected = filterAssigned,
-                                onClick = { filterAssigned = !filterAssigned },
-                                label = {
-                                    Text(
-                                        "Assigned",
-                                        style = MaterialTheme.typography.bodySmall, // Smaller text for better fit
-                                        maxLines = 1,
-                                        fontSize = 12.sp // Explicit smaller font size
-                                    )
+                            // 1. Tri-state Filter Toggle
+                            // Cycle: All (Default) -> Assigned -> Unassigned -> All
+                            // Button text shows CURRENT view or Target? Usually shows current state.
+                            // State 0 (All) -> "All"
+                            // State 1 (Assigned) -> "Assigned"
+                            // State 2 (Unassigned) -> "Unassigned"
+                            
+                            val filterLabel = when(filterMode) {
+                                1 -> "Assigned"
+                                2 -> "Unassigned"
+                                else -> "All" // 0
+                            }
+                            
+                            val filterColor = when(filterMode) {
+                                1 -> Color(0xFF2E7D32) // Green for Assigned
+                                2 -> Color(0xFFC62828) // Red for Unassigned
+                                else -> YellowAccent   // Yellow for All
+                            }
+                            
+                            val filterTextColor = when(filterMode) {
+                                1, 2 -> Color.White
+                                else -> Color.Black
+                            }
+
+                            Button(
+                                onClick = { 
+                                    // Cycle: All (0) -> Assigned (1) -> Unassigned (2) -> All (0)
+                                    // User requested: "One click assigned, another click unassigned another click all..."
+                                    // implies: Default(All/Assigned?) -> Assigned -> Unassigned -> All
+                                    // Let's implement 0->1->2->0
+                                    filterMode = (filterMode + 1) % 3
                                 },
                                 modifier = Modifier
-                                    .weight(1f) // Equal weight distribution
-                                    .heightIn(min = 48.dp), // UI.md touch target maintained
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = YellowAccent,
-                                    selectedLabelColor = Color.Black
+                                    .weight(1f)
+                                    .heightIn(min = 48.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = filterColor,
+                                    contentColor = filterTextColor
                                 ),
-                                shape = RoundedCornerShape(12.dp) // UI.md corner radius
-                            )
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 4.dp)
+                            ) {
+                                Text(
+                                    text = filterLabel,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
 
-                            FilterChip(
-                                selected = filterUnassigned,
-                                onClick = { filterUnassigned = !filterUnassigned },
-                                label = {
+                            // 2. Group Filter Button -> Grid Dialog
+                            Box(
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                OutlinedButton(
+                                    onClick = { showGroupGridDialog = true },
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = Color.White,
+                                        containerColor = DarkSurface
+                                    ),
+                                    border = BorderStroke(1.dp, YellowAccent.copy(alpha = 0.5f)),
+                                    shape = RoundedCornerShape(12.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp)
+                                ) {
+                                    val buttonText = when {
+                                        selectedGroups.isEmpty() -> "All Gps"
+                                        selectedGroups.size == 1 -> "Gp ${selectedGroups.first()}"
+                                        selectedGroups.size <= 2 -> "Gps ${selectedGroups.joinToString(",")}"
+                                        else -> "${selectedGroups.size} Gps"
+                                    }
+                                    
                                     Text(
-                                        "Unassigned",
-                                        style = MaterialTheme.typography.bodySmall, // Smaller text for better fit
+                                        text = buttonText,
+                                        style = MaterialTheme.typography.bodyMedium,
                                         maxLines = 1,
-                                        fontSize = 12.sp // Explicit smaller font size
+                                        overflow = TextOverflow.Ellipsis
                                     )
-                                },
-                                modifier = Modifier
-                                    .weight(1f) // Equal weight distribution
-                                    .heightIn(min = 48.dp), // UI.md touch target maintained
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = YellowAccent,
-                                    selectedLabelColor = Color.Black
-                                ),
-                                shape = RoundedCornerShape(12.dp) // UI.md corner radius
-                            )
+                                }
+                            }
 
-                            // Sort by group filter
+                            // 3. Sort Button
                             FilterChip(
                                 selected = sortByGroup,
                                 onClick = { sortByGroup = !sortByGroup },
                                 label = {
                                     Text(
                                         "Sort",
-                                        style = MaterialTheme.typography.bodySmall, // Smaller text for better fit
-                                        maxLines = 1,
-                                        fontSize = 12.sp // Explicit smaller font size
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        maxLines = 1
                                     )
                                 },
                                 modifier = Modifier
-                                    .weight(1f) // Equal weight distribution
-                                    .heightIn(min = 48.dp), // UI.md touch target maintained
+                                    .weight(0.7f) // Slightly smaller
+                                    .heightIn(min = 48.dp),
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = YellowAccent,
                                     selectedLabelColor = Color.Black
                                 ),
-                                shape = RoundedCornerShape(12.dp) // UI.md corner radius
+                                shape = RoundedCornerShape(12.dp)
                             )
-                        }
-
-                        // Group filter dropdown
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 16.dp) // UI.md element spacing
-                        ) {
-                            var expanded by remember { mutableStateOf(false) }
-
-                            OutlinedButton(
-                                onClick = { expanded = true },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 48.dp), // UI.md touch target
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    contentColor = Color.White,
-                                    containerColor = DarkSurface
-                                ),
-                                border = BorderStroke(1.dp, YellowAccent.copy(alpha = 0.5f)),
-                                shape = RoundedCornerShape(12.dp) // UI.md corner radius
-                            ) {
-                                Text(
-                                    selectedGroup ?: "All Groups",
-                                    style = MaterialTheme.typography.bodyLarge // UI.md interactive text
-                                )
-                            }
-
-                            DropdownMenu(
-                                expanded = expanded,
-                                onDismissRequest = { expanded = false },
-                                modifier = Modifier
-                                    .background(NeutralCardSurface) // UI.md card background
-                                    .widthIn(min = 170.dp) // UI.md minimum width for visibility
-                            ) {
-                                // "All Groups" option
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            "All Groups",
-                                            color = Color.White,
-                                            style = MaterialTheme.typography.bodyMedium
-                                        )
-                                    },
-                                    onClick = {
-                                        selectedGroup = null
-                                        expanded = false
-                                    },
-                                    leadingIcon = if (selectedGroup == null) {
-                                        { Icon(Icons.Default.Check, null, tint = YellowAccent) }
-                                    } else null
-                                )
-
-                                HorizontalDivider(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    color = DarkSurface
-                                )
-
-                                // Group options
-                                groups.forEach { group ->
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                "Group $group",
-                                                color = Color.White,
-                                                style = MaterialTheme.typography.bodyMedium
-                                            )
-                                        },
-                                        onClick = {
-                                            selectedGroup = group
-                                            expanded = false
-                                        },
-                                        leadingIcon = if (selectedGroup == group) {
-                                            { Icon(Icons.Default.Check, null, tint = YellowAccent) }
-                                        } else null
-                                    )
-                                }
-                            }
                         }
 
                         // Volunteers list count
@@ -310,7 +275,113 @@ fun VolunteersListDialog(
                     }
             }
         }
+
+    // Grid Dialog for Group Selection (Inside VolunteersListDialog)
+    if (showGroupGridDialog) {
+        Dialog(
+            onDismissRequest = { showGroupGridDialog = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth(0.75f) // Even smaller width
+                    .heightIn(max = 450.dp) // Even smaller height
+                    .padding(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = NeutralCardSurface
+                ),
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp) // Reduced padding
+                ) {
+                    Text(
+                        text = "Select Groups",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                    
+                    // Grid of groups
+                    androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                        columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(minSize = 40.dp), // Even smaller cells
+                        verticalArrangement = Arrangement.spacedBy(6.dp), // Reduced spacing
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                    ) {
+                        items(groups) { group ->
+                            val isSelected = selectedGroups.contains(group)
+                            
+                            Box(
+                                modifier = Modifier
+                                    .aspectRatio(1f)
+                                    .background(
+                                        color = if (isSelected) YellowAccent else Color.Transparent,
+                                        shape = RoundedCornerShape(6.dp)
+                                    )
+                                    .border(
+                                        width = 1.dp,
+                                        color = if (isSelected) YellowAccent else Color.Gray,
+                                        shape = RoundedCornerShape(6.dp)
+                                    )
+                                    .clickable {
+                                        selectedGroups = if (isSelected) {
+                                            selectedGroups - group
+                                        } else {
+                                            selectedGroups + group
+                                        }
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = group,
+                                    color = if (isSelected) Color.Black else Color.White,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    style = MaterialTheme.typography.bodySmall // Smaller text
+                                )
+                            }
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp), // Check UI layout
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Clear All
+                        TextButton(
+                            onClick = { selectedGroups = emptySet() },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.textButtonColors(contentColor = Color.Red)
+                        ) {
+                            Text("Clear All")
+                        }
+                        
+                        // Done
+                        Button(
+                            onClick = { showGroupGridDialog = false },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = YellowAccent,
+                                contentColor = Color.Black
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Done", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
     }
+}
 
 /**
  * Volunteer list item with UI.md specifications
@@ -331,90 +402,154 @@ fun VolunteerListItem(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(20.dp) // UI.md card internal padding
+                    .padding(16.dp) // UI.md card internal padding
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        // Display first name only
-                        val firstName = volunteer.name.split(" ").firstOrNull() ?: volunteer.name
+                    // Column 1: Volunteer Info (45%) - Enhanced readability & Centered
+                    Column(
+                        modifier = Modifier
+                            .weight(0.45f)
+                            .padding(end = 8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally // Center alignment
+                    ) {
+                        // Line 1: Full Name (truncated)
                         Text(
-                            text = firstName,
+                            text = volunteer.name,
                             color = Color.White, // UI.md primary text color
-                            fontWeight = FontWeight.Medium,
-                            style = MaterialTheme.typography.bodyLarge // UI.md interactive text
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                fontSize = 18.sp // Reduced from 20.sp
+                            ),
+                            fontWeight = FontWeight.Normal, // Explicit unbold
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center
                         )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // Line 2: Chips for Group and Roll - Larger font
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Group Chip
+                            Surface(
+                                color = YellowAccent,
+                                shape = RoundedCornerShape(4.dp)
+                            ) {
+                                Text(
+                                    text = "Gp ${volunteer.group}",
+                                    color = Color.Black,
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontSize = 16.sp // Explicit 16sp
+                                    ),
+                                    fontWeight = FontWeight.Normal, // Explicit unbold
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+
+                            // Roll Chip
+                            val rollLast4 = volunteer.rollNo.takeLast(4)
+                            if (rollLast4.isNotEmpty()) {
+                                Surface(
+                                    color = YellowAccent,
+                                    shape = RoundedCornerShape(4.dp)
+                                ) {
+                                    Text(
+                                        text = rollLast4,
+                                        color = Color.Black,
+                                        style = MaterialTheme.typography.titleMedium.copy(
+                                            fontSize = 16.sp // Explicit 16sp
+                                        ),
+                                        fontWeight = FontWeight.Normal, // Explicit unbold
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
 
                         Spacer(modifier = Modifier.height(4.dp))
 
-                        // Display group and last 4 characters of roll number
-                        val rollLast4 = volunteer.rollNo.takeLast(4)
-                        val subjectAbbr = if (volunteer.isAssigned && volunteer.assignedSlot?.assignedSubject != null) {
-                            " • ${volunteer.assignedSlot!!.assignedSubject!!.take(3)}"
-                        } else {
-                            ""
-                        }
+                        // Line 3: Class = [ClassCount], Sc = [Score]
                         Text(
-                            text = "Group ${volunteer.group} • $rollLast4$subjectAbbr",
-                            color = Color(0xFFB0B0B0), // UI.md secondary text color
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-
-                    // Assignment status badge with UI.md specifications
-                    if (volunteer.isAssigned) {
-                        Surface(
-                            modifier = Modifier.padding(start = 12.dp),
-                            shape = RoundedCornerShape(12.dp), // UI.md badge corner radius
-                            color = Color(0xFF2E7D32), // Success green
-                            shadowElevation = 1.dp // UI.md badge elevation
-                        ) {
-                            Text(
-                                text = "Assigned",
-                                color = Color.White,
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp) // UI.md badge padding
-                            )
-                        }
-                    } else {
-                        Surface(
-                            modifier = Modifier.padding(start = 12.dp),
-                            shape = RoundedCornerShape(12.dp), // UI.md badge corner radius
-                            color = Color(0xFF9E9E9E), // UI.md neutral gray
-                            shadowElevation = 1.dp // UI.md badge elevation
-                        ) {
-                            Text(
-                                text = "Unassigned",
-                                color = Color.White,
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp) // UI.md badge padding
-                            )
-                        }
-                    }
-                }
-
-                // Assignment details if assigned
-                if (volunteer.isAssigned && volunteer.assignedSlot != null) {
-                    val slot = volunteer.assignedSlot!!
-
-                    Spacer(modifier = Modifier.height(12.dp)) // UI.md element spacing
-
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp),
-                        color = DarkSurface.copy(alpha = 0.5f)
-                    ) {
-                        Text(
-                            text = "${slot.schoolName} • ${slot.dayName} • ${slot.timeLabel}",
+                            text = "Class = ${volunteer.classCount}, Sc = ${volunteer.interviewScore}",
                             color = Color(0xFFB0B0B0), // UI.md secondary text color
                             style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(12.dp)
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center
                         )
+                    }
+
+                    // Column 2: Status/Preferences (55%) - Centered
+                    Column(
+                        modifier = Modifier
+                            .weight(0.55f)
+                            .padding(start = 4.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally // Center alignment
+                    ) {
+                        if (volunteer.isAssigned && volunteer.assignedSlot != null) {
+                            val slot = volunteer.assignedSlot!!
+                            
+                            // Assigned State - Subject Name Only, Larger
+                            val rank = if (slot.assignedSubject != null) {
+                                val idx = volunteer.subjectPreferences.indexOfFirst { it.equals(slot.assignedSubject, ignoreCase = true) }
+                                if (idx != -1) " (#${idx + 1})" else ""
+                            } else ""
+                            
+                            Text(
+                                text = (slot.assignedSubject ?: "N/A") + rank,
+                                color = YellowAccent,
+                                style = MaterialTheme.typography.titleLarge.copy( // Larger font for subject
+                                    fontSize = 18.sp // Reduced from 20.sp
+                                ),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center
+                            )
+                            
+                            Spacer(modifier = Modifier.height(2.dp))
+                            
+                            // Split slot details into two lines
+                            Text(
+                                text = "${slot.schoolName} • ${slot.dayName}",
+                                color = Color(0xFF2E7D32), // Success green
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center
+                            )
+
+                            Text(
+                                text = slot.timeLabel,
+                                color = Color(0xFF2E7D32), // Success green
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center
+                            )
+                        } else {
+                            // Unassigned State - Just the preferences list
+                            val prefsText = if (volunteer.subjectPreferences.isNotEmpty()) {
+                                volunteer.subjectPreferences.joinToString(", ") { it.take(3) }
+                            } else {
+                                "None"
+                            }
+                            
+                            Text(
+                                text = prefsText,
+                                color = Color.White,
+                                style = MaterialTheme.typography.bodyLarge.copy(
+                                    fontSize = 16.sp,
+                                ),
+                                maxLines = 2, // Allow 2 lines for preferences
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
                 }
             }
@@ -429,7 +564,7 @@ fun VolunteerListItem(
 fun AssignmentPanel(
     slot: Slot,
     volunteers: List<Volunteer>,
-    onAssignManual: (Volunteer) -> Unit,
+    onAssignManual: (Volunteer, String) -> Unit,
     onAssignAutomatic: () -> Unit,
     onClose: () -> Unit
 ) {
@@ -572,6 +707,24 @@ fun AssignmentPanel(
                                         fontWeight = FontWeight.Normal,
                                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                                     )
+                                }
+
+                                // Score card
+                                val volunteer = volunteers.find { it.id == slot.assignedVolunteerId }
+                                if (volunteer != null && volunteer.interviewScore > 0) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = YellowAccent,
+                                        modifier = Modifier.padding(horizontal = 4.dp)
+                                    ) {
+                                        Text(
+                                            text = "Score ${volunteer.interviewScore}",
+                                            color = Color.Black,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Normal,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                        )
+                                    }
                                 }
                             }
 
@@ -937,8 +1090,8 @@ fun AssignmentPanel(
                         volunteers = volunteers,
                         slot = slot,
                         onDismiss = { showManualSelection = false },
-                        onVolunteerSelected = { volunteer ->
-                            onAssignManual(volunteer)
+                        onVolunteerSelected = { volunteer, subject ->
+                            onAssignManual(volunteer, subject)
                             showManualSelection = false
                         }
                     )
@@ -956,8 +1109,9 @@ fun AssignmentPanel(
 fun ManualVolunteerSelectionDialog(
     volunteers: List<Volunteer>,
     slot: Slot,
+    conflictingVolunteerIds: Set<String> = emptySet(),
     onDismiss: () -> Unit,
-    onVolunteerSelected: (Volunteer) -> Unit
+    onVolunteerSelected: (Volunteer, String) -> Unit
 ) {
     // Helper function to expand group ranges (same as in ScheduleGenerationViewModel)
     fun expandGroupRanges(groupString: String): List<String> {
@@ -993,12 +1147,40 @@ fun ManualVolunteerSelectionDialog(
         return allExpandedGroups.distinct()
     }
 
-    // Filter and sort volunteers alphabetically by name (with group range expansion)
-    val filteredVolunteers = remember(volunteers, slot) {
+    // Filter and sort volunteers alphabetically by name
+    // Filter and sort volunteers
+    val filteredVolunteers = remember(volunteers, slot, conflictingVolunteerIds) {
         val expandedAvailableGroups = expandAllGroupRanges(slot.availableGroups)
+        
+        // Identify the highest priority subject that still needs classes
+        val targetSubject = slot.subjectPriorities
+            .sortedBy { it.priority }
+            .firstOrNull { it.classCount > 0 }
+            ?.subjectName
+
         volunteers.filter { volunteer ->
-            !volunteer.isAssigned && expandedAvailableGroups.contains(volunteer.group)
-        }.sortedBy { it.name } // Alphabetical sorting by name
+            !volunteer.isAssigned && 
+            expandedAvailableGroups.contains(volunteer.group) &&
+            !conflictingVolunteerIds.contains(volunteer.id)
+        }.sortedWith(
+            compareBy<Volunteer> { volunteer ->
+                // Primary Sort: Preference Level for Target Subject
+                // 0 = 1st pref, 1 = 2nd pref, etc.
+                // If not found, assign high number to push to bottom
+                if (targetSubject != null) {
+                    val idx = volunteer.subjectPreferences.indexOfFirst { it.equals(targetSubject, ignoreCase = true) }
+                    if (idx != -1) idx else 999
+                } else {
+                    0 // No target subject, all equal
+                }
+            }.thenByDescending { 
+                // Secondary Sort: Interview Score (High to Low)
+                it.interviewScore 
+            }.thenBy { 
+                // Tertiary Sort: Name (A-Z)
+                it.name 
+            }
+        )
     }
 
 
@@ -1123,7 +1305,10 @@ fun ManualVolunteerSelectionDialog(
                             itemsIndexed(filteredVolunteers) { index, volunteer ->
                                 ManualVolunteerSelectionItem(
                                     volunteer = volunteer,
-                                    onClick = { onVolunteerSelected(volunteer) }
+                                    slot = slot,
+                                    onSubjectClick = { subject -> 
+                                        onVolunteerSelected(volunteer, subject) 
+                                    }
                                 )
                             }
                         }
@@ -1182,12 +1367,12 @@ fun EmptyStateCard(
 @Composable
 fun ManualVolunteerSelectionItem(
     volunteer: Volunteer,
-    onClick: () -> Unit
+    slot: Slot,
+    onSubjectClick: (String) -> Unit
 ) {
     Card(
         modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() },
+            .fillMaxWidth(),
             colors = CardDefaults.cardColors(
                 containerColor = NeutralCardSurface // Static background color
             ),
@@ -1203,7 +1388,8 @@ fun ManualVolunteerSelectionItem(
             ) {
                 // Column 1: Name, Roll and Group
                 Column(
-                    modifier = Modifier.weight(0.4f)
+                    modifier = Modifier.weight(0.4f),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     // Line 1: Full Name
                     Text(
@@ -1212,7 +1398,9 @@ fun ManualVolunteerSelectionItem(
                         fontWeight = FontWeight.Medium,
                         style = MaterialTheme.typography.titleMedium,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
                     )
 
                     Spacer(modifier = Modifier.height(4.dp))
@@ -1251,9 +1439,20 @@ fun ManualVolunteerSelectionItem(
                             )
                         }
                     }
+                    
+                    // Line 3: Class count and Score in one line
+                    Text(
+                        text = "Class=${volunteer.classCount}  Scr=${volunteer.interviewScore}",
+                        color = Color.Gray,
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp)
+                    )
                 }
 
-                // Column 2: Subject preferences in 2-3 lines
+                // Column 2: Subject preferences - show all with valid ones clickable, invalid dimmed
                 if (volunteer.subjectPreferences.isNotEmpty()) {
                     FlowRow(
                         modifier = Modifier.weight(0.55f),
@@ -1262,12 +1461,30 @@ fun ManualVolunteerSelectionItem(
                         maxItemsInEachRow = 4
                     ) {
                         volunteer.subjectPreferences.forEach { subject ->
-                            Text(
-                                text = subject.take(3),
-                                color = Color.White,
-                                style = MaterialTheme.typography.labelSmall,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                            )
+                            // Check if this subject is valid for the slot
+                            // Check if this subject is valid for the slot AND has classes left
+                            val slotSubject = slot.subjectPriorities.find { 
+                                it.subjectName.equals(subject, ignoreCase = true) 
+                            }
+                            val isValid = slotSubject != null && slotSubject.classCount > 0
+                            
+                            Surface(
+                                color = Color.Transparent,
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, if (isValid) Color.White else Color.Gray.copy(alpha = 0.3f)),
+                                modifier = if (isValid) {
+                                    Modifier.clickable { onSubjectClick(subject) }
+                                } else {
+                                    Modifier
+                                }
+                            ) {
+                                Text(
+                                    text = subject.take(3),
+                                    color = if (isValid) Color.White else Color.Gray.copy(alpha = 0.5f),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
                         }
                     }
                 }

@@ -14,6 +14,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.RadioButtonChecked
+import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.outlined.CheckCircleOutline
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
@@ -105,7 +107,8 @@ fun ScheduleGenerationScreen(navController: NavController) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 8.dp, bottom = 24.dp),
+                        .padding(top = 16.dp, bottom = 8.dp)
+                        .padding(start = 4.dp, end = 20.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                         // Back button
@@ -117,53 +120,20 @@ fun ScheduleGenerationScreen(navController: NavController) {
                                 Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = "Back",
                                 tint = Color.White,
-                                modifier = Modifier.size(28.dp)
+                                modifier = Modifier.size(24.dp)
                             )
                         }
 
                         // Title
                         Text(
                             text = "Generate Schedule",
-                            style = MaterialTheme.typography.titleLarge,
+                            style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp),
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier
                                 .weight(1f)
                                 .padding(start = 8.dp)
                         )
-
-                        // Continue button - only show when data is loaded and not in loading state
-                        if (!isLoading && volunteerPresets.isNotEmpty() && availabilityPresets.isNotEmpty()) {
-                            StandardButton(
-                                onClick = {
-                                    if (selectedVPPreset == null) {
-                                        coroutineScope.launch {
-                                            snackbarHostState.showSnackbar("Please select a volunteer preset")
-                                        }
-                                        return@StandardButton
-                                    }
-                                    if (selectedVAPresets.isEmpty()) {
-                                        coroutineScope.launch {
-                                            snackbarHostState.showSnackbar("Please select at least one availability preset")
-                                        }
-                                        return@StandardButton
-                                    }
-
-                                    // Create parameter string for the navigation
-                                    val vpId = selectedVPPreset!!.id
-                                    val vaIds = selectedVAPresets.joinToString(",") { it.id }
-
-                                    // Navigate to next screen
-                                    navController.navigate("scheduleCreation/$vpId/$vaIds")
-                                },
-                                enabled = selectedVPPreset != null && selectedVAPresets.isNotEmpty()
-                            ) {
-                                Text(
-                                    "Continue",
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                        }
                     }
             },
             snackbarHost = { SnackbarHost(snackbarHostState) }
@@ -390,6 +360,48 @@ fun ScheduleGenerationScreen(navController: NavController) {
                                 }
                         }
                     }
+                }
+            }
+        }
+
+        // FAB for "Continue" action
+        if (!isLoading && volunteerPresets.isNotEmpty() && availabilityPresets.isNotEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(end = 24.dp, bottom = 48.dp),
+                contentAlignment = Alignment.BottomEnd
+            ) {
+                 FloatingActionButton(
+                    onClick = {
+                        if (selectedVPPreset == null) {
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar("Please select a volunteer preset")
+                            }
+                            return@FloatingActionButton
+                        }
+                        if (selectedVAPresets.isEmpty()) {
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar("Please select at least one availability preset")
+                            }
+                            return@FloatingActionButton
+                        }
+
+                        // Create parameter string for the navigation
+                        val vpId = selectedVPPreset!!.id
+                        val vaIds = selectedVAPresets.joinToString(",") { it.id }
+
+                        // Navigate to next screen
+                        navController.navigate("scheduleCreation/$vpId/$vaIds")
+                    },
+                    containerColor = Color(0xFF4CAF50), // Green color
+                    contentColor = Color.White
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.ArrowForward,
+                        contentDescription = "Continue",
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
             }
         }

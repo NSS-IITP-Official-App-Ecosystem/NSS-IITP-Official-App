@@ -1,5 +1,12 @@
 package com.phad.chatapp.features.scheduling.schedule
 
+import android.util.Log
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import kotlinx.coroutines.delay
+
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -14,15 +21,24 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.ViewList
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.LibraryBooks
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
@@ -63,13 +79,32 @@ fun ScheduleCreationScreen(
     var selectedSchoolIndex by remember { mutableStateOf(0) }
     var showVolunteersList by remember { mutableStateOf(false) }
     var showFinishDialog by remember { mutableStateOf(false) }
-    var showManualSelection by remember { mutableStateOf(false) }
+    var showManualSelection by remember { mutableStateOf(false) } // Still used if needed, but not for fallback
+    var showAutoAssignError by remember { mutableStateOf(false) } // New state for error dialog
     var selectedSlotForManualAssignment by remember { mutableStateOf<Slot?>(null) }
     var isSavingSchedule by remember { mutableStateOf(false) }
+    var showAlgorithmLogs by remember { mutableStateOf(false) } // NEW: Log viewer dialog
 
     // Initialize viewModel
     LaunchedEffect(vpId, vaIds) {
         viewModel.initialize(vpId, vaIdsList)
+    }
+    
+    // Message state
+    var showMessage by remember { mutableStateOf(false) }
+    var currentMessage by remember { mutableStateOf("") }
+
+    // Observe assignment success message and show Sliding Message
+    val assignmentMessage by viewModel.lastAssignmentMessage.collectAsState()
+    LaunchedEffect(assignmentMessage) {
+        assignmentMessage?.let { message ->
+            currentMessage = message
+            showMessage = true
+            delay(3000) // Show for 3 seconds
+            showMessage = false
+            delay(300) // Wait for animation
+            viewModel.clearAssignmentMessage()
+        }
     }
 
     // Main layout
@@ -85,10 +120,8 @@ fun ScheduleCreationScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(
-                        horizontal = 20.dp, // UI.md standard horizontal margins
-                        vertical = 8.dp     // UI.md header padding
-                    ),
+                    .padding(top = 16.dp, bottom = 8.dp)
+                    .padding(start = 4.dp, end = 20.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Back button with 48dp touch target
@@ -104,33 +137,61 @@ fun ScheduleCreationScreen(
                         Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
                         tint = Color.White,
-                        modifier = Modifier.size(28.dp) // UI.md icon size
+                        modifier = Modifier.size(24.dp) // UI.md icon size
                     )
                 }
 
                 // Title with proper spacing
                 Text(
                     text = "Create Schedule",
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp),
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier
                         .weight(1f)
                         .padding(start = 8.dp) // UI.md title padding
                 )
-
-                // Save button only in header (text only)
-                StandardButton(
-                    onClick = {
-                        if (!isSavingSchedule) { // Prevent multiple save operations
-                            showFinishDialog = true
-                        }
+                
+                // Volunteers button (circular yellow per TTW_UI_plan.md)
+                if (!viewModel.isLoading && !isSavingSchedule) {
+                    Box(
+                        modifier = Modifier
+                            .padding(top = 2.dp, end = 8.dp)
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(YellowAccent)
+                            .clickable { showVolunteersList = true },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = "Volunteers",
+                            tint = Color.Black,
+                            modifier = Modifier.size(24.dp)
+                        )
                     }
-                ) {
-                    Text(
-                        "Save",
-                        fontWeight = FontWeight.Medium
-                    )
+                }
+
+
+
+                // Log viewer button (circular yellow per TTW_UI_plan.md)
+                if (!viewModel.isLoading && !isSavingSchedule) {
+                    Box(
+                        modifier = Modifier
+                            .padding(top = 2.dp, end = 4.dp)
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(YellowAccent)
+                            .clickable { showAlgorithmLogs = true },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.LibraryBooks,
+                            contentDescription = "View Logs",
+                            tint = Color.Black,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
                 }
             }
 
@@ -189,37 +250,6 @@ fun ScheduleCreationScreen(
                             }
                             else -> {
                                 Column {
-                                    // Action buttons section - positioned above schedule content
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(bottom = 16.dp), // UI.md spacing
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        // Assign button
-                                        StandardButton(
-                                            onClick = { viewModel.assignLowestTFVSlot() },
-                                            modifier = Modifier.weight(1f)
-                                        ) {
-                                            Text(
-                                                "Assign",
-                                                fontWeight = FontWeight.Medium
-                                            )
-                                        }
-
-                                        // View volunteers button (text only)
-                                        StandardButton(
-                                            onClick = { showVolunteersList = true },
-                                            modifier = Modifier.weight(1f)
-                                        ) {
-                                            Text(
-                                                "Volunteers",
-                                                fontWeight = FontWeight.Medium
-                                            )
-                                        }
-                                    }
-
                                     // Schedule content
                                     Box(
                                         modifier = Modifier
@@ -249,7 +279,7 @@ fun ScheduleCreationScreen(
                                             schools = updatedSchools,
                                             onSlotClick = { slot ->
                                                 if (slot.assignedVolunteerId == null) {
-                                                    // For unassigned slots, directly show manual selection
+                                                    // For unassigned slots, show the list of available volunteers
                                                     selectedSlotForManualAssignment = slot
                                                     showManualSelection = true
                                                 } else {
@@ -268,28 +298,100 @@ fun ScheduleCreationScreen(
 
         // Overlays positioned outside the main column
         Box(modifier = Modifier.fillMaxSize()) {
+            // Sliding Assignment Message (Overlay)
+            // Positioned at the top, respecting header space (approx 70-80dp)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 80.dp), // Position below header
+                contentAlignment = Alignment.TopStart
+            ) {
+                 AnimatedVisibility(
+                    visible = showMessage,
+                    enter = slideInHorizontally(initialOffsetX = { -it }),
+                    exit = slideOutHorizontally(targetOffsetX = { -it })
+                ) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                            .shadow(8.dp, RoundedCornerShape(12.dp)),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = NeutralCardSurface
+                        ),
+                        border = BorderStroke(1.dp, YellowAccent.copy(alpha = 0.5f))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .padding(16.dp)
+                                .fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            // Success Icon
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .background(YellowAccent.copy(alpha = 0.2f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = YellowAccent,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+
+                            // Message Text
+                            Text(
+                                text = currentMessage,
+                                color = Color.White,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+            }
+
             // If a slot is selected, show the assignment panel
             currentSlot?.let { slot ->
-                AssignmentPanel(
-                    slot = slot,
-                    volunteers = volunteers,
-                    onAssignManual = { volunteer -> viewModel.assignSpecificVolunteer(volunteer) },
-                    onAssignAutomatic = { viewModel.assignVolunteerToCurrentSlot() },
-                    onClose = { viewModel.selectSlot(null) }
-                )
+                if (slot.assignedVolunteerId != null) {
+                    AssignmentPanel(
+                        slot = slot,
+                        volunteers = volunteers,
+                        onAssignManual = { volunteer, subject -> viewModel.assignSpecificVolunteer(volunteer, slot, subject) },
+                        onAssignAutomatic = { viewModel.assignVolunteerToCurrentSlot() },
+                        onClose = { viewModel.selectSlot(null) }
+                    )
+                }
             }
 
             // Manual volunteer selection dialog
             if (showManualSelection && selectedSlotForManualAssignment != null) {
+                // Determine conflicting volunteers (assigned to other slots at same time)
+                val conflictingVolunteerIds = remember(slots, selectedSlotForManualAssignment) {
+                    val target = selectedSlotForManualAssignment!!
+                    slots.filter { 
+                        it.dayName == target.dayName && 
+                        it.timeLabel == target.timeLabel && 
+                        it.assignedVolunteerId != null &&
+                        it.slotIndex != target.slotIndex // Don't count self if editing
+                    }.mapNotNull { it.assignedVolunteerId }.toSet()
+                }
+
                 ManualVolunteerSelectionDialog(
                     volunteers = volunteers,
                     slot = selectedSlotForManualAssignment!!,
+                    conflictingVolunteerIds = conflictingVolunteerIds,
                     onDismiss = {
                         showManualSelection = false
                         selectedSlotForManualAssignment = null
                     },
-                    onVolunteerSelected = { volunteer ->
-                        viewModel.assignSpecificVolunteer(volunteer, selectedSlotForManualAssignment!!)
+                    onVolunteerSelected = { volunteer, subject ->
+                        viewModel.assignSpecificVolunteer(volunteer, selectedSlotForManualAssignment!!, subject)
                         showManualSelection = false
                         selectedSlotForManualAssignment = null
                     }
@@ -337,8 +439,8 @@ fun ScheduleCreationScreen(
                                 }
                                 snackbarHostState.showSnackbar(message)
 
-                                // Navigate back
-                                navController.navigateUp()
+                                // Navigate back to the main scheduling dashboard
+                                navController.popBackStack("scheduleMaker", inclusive = false)
                             } catch (e: Exception) {
                                 // Hide loading screen and show error
                                 isSavingSchedule = false
@@ -349,11 +451,62 @@ fun ScheduleCreationScreen(
                 )
             }
 
-            // Snackbar host positioned at bottom
+            // FAB for Save action
+            if (!viewModel.isLoading && !isSavingSchedule) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(end = 24.dp, bottom = 48.dp),
+                    contentAlignment = Alignment.BottomEnd
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // Assign FAB
+                        FloatingActionButton(
+                            onClick = {
+                                val assigned = viewModel.assignNextSlotInRoundRobin()
+                                if (!assigned) {
+                                    Log.d("ScheduleCreationScreen", "❌ Step assignment failed - no assignment possible")
+                                    showAutoAssignError = true
+                                }
+                            },
+                            containerColor = Color(0xFF00B0FF), // Light Blue A400 (Vibrant but not too light)
+                            contentColor = Color.Black
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = "Assign Automatically",
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+
+                        // Save FAB
+                        FloatingActionButton(
+                            onClick = {
+                                if (!isSavingSchedule) { // Prevent multiple save operations
+                                    showFinishDialog = true
+                                }
+                            },
+                            containerColor = Color(0xFF4CAF50), // Green color
+                            contentColor = Color.White
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Save,
+                                contentDescription = "Save",
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Snackbar host positioned above bottom navigation
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(16.dp),
+                    .padding(start = 16.dp, end = 16.dp, bottom = 72.dp), // 72dp to clear bottom nav
                 contentAlignment = Alignment.BottomCenter
             ) {
                 SnackbarHost(snackbarHostState)
@@ -387,6 +540,68 @@ fun ScheduleCreationScreen(
                         )
                     }
                 }
+            }
+
+            // Auto-Assign Error Overlay (HIGHEST Z-ORDER - last child of root Box)
+            if (showAutoAssignError) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.7f))
+                        .clickable { /* Consume clicks */ },
+                    contentAlignment = Alignment.Center
+                ) {
+                   Card(
+                       colors = CardDefaults.cardColors(containerColor = NeutralCardSurface),
+                       shape = RoundedCornerShape(16.dp),
+                       modifier = Modifier.padding(32.dp)
+                   ) {
+                       Column(
+                           modifier = Modifier.padding(24.dp),
+                           horizontalAlignment = Alignment.CenterHorizontally
+                       ) {
+                           Text(
+                               text = "Assignment Failed",
+                               color = Color.White,
+                               style = MaterialTheme.typography.titleMedium,
+                               fontWeight = FontWeight.Bold,
+                               modifier = Modifier.padding(bottom = 16.dp)
+                           )
+                           
+                           Text(
+                               text = "No suitable volunteer found that meets all criteria.",
+                               color = Color(0xFFB0B0B0),
+                               style = MaterialTheme.typography.bodyMedium,
+                               textAlign = TextAlign.Center,
+                               modifier = Modifier.padding(bottom = 24.dp)
+                           )
+                           
+                           Button(
+                               onClick = { showAutoAssignError = false },
+                               colors = ButtonDefaults.buttonColors(
+                                   containerColor = YellowAccent,
+                                   contentColor = Color.Black
+                               ),
+                               shape = RoundedCornerShape(8.dp)
+                           ) {
+                               Text(
+                                   text = "OK",
+                                   fontWeight = FontWeight.Bold
+                               )
+                           }
+                       }
+                   }
+                }
+            }
+
+            // Algorithm Log Viewer Dialog
+            if (showAlgorithmLogs) {
+                val logs by viewModel.algorithmLogs.collectAsState()
+                AlgorithmLogDialog(
+                    logs = logs,
+                    onDismiss = { showAlgorithmLogs = false },
+                    onClear = { viewModel.clearLogs() }
+                )
             }
         }
     }
@@ -458,10 +673,16 @@ fun SlotItem(
                             tint = Color.White,
                             modifier = Modifier.size(16.dp)
                         )
-                        // Display first name and last 4 characters of roll number
+                        // Display first name and last 4 characters of roll number + Subject
                         val firstName = slot.assignedVolunteerName?.split(" ")?.firstOrNull() ?: "Assigned"
                         val rollLast4 = slot.assignedVolunteerRollNo?.takeLast(4) ?: ""
-                        val displayText = if (rollLast4.isNotEmpty()) "$firstName ($rollLast4)" else firstName
+                        val subjectAbbr = slot.assignedSubject?.take(3) ?: ""
+                        
+                        val detailsText = if (subjectAbbr.isNotEmpty()) {
+                            if (rollLast4.isNotEmpty()) "$rollLast4 $subjectAbbr" else subjectAbbr
+                        } else rollLast4
+                        
+                        val displayText = if (detailsText.isNotEmpty()) "$firstName ($detailsText)" else firstName
                         Text(
                             text = displayText,
                             style = MaterialTheme.typography.bodySmall,
