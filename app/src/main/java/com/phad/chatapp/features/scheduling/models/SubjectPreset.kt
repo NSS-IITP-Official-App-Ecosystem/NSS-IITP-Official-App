@@ -1,28 +1,6 @@
 package com.phad.chatapp.features.scheduling.models
 
 /**
- * Data model for subject presets
- * Contains the number of classes for each subject
- */
-data class SubjectPreset(
-    val id: String = "",
-    val name: String = "",
-    val createdAt: Long = System.currentTimeMillis(),
-    val subjects: Map<String, Int> = emptyMap(), // Subject code to number of classes
-    val subjectsWithPriority: List<SubjectWithPriority> = emptyList() // Enhanced subject data with priority
-)
-
-/**
- * Subject data with priority information
- */
-data class SubjectWithPriority(
-    val code: String = "",
-    val name: String = "",
-    val classCount: Int = 0,
-    val priority: Int = 999 // Priority level (1 = highest, 999 = lowest/default)
-)
-
-/**
  * Constants for available subjects
  */
 object SubjectConstants {
@@ -63,13 +41,3 @@ object SubjectConstants {
         COMPUTER to "Computer"
     )
 }
-
-/**
- * Data model for schedule and subject preset pairing
- */
-data class ScheduleSubjectPairing(
-    val schedulePresetId: String = "",
-    val schedulePresetName: String = "",
-    val subjectPresetId: String = "",
-    val subjectPresetName: String = ""
-)

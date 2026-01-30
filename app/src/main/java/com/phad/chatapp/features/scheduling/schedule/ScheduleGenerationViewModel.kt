@@ -942,7 +942,11 @@ class ScheduleGenerationViewModel : ViewModel() {
                     _lastAssignmentMessage.value = "Assigned: $volunteerDisplay to $slotInfo"
                     
                     _currentSlot.value = null
-                    return true // STOP after 1 assignment. KEEP currentPreferenceRound same.
+                    
+                    // Reset to Round 1 for next click - always try 1st preferences first
+                    currentPreferenceRound = 0
+                    
+                    return true // STOP after 1 assignment
                 }
             }
 
@@ -1901,7 +1905,7 @@ class ScheduleGenerationViewModel : ViewModel() {
         // Create volunteers list
         val volunteersList = _unassignedVolunteers.value.map { volunteer ->
             mapOf(
-                "rollNo" to volunteer.id,
+                "rollNo" to volunteer.rollNo,
                 "name" to volunteer.name,
                 "group" to volunteer.group,
                 "classCount" to volunteer.classCount
@@ -1970,12 +1974,14 @@ class ScheduleGenerationViewModel : ViewModel() {
             val documentId = "Z_$presetName"
 
             // Create volunteers list for this teaching slot preset
+            // For assigned volunteers, classCount should be 1 (they were assigned 1 class)
+            // Using volunteer.id as it's populated from rollNo during loading
             val volunteersList = volunteers.map { volunteer ->
                 mapOf(
-                    "rollNo" to volunteer.id,
+                    "rollNo" to volunteer.rollNo,
                     "name" to volunteer.name,
                     "group" to volunteer.group,
-                    "classCount" to volunteer.classCount
+                    "classCount" to 1 // Each volunteer was assigned 1 class slot
                 )
             }
 

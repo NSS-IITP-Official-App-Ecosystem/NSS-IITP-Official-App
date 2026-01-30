@@ -653,10 +653,14 @@ object CloneDetectionUtils {
             // Play Store release certificate (from keytool if different from internal)
             val playStoreReleaseCertificateHash = "f17cb7278858d5109a26037b2bb47cd6d5b9e3d7e031b22aa97b03d4ee34d5aa"
             
+            // Firebase App Distribution / Additional release certificate (detected 2026-01-28)
+            val appDistributionCertificateHash = "cb700187cae8c934310a7269375684e6da1de38378621ee335e94623a3abec0e"
+            
             val validHashes = listOf(
                 debugCertificateHash.lowercase(),
                 internalReleaseCertificateHash.lowercase(),
-                playStoreReleaseCertificateHash.lowercase()
+                playStoreReleaseCertificateHash.lowercase(),
+                appDistributionCertificateHash.lowercase()
             )
             
             if (signatureHash != null) {

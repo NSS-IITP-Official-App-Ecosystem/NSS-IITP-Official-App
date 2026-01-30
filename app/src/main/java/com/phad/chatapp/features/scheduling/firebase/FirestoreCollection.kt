@@ -9,7 +9,6 @@ object FirestoreCollection {
     const val VOLUNTEER_AVAILABILITY = "volunteerAvailability"
     const val GENERATED_SCHEDULES = "generatedSchedules"
     const val GENERATE_SCHEDULE = "generateSchedule"
-    const val SUBJECT_PRESETS = "subjectPresets"
     const val SUBJECT_ASSIGNMENTS = "subjectAssignments"
     const val STUDENTS = "ttwStudents"
     const val USERS = "users"

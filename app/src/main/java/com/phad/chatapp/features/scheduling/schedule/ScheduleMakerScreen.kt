@@ -29,7 +29,6 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.ViewList
 import androidx.compose.material.icons.filled.Assignment
 
@@ -113,13 +112,6 @@ fun ScheduleMakerScreen(navController: NavController) {
                         title = "Generate Schedule",
                         description = "Create complete teaching schedule",
                         onClick = { navController.navigate("scheduleGeneration") }
-                    )
-
-                    StaggeredMenuButton(
-                        icon = Icons.Default.School,
-                        title = "Assign Subject",
-                        description = "Assign subjects to sessions",
-                        onClick = { navController.navigate("subjectAssignment") }
                     )
 
                     // View Assignments button
