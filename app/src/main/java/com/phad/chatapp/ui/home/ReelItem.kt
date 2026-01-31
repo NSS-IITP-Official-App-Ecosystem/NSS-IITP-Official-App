@@ -71,16 +71,29 @@ import java.util.Locale
 fun ReelItem(
     update: Update,
     isVisible: Boolean,
-    onUpdateClick: (Update) -> Unit
+    isAdmin: Boolean = false,
+    onUpdateClick: (Update) -> Unit,
+    onEditClick: (Update) -> Unit = {},
+    onDeleteClick: (Update) -> Unit = {}
 ) {
+    var showMenu by remember { mutableStateOf(false) }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
             .clickable { onUpdateClick(update) }
     ) {
-        // Content Layer
-        when {
+        if (update.postType == "text") {
+            TextPostView(
+                update = update,
+                isAdmin = isAdmin,
+                onEditClick = onEditClick,
+                onDeleteClick = onDeleteClick
+            )
+        } else {
+            // Content Layer for Reels
+            when {
             !update.instagramUrl.isNullOrEmpty() -> {
                 InstagramPlayer(instagramUrl = update.instagramUrl!!, isVisible = isVisible)
             }
@@ -231,8 +244,50 @@ fun ReelItem(
                 }
             }
         }
+
+        // Admin Controls (Top Right)
+        if (isAdmin) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+                    .padding(top = 24.dp)
+            ) {
+                androidx.compose.material3.IconButton(
+                    onClick = { showMenu = true }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "Options",
+                        tint = Color.White
+                    )
+                }
+                
+                androidx.compose.material3.DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false }
+                ) {
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { Text("Edit Post") },
+                        onClick = { 
+                            showMenu = false
+                            onEditClick(update)
+                        }
+                    )
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { Text("Delete Post") },
+                        onClick = { 
+                            showMenu = false
+                            onDeleteClick(update)
+                        }
+                    )
+                }
+            }
+        }
+        }
     }
 }
+
 
 @Composable
 fun ExoVideoPlayer(videoUrl: String, isVisible: Boolean) {

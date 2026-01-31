@@ -385,10 +385,16 @@ class HomeFragment : Fragment() {
         val updateContentInput = dialog.findViewById<EditText>(R.id.updateContentInput)
         val updateTitleInput = dialog.findViewById<EditText>(R.id.updateTitleInput)
         val updateLinkInput = dialog.findViewById<EditText>(R.id.updateLinkInput)
-        val attachImageButton = dialog.findViewById<ImageButton>(R.id.attachImageButton)
-        val attachDocumentButton = dialog.findViewById<ImageButton>(R.id.attachDocumentButton)
+        val attachImageButton = dialog.findViewById<com.google.android.material.button.MaterialButton>(R.id.attachImageButton)
+        val attachDocumentButton = dialog.findViewById<com.google.android.material.button.MaterialButton>(R.id.attachDocumentButton)
         val cancelButton = dialog.findViewById<Button>(R.id.cancelButton)
         val postUpdateButton = dialog.findViewById<Button>(R.id.postUpdateButton)
+        
+        // Hide Post Type logic for HomeFragment (Text only)
+        dialog.findViewById<View>(R.id.postTypeLabel)?.visibility = View.GONE
+        dialog.findViewById<View>(R.id.postTypeContainer)?.visibility = View.GONE
+        dialog.findViewById<View>(R.id.reelPostFields)?.visibility = View.GONE
+        dialog.findViewById<View>(R.id.textPostFields)?.visibility = View.VISIBLE
         
         // Hide preview containers initially
         val mediaPreviewContainer = dialog.findViewById<FrameLayout>(R.id.mediaPreviewContainer)

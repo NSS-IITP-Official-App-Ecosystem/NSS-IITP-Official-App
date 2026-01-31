@@ -18,7 +18,11 @@ import com.phad.chatapp.models.Update
 @Composable
 fun ReelFeed(
     updates: List<Update>,
-    onUpdateClick: (Update) -> Unit
+    initialPage: Int = 0,
+    isAdmin: Boolean = false,
+    onUpdateClick: (Update) -> Unit,
+    onEditClick: (Update) -> Unit = {},
+    onDeleteClick: (Update) -> Unit = {}
 ) {
     if (updates.isEmpty()) {
         Box(
@@ -30,7 +34,7 @@ fun ReelFeed(
             Text(text = "No updates available", color = Color.White, fontSize = 18.sp)
         }
     } else {
-        val pagerState = rememberPagerState(pageCount = { updates.size })
+        val pagerState = rememberPagerState(initialPage = initialPage, pageCount = { updates.size })
 
         VerticalPager(
             state = pagerState,
@@ -42,7 +46,10 @@ fun ReelFeed(
             ReelItem(
                 update = updates[page],
                 isVisible = isVisible,
-                onUpdateClick = onUpdateClick
+                isAdmin = isAdmin,
+                onUpdateClick = onUpdateClick,
+                onEditClick = onEditClick,
+                onDeleteClick = onDeleteClick
             )
         }
     }

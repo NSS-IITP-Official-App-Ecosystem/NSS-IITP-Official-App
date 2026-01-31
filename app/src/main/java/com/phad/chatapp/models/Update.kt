@@ -19,6 +19,10 @@ data class Update(
     val mediaUrl: String? = null, // Keep for backward compatibility
     val isVideo: Boolean = false, // New field to identify video updates
     val instagramUrl: String? = null, // Store Instagram Reel/Post URL for native engagement
+    val postType: String = "text", // "reel" or "text" - determines post display mode
+    val hasExternalLink: Boolean = false, // Flag for posts containing clickable links
+    val viewCount: Long = 0, // Track post views for analytics
+    val likeCount: Long = 0, // Track post likes for engagement
     val timestamp: Long = 0,
     val updateType: Int = 1 // 1=Teaching Wing, 2=NSS only, 3=Both
 ) : Serializable {
@@ -38,6 +42,10 @@ data class Update(
         mediaUrl = null,
         isVideo = false, // New field for video updates
         instagramUrl = null, // New field for Instagram URL
+        postType = "text",
+        hasExternalLink = false,
+        viewCount = 0,
+        likeCount = 0,
         timestamp = 0,
         updateType = 1
     )

@@ -5,209 +5,384 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     app:cardCornerRadius="16dp"
-    app:cardElevation="8dp">
+    app:cardElevation="8dp"
+    app:cardBackgroundColor="@android:color/white">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:padding="24dp">
 
+        <!-- Header -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Create Update"
+            android:text="Create Post"
             android:textSize="20sp"
             android:textStyle="bold"
             android:textColor="@android:color/black"
-            android:padding="8dp" />
+            android:paddingBottom="24dp" />
 
-        <!-- Input for update content -->
+        <!-- Post Type Label -->
+        <TextView
+            android:id="@+id/postTypeLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Post Type"
+            android:textSize="14sp"
+            android:textColor="#505050"
+            android:paddingBottom="12dp" />
+
+        <!-- Toggle Buttons Row -->
+        <LinearLayout
+            android:id="@+id/postTypeContainer"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginBottom="24dp"
+            android:orientation="horizontal"
+            android:weightSum="2">
+
+            <!-- Reel Post Button -->
+            <!-- Active State: Purple #5E35B1 (using purple_500), White Text -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/reelPostButton"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:text="Reel Post"
+                android:textAllCaps="false"
+                android:textColor="@android:color/white"
+                android:textSize="14sp"
+                app:icon="@android:drawable/ic_menu_camera"
+                app:iconTint="@android:color/white"
+                app:iconGravity="textStart"
+                app:cornerRadius="12dp"
+                android:backgroundTint="@color/purple_500"
+                app:elevation="0dp"
+                android:layout_marginEnd="8dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"/>
+
+            <!-- Text Post Button -->
+            <!-- Inactive State: Light Gray #F5F5F5, Dark Text -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/textPostButton"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:text="Text Post"
+                android:textAllCaps="false"
+                android:textSize="14sp"
+                android:textColor="#333333"
+                app:icon="@android:drawable/ic_menu_agenda"
+                app:iconTint="#333333"
+                app:iconGravity="textStart"
+                app:cornerRadius="12dp"
+                android:backgroundTint="#F5F5F5"
+                app:elevation="0dp"
+                android:layout_marginStart="8dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"/>
+        </LinearLayout>
+
+        <!-- Title Section -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Title"
+            android:textSize="14sp"
+            android:textColor="#505050"
+            android:layout_marginBottom="8dp" />
+
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:hint="Update content"
-            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
-
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/updateContentInput"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:inputType="textMultiLine"
-                android:minLines="3"
-                android:maxLines="6" />
-        </com.google.android.material.textfield.TextInputLayout>
-
-        <!-- Input for update title -->
-        <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:hint="Title*"
+            app:boxBackgroundMode="outline"
+            app:boxCornerRadiusTopStart="12dp"
+            app:boxCornerRadiusTopEnd="12dp"
+            app:boxCornerRadiusBottomStart="12dp"
+            app:boxCornerRadiusBottomEnd="12dp"
+            app:boxStrokeColor="@color/purple_500"
+            app:hintEnabled="false"
+            android:layout_marginBottom="16dp"
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/updateTitleInput"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:inputType="text"
-                android:maxLines="1" />
+                android:hint="Enter post title"
+                android:inputType="textCapSentences"
+                android:maxLines="1"
+                android:padding="16dp"
+                android:textColor="@android:color/black"
+                android:textColorHint="#9E9E9E"/>
         </com.google.android.material.textfield.TextInputLayout>
 
-        <!-- Input for Instagram Reel/Post Link -->
-        <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:hint="Instagram Reel/Post Link (for Reel)"
-            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
-
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/instagramLinkInput"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:inputType="textUri"
-                android:maxLines="1" />
-        </com.google.android.material.textfield.TextInputLayout>
-
-        <!-- Input for external link -->
-        <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:hint="External link (optional)"
-            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
-
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/updateLinkInput"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:inputType="textUri"
-                android:maxLines="1" />
-        </com.google.android.material.textfield.TextInputLayout>
-
-        <!-- Media preview -->
-        <FrameLayout
-            android:id="@+id/mediaPreviewContainer"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:visibility="gone">
-
-            <ImageView
-                android:id="@+id/mediaPreview"
-                android:layout_width="match_parent"
-                android:layout_height="150dp"
-                android:scaleType="centerCrop"
-                android:contentDescription="Selected media" />
-
-            <ImageButton
-                android:id="@+id/removeMediaButton"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:layout_gravity="top|end"
-                android:background="@drawable/circle_background"
-                android:src="@drawable/ic_close"
-                android:contentDescription="Remove media" />
-        </FrameLayout>
-
-        <!-- Document preview -->
+        <!-- REEL POST FIELDS -->
         <LinearLayout
-            android:id="@+id/documentPreviewContainer"
+            android:id="@+id/reelPostFields"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="16dp"
-            android:padding="8dp"
-            android:background="#F5F5F5"
+            android:orientation="vertical"
             android:visibility="gone">
-
-            <ImageView
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:src="@drawable/ic_attachment"
-                android:contentDescription="Document" />
 
             <TextView
-                android:id="@+id/documentNameText"
-                android:layout_width="0dp"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginStart="8dp"
-                android:layout_gravity="center_vertical"
-                android:ellipsize="middle"
-                android:singleLine="true"
-                android:text="Document name" />
+                android:text="Instagram Reel Link"
+                android:textSize="14sp"
+                android:textColor="#505050"
+                android:layout_marginBottom="8dp" />
 
-            <ImageButton
-                android:id="@+id/removeDocumentButton"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@drawable/ic_close"
-                android:contentDescription="Remove document" />
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:boxBackgroundMode="outline"
+                app:boxCornerRadiusTopStart="12dp"
+                app:boxCornerRadiusTopEnd="12dp"
+                app:boxCornerRadiusBottomStart="12dp"
+                app:boxCornerRadiusBottomEnd="12dp"
+                app:boxStrokeColor="@color/purple_500"
+                app:hintEnabled="false"
+                android:layout_marginBottom="16dp"
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/instagramLinkInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="https://instagram.com/reel/..."
+                    android:inputType="textUri"
+                    android:maxLines="1"
+                    android:padding="16dp"
+                    android:textColor="@android:color/black"
+                    android:textColorHint="#9E9E9E"/>
+            </com.google.android.material.textfield.TextInputLayout>
         </LinearLayout>
 
-        <!-- Attachment options -->
+        <!-- TEXT POST FIELDS -->
+        <LinearLayout
+            android:id="@+id/textPostFields"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Content"
+                android:textSize="14sp"
+                android:textColor="#505050"
+                android:layout_marginBottom="8dp" />
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:boxBackgroundMode="outline"
+                app:boxCornerRadiusTopStart="12dp"
+                app:boxCornerRadiusTopEnd="12dp"
+                app:boxCornerRadiusBottomStart="12dp"
+                app:boxCornerRadiusBottomEnd="12dp"
+                app:boxStrokeColor="@color/purple_500"
+                app:hintEnabled="false"
+                android:layout_marginBottom="16dp"
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/updateContentInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="Enter your text here..."
+                    android:inputType="textMultiLine|textCapSentences"
+                    android:minLines="4"
+                    android:maxLines="8"
+                    android:gravity="top|start"
+                    android:padding="16dp"
+                    android:textColor="@android:color/black"
+                    android:textColorHint="#9E9E9E"/>
+            </com.google.android.material.textfield.TextInputLayout>
+            
+            <!-- External Link -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="External Link (Optional)"
+                android:textSize="14sp"
+                android:textColor="#505050"
+                android:layout_marginBottom="8dp" />
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:boxBackgroundMode="outline"
+                app:boxCornerRadiusTopStart="12dp"
+                app:boxCornerRadiusTopEnd="12dp"
+                app:boxCornerRadiusBottomStart="12dp"
+                app:boxCornerRadiusBottomEnd="12dp"
+                app:boxStrokeColor="@color/purple_500"
+                app:hintEnabled="false"
+                android:layout_marginBottom="16dp"
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/updateLinkInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="https://example.com"
+                    android:inputType="textUri"
+                    android:maxLines="1"
+                    android:padding="16dp"
+                    android:textColor="@android:color/black"
+                    android:textColorHint="#9E9E9E"/>
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <!-- Attachments -->
+             <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="16dp"
+                android:gravity="start">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/attachImageButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Photo"
+                    android:textAllCaps="false"
+                    android:layout_marginEnd="8dp"
+                    app:icon="@android:drawable/ic_menu_camera"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton" 
+                    app:strokeColor="#DDDDDD"
+                    android:textColor="#505050"
+                    app:iconTint="#505050"/>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/attachDocumentButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Doc"
+                    android:textAllCaps="false"
+                    app:icon="@android:drawable/ic_menu_agenda"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    app:strokeColor="#DDDDDD"
+                    android:textColor="#505050"
+                    app:iconTint="#505050"/>
+            </LinearLayout>
+
+            <!-- Media/Document Preview Containers (Same as before) -->
+            <FrameLayout
+                android:id="@+id/mediaPreviewContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:visibility="gone">
+                <ImageView
+                    android:id="@+id/mediaPreview"
+                    android:layout_width="match_parent"
+                    android:layout_height="200dp"
+                    android:scaleType="centerCrop"
+                    android:background="@android:color/darker_gray" />
+                <ImageButton
+                    android:id="@+id/removeMediaButton"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:layout_gravity="top|end"
+                    android:layout_margin="8dp"
+                    android:padding="4dp"
+                    android:src="@android:drawable/ic_menu_close_clear_cancel"
+                    android:background="?attr/selectableItemBackgroundBorderless" />
+            </FrameLayout>
+
+            <LinearLayout
+                android:id="@+id/documentPreviewContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:padding="12dp"
+                android:background="#F5F5F5"
+                android:visibility="gone"
+                android:layout_marginBottom="12dp">
+                 <ImageView
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:src="@android:drawable/ic_menu_agenda" />
+                <TextView
+                    android:id="@+id/documentNamePreview"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_gravity="center_vertical"
+                    android:layout_marginStart="12dp"
+                    android:text="document.pdf"
+                    android:textSize="14sp"
+                    android:ellipsize="middle"
+                    android:maxLines="1" />
+                <ImageButton
+                    android:id="@+id/removeDocumentButton"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:src="@android:drawable/ic_menu_close_clear_cancel"
+                    android:background="?attr/selectableItemBackgroundBorderless" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Cross-Post Checkbox -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#F8F9FA" 
+            android:padding="12dp"
+            android:layout_marginBottom="24dp"
+            android:orientation="horizontal">
+            <!-- Note: Using simple checkbox for now, styled with container -->
+            <CheckBox
+                android:id="@+id/crossPostCheckbox"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Also Post to Teaching Wing Interface"
+                android:textColor="#333333"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <!-- Action Buttons -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="16dp">
+            android:weightSum="2">
 
-            <ImageButton
-                android:id="@+id/attachImageButton"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_weight="1"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@drawable/ic_gallery"
-                android:contentDescription="Attach image" />
-
-            <ImageButton
-                android:id="@+id/attachDocumentButton"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_weight="1"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@drawable/ic_document"
-                android:contentDescription="Attach document" />
-        </LinearLayout>
-
-        <!-- Cross-post checkbox -->
-        <CheckBox
-            android:id="@+id/crossPostCheckbox"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="Also post to Teaching Wing interface"
-            android:textSize="14sp"
-            android:visibility="gone" />
-
-        <!-- Action buttons -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="16dp">
-
-            <Button
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/cancelButton"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="56dp"
                 android:layout_weight="1"
                 android:text="Cancel"
-                style="@style/Widget.MaterialComponents.Button.TextButton" />
+                android:textAllCaps="false"
+                style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
+                android:backgroundTint="#F5F5F5"
+                android:textColor="#333333"
+                app:cornerRadius="12dp"
+                android:layout_marginEnd="8dp"/>
 
-            <Button
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/postUpdateButton"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="56dp"
                 android:layout_weight="1"
-                android:text="Post Update"
-                style="@style/Widget.MaterialComponents.Button.UnelevatedButton" />
+                android:text="Post"
+                android:textAllCaps="false"
+                style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
+                android:backgroundTint="@color/purple_500"
+                android:textColor="@android:color/white"
+                app:cornerRadius="12dp"
+                app:icon="@android:drawable/ic_menu_send"
+                app:iconTint="@android:color/white"
+                app:iconGravity="textStart"
+                android:layout_marginStart="8dp"/>
         </LinearLayout>
 
     </LinearLayout>
-</androidx.cardview.widget.CardView> 
+</androidx.cardview.widget.CardView>

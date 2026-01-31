@@ -3,6 +3,7 @@ package com.phad.chatapp.ui.home
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -16,8 +17,13 @@ import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
@@ -50,7 +56,9 @@ fun HomeScreen(
     state: HomeUiState,
     onChatbotClick: () -> Unit,
     onAddUpdateClick: () -> Unit,
-    onUpdateClick: (Update) -> Unit
+    onUpdateClick: (Update) -> Unit,
+    onEditPost: (Update) -> Unit = {},
+    onDeletePost: (Update) -> Unit = {}
 ) {
     // Debug logging
     android.util.Log.d("HomeScreen", "HomeScreen - Received state: isAdmin=${state.isAdmin}, isNssInterface=${state.isNssInterface}, userName='${state.userName}'")
@@ -202,16 +210,64 @@ fun HomeScreen(
                 }
 
                 // Reel Feed Section - Fills remaining space
+                // Reel Feed Section - First Item Only + Swipe Detector
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
                 ) {
-                    ReelFeed(
-                        updates = state.updates,
-                        onUpdateClick = onUpdateClick
-                    )
+                    var showPostDialog by remember { mutableStateOf(false) }
+
+                    if (state.updates.isNotEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .pointerInput(Unit) {
+                                    detectVerticalDragGestures { change, dragAmount ->
+                                        // Detect Swipe Up (dragAmount is negative)
+                                        if (dragAmount < -20) {
+                                            showPostDialog = true
+                                        }
+                                        change.consume()
+                                    }
+                                }
+                        ) {
+                            // Show ONLY the first item in the main view
+                            ReelItem(
+                                update = state.updates[0],
+                                isVisible = true,
+                                isAdmin = state.isAdmin,
+                                onUpdateClick = { 
+                                    // Clicking also opens the dialog
+                                    showPostDialog = true 
+                                },
+                                onEditClick = onEditPost,
+                                onDeleteClick = onDeletePost
+                            )
+                        }
+                    } else {
+                        // Empty State
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("No updates available", color = Color.White)
+                        }
+                    }
+
+                    // Immersive Dialog Viewer
+                    if (showPostDialog) {
+                         PostViewerDialog(
+                             updates = state.updates,
+                             initialPage = 0, // Always start from top when opened from here
+                             isAdmin = state.isAdmin,
+                             onDismiss = { showPostDialog = false },
+                             onUpdateClick = onUpdateClick,
+                             onEditClick = onEditPost,
+                             onDeleteClick = onDeletePost
+                         )
+                    }
                 }
             }
         }

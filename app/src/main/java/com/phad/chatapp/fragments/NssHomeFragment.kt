@@ -124,12 +124,14 @@ class NssHomeFragment : Fragment() {
                         val intent = Intent(requireContext(), com.phad.chatapp.features.home.faqs.ui.FaqActivity::class.java)
                         startActivity(intent)
                     },
-                    onAddUpdateClick = { showUpdateOptionsDialog() },
+                    onAddUpdateClick = { showCreateUpdateDialog() }, // Fix naming if needed. The internal function is showCreateUpdateDialog
                     onUpdateClick = { update ->
                         val intent = Intent(requireContext(), com.phad.chatapp.activities.UpdateDetailActivity::class.java)
                         intent.putExtra(com.phad.chatapp.activities.UpdateDetailActivity.EXTRA_UPDATE, update)
                         startActivity(intent)
-                    }
+                    },
+                    onEditPost = { update -> showCreateUpdateDialog(update) },
+                    onDeletePost = { update -> confirmDeletePost(update) }
                 )
             }
         }
@@ -288,6 +290,8 @@ class NssHomeFragment : Fragment() {
                         
                         val isVideo = doc.getBoolean("isVideo") ?: false
                         val instagramUrl = doc.getString("instagramUrl")
+                        val postType = doc.getString("postType") ?: "text"
+                        val hasExternalLink = doc.getBoolean("hasExternalLink") ?: false
 
                         var update = Update(
                             id = id,
@@ -304,6 +308,8 @@ class NssHomeFragment : Fragment() {
                             mediaUrl = mediaUrl,
                             isVideo = isVideo,
                             instagramUrl = instagramUrl,
+                            postType = postType,
+                            hasExternalLink = hasExternalLink,
                             timestamp = timestamp,
                             updateType = updateType
                         )
@@ -362,7 +368,7 @@ class NssHomeFragment : Fragment() {
         }
     }
 
-    private fun showCreateUpdateDialog() {
+    private fun showCreateUpdateDialog(existingUpdate: Update? = null) {
         // Initialize the dialog
         createUpdateDialog = Dialog(requireContext()).apply {
             requestWindowFeature(Window.FEATURE_NO_TITLE)
@@ -391,8 +397,8 @@ class NssHomeFragment : Fragment() {
         val updateTitleInput = dialog.findViewById<EditText>(R.id.updateTitleInput)
         val updateLinkInput = dialog.findViewById<EditText>(R.id.updateLinkInput)
         val instagramLinkInput = dialog.findViewById<EditText>(R.id.instagramLinkInput)
-        val attachImageButton = dialog.findViewById<ImageButton>(R.id.attachImageButton)
-        val attachDocumentButton = dialog.findViewById<ImageButton>(R.id.attachDocumentButton)
+        val attachImageButton = dialog.findViewById<com.google.android.material.button.MaterialButton>(R.id.attachImageButton)
+        val attachDocumentButton = dialog.findViewById<com.google.android.material.button.MaterialButton>(R.id.attachDocumentButton)
         val cancelButton = dialog.findViewById<Button>(R.id.cancelButton)
         val postUpdateButton = dialog.findViewById<Button>(R.id.postUpdateButton)
 
@@ -400,6 +406,64 @@ class NssHomeFragment : Fragment() {
         val crossPostCheckbox = dialog.findViewById<android.widget.CheckBox>(R.id.crossPostCheckbox)
         crossPostCheckbox?.visibility = View.VISIBLE
         crossPostCheckbox?.text = "Also post to Teaching Wing interface"
+
+        // Post Type Selector Buttons
+        val reelPostButton = dialog.findViewById<com.google.android.material.button.MaterialButton>(R.id.reelPostButton)
+        val textPostButton = dialog.findViewById<com.google.android.material.button.MaterialButton>(R.id.textPostButton)
+        
+        // Containers for conditional fields
+        val reelPostFields = dialog.findViewById<LinearLayout>(R.id.reelPostFields)
+        val textPostFields = dialog.findViewById<LinearLayout>(R.id.textPostFields)
+        
+        // Variable to track current post type
+        var currentPostType = "text" // Default to text post
+        
+        // Helper to update UI based on type
+        fun updatePostTypeUI(type: String) {
+            currentPostType = type
+            val context = requireContext()
+            val activeColor = androidx.core.content.ContextCompat.getColor(context, R.color.purple_500)
+            val inactiveColor = android.graphics.Color.parseColor("#F5F5F5")
+            val activeText = android.graphics.Color.WHITE
+            val inactiveText = android.graphics.Color.parseColor("#333333")
+
+            if (type == "reel") {
+                // Reel Active
+                reelPostButton.backgroundTintList = android.content.res.ColorStateList.valueOf(activeColor)
+                reelPostButton.setTextColor(activeText)
+                reelPostButton.iconTint = android.content.res.ColorStateList.valueOf(activeText)
+                
+                textPostButton.backgroundTintList = android.content.res.ColorStateList.valueOf(inactiveColor)
+                textPostButton.setTextColor(inactiveText)
+                textPostButton.iconTint = android.content.res.ColorStateList.valueOf(inactiveText)
+                
+                reelPostFields?.visibility = View.VISIBLE
+                textPostFields?.visibility = View.GONE
+                updateContentInput?.isEnabled = false
+                updateLinkInput?.isEnabled = false
+            } else {
+                // Text Active
+                textPostButton.backgroundTintList = android.content.res.ColorStateList.valueOf(activeColor)
+                textPostButton.setTextColor(activeText)
+                textPostButton.iconTint = android.content.res.ColorStateList.valueOf(activeText)
+                
+                reelPostButton.backgroundTintList = android.content.res.ColorStateList.valueOf(inactiveColor)
+                reelPostButton.setTextColor(inactiveText)
+                reelPostButton.iconTint = android.content.res.ColorStateList.valueOf(inactiveText)
+                
+                reelPostFields?.visibility = View.GONE
+                textPostFields?.visibility = View.VISIBLE
+                updateContentInput?.isEnabled = true
+                updateLinkInput?.isEnabled = true
+            }
+        }
+
+        // Set listeners
+        reelPostButton.setOnClickListener { updatePostTypeUI("reel") }
+        textPostButton.setOnClickListener { updatePostTypeUI("text") }
+        
+        // Set initial state
+        updatePostTypeUI("text")
 
         // Hide preview containers initially
         val mediaPreviewContainer = dialog.findViewById<FrameLayout>(R.id.mediaPreviewContainer)
@@ -436,6 +500,24 @@ class NssHomeFragment : Fragment() {
             documentPreviewContainer.visibility = View.GONE
         }
 
+        // Pre-fill if editing
+        if (existingUpdate != null) {
+            updateTitleInput?.setText(existingUpdate.title)
+            updateContentInput?.setText(existingUpdate.content)
+            updateLinkInput?.setText(existingUpdate.externalLink)
+            instagramLinkInput?.setText(existingUpdate.instagramUrl)
+            crossPostCheckbox?.isChecked = (existingUpdate.updateType == 3)
+
+            // Set Post Type
+            if (existingUpdate.postType == "reel" || !existingUpdate.instagramUrl.isNullOrEmpty()) {
+                updatePostTypeUI("reel")
+            } else {
+                updatePostTypeUI("text")
+            }
+
+            postUpdateButton.text = "Update Post"
+        }
+
         // Set up cancel button
         cancelButton.setOnClickListener {
             dialog.dismiss()
@@ -443,63 +525,101 @@ class NssHomeFragment : Fragment() {
 
         // Set up post update button
         postUpdateButton.setOnClickListener {
-            val content = updateContentInput.text.toString().trim()
             val title = updateTitleInput.text.toString().trim()
             
-            if (content.isEmpty()) {
-                Toast.makeText(requireContext(), "Please enter update content", Toast.LENGTH_SHORT).show()
+            // Validation based on post type
+            if (title.isEmpty()) {
+                Toast.makeText(requireContext(), "Please enter a title", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             
-            if (title.isEmpty()) {
-                Toast.makeText(requireContext(), "Please enter update title", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
+            // Reel Post Validation
+            if (currentPostType == "reel") {
+                val instagramLink = instagramLinkInput.text.toString().trim()
+                if (instagramLink.isEmpty()) {
+                    Toast.makeText(requireContext(), "Please enter Instagram Reel/Post URL", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                if (!validateInstagramUrl(instagramLink)) {
+                    Toast.makeText(requireContext(), "Invalid Instagram URL. Use format: instagram.com/reel/ID or instagram.com/p/ID", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+            }
+            
+            // Text Post Validation
+            if (currentPostType == "text") {
+                val content = updateContentInput.text.toString().trim()
+                if (content.isEmpty() && selectedImageUri == null && selectedDocumentUri == null) {
+                    Toast.makeText(requireContext(), "Please enter content or attach media/document", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
             }
             
             // Show loading indicator
             dialog.findViewById<Button>(R.id.postUpdateButton).isEnabled = false
             dialog.findViewById<Button>(R.id.cancelButton).isEnabled = false
             
-            // Create update data
-            val link = updateLinkInput.text.toString().trim()
-            val instagramLink = instagramLinkInput.text.toString().trim()
+            // Prepare post data
+            val content = if (currentPostType == "text") updateContentInput.text.toString().trim() else ""
+            val link = if (currentPostType == "text") updateLinkInput.text.toString().trim() else ""
+            val instagramLink = if (currentPostType == "reel") instagramLinkInput.text.toString().trim() else ""
             val crossPost = crossPostCheckbox?.isChecked ?: false
-
-            // Validate Instagram URL if present
-            var instagramUrl: String? = null
-            if (instagramLink.isNotEmpty()) {
-                if (validateInstagramUrl(instagramLink)) {
-                    instagramUrl = instagramLink
-                } else {
-                    Toast.makeText(requireContext(), "Invalid Instagram URL. Use format: instagram.com/reel/ID or instagram.com/p/ID", Toast.LENGTH_SHORT).show()
-                    dialog.findViewById<Button>(R.id.postUpdateButton).isEnabled = true
-                    dialog.findViewById<Button>(R.id.cancelButton).isEnabled = true
-                    return@setOnClickListener
-                }
+            
+            // Detect if content or link contains URLs
+            val hasExternalLink = when (currentPostType) {
+                "reel" -> false // Reel posts don't have external links (Instagram is the content)
+                "text" -> com.phad.chatapp.utils.PostUtils.containsUrl(content) || link.isNotEmpty()
+                else -> false
+            }
+            
+            // Set Instagram URL for reel posts
+            val instagramUrl = if (currentPostType == "reel" && validateInstagramUrl(instagramLink)) {
+                instagramLink
+            } else {
+                null
             }
 
-            // Upload media if selected
-            if (selectedImageUri != null) {
-                uploadMedia(selectedImageUri!!) { mediaUrl: String ->
-                    // Upload document if selected
-                    if (selectedDocumentUri != null) {
-                        uploadDocument(selectedDocumentUri!!) { documentUrl: String, documentName: String ->
-                            createUpdate(content, title, link, mediaUrl, documentUrl, documentName, false, null, crossPost)
-                        }
-                    } else {
-                        // If both image and Instagram link are present, prioritize image as background or similar? 
-                        // For now we pass both, logic in ReelItem handles priority (Instagram > Media > Image)
-                        createUpdate(content, title, link, mediaUrl, null, null, false, instagramUrl, crossPost)
-                    }
-                }
-            } else if (selectedDocumentUri != null) {
-                uploadDocument(selectedDocumentUri!!) { documentUrl: String, documentName: String ->
-                    createUpdate(content, title, link, null, documentUrl, documentName, false, instagramUrl, crossPost)
-                }
+            val isVideo = !instagramUrl.isNullOrEmpty()
+
+            // Update vs Create Logic
+            if (existingUpdate != null) {
+                 if (selectedImageUri != null) {
+                      uploadMedia(selectedImageUri!!) { mediaUrl: String ->
+                           if (selectedDocumentUri != null) {
+                                uploadDocument(selectedDocumentUri!!) { documentUrl: String, documentName: String ->
+                                     updatePost(existingUpdate, content, title, link, mediaUrl, documentUrl, documentName, isVideo, instagramUrl, currentPostType, hasExternalLink, crossPost)
+                                }
+                           } else {
+                                updatePost(existingUpdate, content, title, link, mediaUrl, existingUpdate.documentUrl, existingUpdate.documentName, isVideo, instagramUrl, currentPostType, hasExternalLink, crossPost)
+                           }
+                      }
+                 } else if (selectedDocumentUri != null) {
+                      uploadDocument(selectedDocumentUri!!) { documentUrl: String, documentName: String ->
+                           val oldMediaUrl = existingUpdate.mediaUrl ?: existingUpdate.imageUrl
+                           updatePost(existingUpdate, content, title, link, oldMediaUrl, documentUrl, documentName, isVideo, instagramUrl, currentPostType, hasExternalLink, crossPost)
+                      }
+                 } else {
+                      val oldMediaUrl = existingUpdate.mediaUrl ?: existingUpdate.imageUrl
+                      updatePost(existingUpdate, content, title, link, oldMediaUrl, existingUpdate.documentUrl, existingUpdate.documentName, isVideo, instagramUrl, currentPostType, hasExternalLink, crossPost)
+                 }
             } else {
-                // If only Instagram link is there
-                val isVideo = instagramUrl != null
-                createUpdate(content, title, link, null, null, null, isVideo, instagramUrl, crossPost)
+                 if (selectedImageUri != null) {
+                     uploadMedia(selectedImageUri!!) { mediaUrl: String ->
+                         if (selectedDocumentUri != null) {
+                             uploadDocument(selectedDocumentUri!!) { documentUrl: String, documentName: String ->
+                                 createUpdate(content, title, link, mediaUrl, documentUrl, documentName, false, null, currentPostType, hasExternalLink, crossPost)
+                             }
+                         } else {
+                             createUpdate(content, title, link, mediaUrl, null, null, false, instagramUrl, currentPostType, hasExternalLink, crossPost)
+                         }
+                     }
+                 } else if (selectedDocumentUri != null) {
+                     uploadDocument(selectedDocumentUri!!) { documentUrl: String, documentName: String ->
+                         createUpdate(content, title, link, null, documentUrl, documentName, false, instagramUrl, currentPostType, hasExternalLink, crossPost)
+                     }
+                 } else {
+                     createUpdate(content, title, link, null, null, null, isVideo, instagramUrl, currentPostType, hasExternalLink, crossPost)
+                 }
             }
         }
 
@@ -507,13 +627,13 @@ class NssHomeFragment : Fragment() {
     }
 
     private fun showUpdateOptionsDialog() {
-        val options = arrayOf("Create New Update", "Delete Update")
+        val options: Array<CharSequence> = arrayOf("Add Post", "Batch Delete Posts")
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("What would you like to do?")
-            .setItems(options) { _, which ->
+            .setTitle("Manage Posts")
+            .setItems(options) { dialog, which ->
                 when (which) {
                     0 -> showCreateUpdateDialog()
-                    1 -> showDeleteUpdateDialog()
+                    1 -> showBatchDeleteDialog()
                 }
             }
             .show()
@@ -679,6 +799,8 @@ class NssHomeFragment : Fragment() {
         documentName: String?,
         isVideo: Boolean = false,
         instagramUrl: String? = null,
+        postType: String = "text",
+        hasExternalLink: Boolean = false,
         crossPost: Boolean = false
     ) {
         val userId = auth.currentUser?.uid ?: return
@@ -716,6 +838,8 @@ class NssHomeFragment : Fragment() {
             mediaUrl = mediaUrl, // Keep for backward compatibility
             isVideo = isVideo,
             instagramUrl = instagramUrl,
+            postType = postType,
+            hasExternalLink = hasExternalLink,
             timestamp = timestamp,
             updateType = updateType
         )
@@ -764,6 +888,148 @@ class NssHomeFragment : Fragment() {
                 createUpdateDialog?.findViewById<Button>(R.id.cancelButton)?.isEnabled = true
             }
     }
+
+    private fun updatePost(
+        originalUpdate: Update,
+        content: String,
+        title: String?,
+        link: String?,
+        mediaUrl: String?,
+        documentUrl: String?,
+        documentName: String?,
+        isVideo: Boolean,
+        instagramUrl: String?,
+        postType: String,
+        hasExternalLink: Boolean,
+        crossPost: Boolean
+    ) {
+        // Determine updateType based on cross-post setting
+        val updateType = if (crossPost) 3 else 2 // 3=Both, 2=NSS only
+
+        val updatedUpdate = originalUpdate.copy(
+            title = title,
+            content = content,
+            externalLink = if (link.isNullOrEmpty()) null else link,
+            mediaUrl = mediaUrl,
+            imageUrl = if (!isVideo) mediaUrl else null,
+            imageName = if (mediaUrl != null && mediaUrl != originalUpdate.mediaUrl) "image_${System.currentTimeMillis()}.jpg" else originalUpdate.imageName,
+            documentUrl = documentUrl,
+            documentName = documentName,
+            isVideo = isVideo,
+            instagramUrl = instagramUrl,
+            postType = postType,
+            hasExternalLink = hasExternalLink,
+            updateType = updateType
+        )
+
+        // Update in NSS collection
+        db.collection("nss_updates").document(originalUpdate.id)
+            .set(updatedUpdate)
+            .addOnSuccessListener {
+                if (crossPost) {
+                    db.collection("updates").document(originalUpdate.id)
+                        .set(updatedUpdate)
+                }
+                Toast.makeText(requireContext(), "Post updated successfully", Toast.LENGTH_SHORT).show()
+                createUpdateDialog?.dismiss()
+                updateCache = null
+                loadUpdates()
+            }
+            .addOnFailureListener { e ->
+                Toast.makeText(requireContext(), "Failed to update: ${e.message}", Toast.LENGTH_SHORT).show()
+                createUpdateDialog?.findViewById<Button>(R.id.postUpdateButton)?.isEnabled = true
+                createUpdateDialog?.findViewById<Button>(R.id.cancelButton)?.isEnabled = true
+            }
+    }
+
+    private fun confirmDeletePost(update: Update) {
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Delete Post?")
+            .setMessage("Are you sure you want to delete '${update.title}'? This action cannot be undone.")
+            .setPositiveButton("Delete") { _, _ ->
+                deletePost(update)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun deletePost(update: Update) {
+        db.collection("nss_updates").document(update.id)
+            .delete()
+            .addOnSuccessListener {
+                // Also delete from general updates if it exists there
+                db.collection("updates").document(update.id).delete()
+                
+                Toast.makeText(requireContext(), "Post deleted", Toast.LENGTH_SHORT).show()
+                updateCache = null
+                loadUpdates()
+            }
+            .addOnFailureListener { e ->
+                Toast.makeText(requireContext(), "Failed to delete: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+    }
+
+    private fun showBatchDeleteDialog() {
+        val updates = uiState.value.updates
+        if (updates.isEmpty()) {
+            Toast.makeText(requireContext(), "No posts to delete", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val titles: Array<CharSequence> = updates.map { 
+            val time = java.text.SimpleDateFormat("dd MMM", java.util.Locale.getDefault()).format(java.util.Date(it.timestamp))
+            "${it.title ?: "Untitled"} ($time)"
+        }.toTypedArray()
+        
+        val checkedItems = BooleanArray(updates.size)
+        val selectedItems = java.util.ArrayList<Int>()
+
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Select Posts to Delete")
+            .setMultiChoiceItems(titles, checkedItems) { dialog, which, isChecked ->
+                if (isChecked) {
+                    selectedItems.add(which)
+                } else {
+                    selectedItems.remove(Integer.valueOf(which))
+                }
+            }
+            .setPositiveButton("Delete Selected") { _, _ ->
+                if (selectedItems.isEmpty()) {
+                    Toast.makeText(requireContext(), "No posts selected", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+
+                MaterialAlertDialogBuilder(requireContext())
+                    .setTitle("Confirm Batch Delete")
+                    .setMessage("Are you sure you want to delete ${selectedItems.size} posts?")
+                    .setPositiveButton("Delete") { _, _ ->
+                        // Loop and delete
+                        var deletedCount = 0
+                        val total = selectedItems.size
+                        
+                        selectedItems.forEach { index ->
+                            if (index < updates.size) {
+                                // Simplified delete for batch to avoid spam
+                                val update = updates[index]
+                                db.collection("nss_updates").document(update.id).delete()
+                                db.collection("updates").document(update.id).delete()
+                            }
+                        }
+                        
+                        Toast.makeText(requireContext(), "Deleting $total posts...", Toast.LENGTH_SHORT).show()
+                        // Delay reload slightly to allow deletions to propagate
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            updateCache = null
+                            loadUpdates()
+                        }, 1000)
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
 
     private fun sendUpdateNotification(update: Update) {
         Log.d(TAG, "Preparing to send update notification for update: ${update.id} with updateType: ${update.updateType}")
@@ -918,93 +1184,5 @@ class NssHomeFragment : Fragment() {
         createUpdateDialog = null
     }
 
-    private fun showDeleteUpdateDialog() {
-        // Load existing updates for deletion from NSS updates collection
-        db.collection("nss_updates")
-            .orderBy("timestamp", Query.Direction.DESCENDING)
-            .limit(20) // Show last 20 updates
-            .get()
-            .addOnSuccessListener { documents ->
-                if (documents.isEmpty) {
-                    Toast.makeText(requireContext(), "No updates found to delete", Toast.LENGTH_SHORT).show()
-                    return@addOnSuccessListener
-                }
-                
-                val updates = documents.toObjects(Update::class.java)
-                val updateTitles = updates.map { update ->
-                    val title = update.title ?: "Untitled"
-                    val content = (update.content ?: "").take(50)
-                    val timestamp = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault())
-                        .format(java.util.Date(update.timestamp))
-                    "$title: $content... (Posted: $timestamp)"
-                }.toTypedArray()
-                
-                MaterialAlertDialogBuilder(requireContext())
-                    .setTitle("Select Update to Delete")
-                    .setItems(updateTitles) { _, which ->
-                        val selectedUpdate = updates[which]
-                        showDeleteConfirmationDialog(selectedUpdate)
-                    }
-                    .setNegativeButton("Cancel") { dialog, _ ->
-                        dialog.dismiss()
-                    }
-                    .show()
-            }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "Error loading updates for deletion", e)
-                Toast.makeText(requireContext(), "Failed to load updates: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
-            }
-    }
-    
-    private fun showDeleteConfirmationDialog(update: Update) {
-        val message = "Are you sure you want to delete this update?\n\n" +
-                "Title: ${update.title ?: "Untitled"}\n" +
-                "Content: ${(update.content ?: "").take(100)}...\n" +
-                "Posted by: ${update.authorName}\n" +
-                "Posted on: ${java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(update.timestamp))}"
-        
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Confirm Deletion")
-            .setMessage(message)
-            .setPositiveButton("Delete") { dialog, _ ->
-                deleteUpdate(update)
-                dialog.dismiss()
-            }
-            .setNegativeButton("Cancel") { dialog, _ ->
-                dialog.dismiss()
-            }
-            .show()
-    }
-    
-    private fun deleteUpdate(update: Update) {
-        // Delete from NSS updates collection first
-        db.collection("nss_updates").document(update.id)
-            .delete()
-            .addOnSuccessListener {
-                // If this was a cross-posted update (updateType = 3), also delete from the regular updates collection
-                if (update.updateType == 3) {
-                    db.collection("updates").document(update.id)
-                        .delete()
-                        .addOnSuccessListener {
-                            Toast.makeText(requireContext(), "Update deleted from both NSS and Teaching Wing", Toast.LENGTH_SHORT).show()
-                            updateCache = null
-                            loadUpdates()
-                        }
-                        .addOnFailureListener { e ->
-                            Log.e(TAG, "Error deleting cross-posted update: ${e.localizedMessage}", e)
-                            Toast.makeText(requireContext(), "Update deleted from NSS but failed to delete from Teaching Wing", Toast.LENGTH_SHORT).show()
-                            updateCache = null
-                            loadUpdates()
-                        }
-                } else {
-                    Toast.makeText(requireContext(), "Update deleted successfully", Toast.LENGTH_SHORT).show()
-                    updateCache = null
-                    loadUpdates()
-                }
-            }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "Error deleting update", e)
-                Toast.makeText(requireContext(), "Failed to delete update: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
-            }
-    }
+
 } 
