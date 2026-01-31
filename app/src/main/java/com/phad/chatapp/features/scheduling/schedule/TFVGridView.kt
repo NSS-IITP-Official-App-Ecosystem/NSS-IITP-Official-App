@@ -16,6 +16,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,6 +29,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import com.phad.chatapp.features.scheduling.models.SubjectAllocation
 import com.phad.chatapp.features.scheduling.ui.theme.DarkSurface
 import com.phad.chatapp.features.scheduling.ui.theme.NeutralCardSurface
 import com.phad.chatapp.features.scheduling.ui.theme.YellowAccent
@@ -303,7 +309,7 @@ fun TFVScheduleView(
         verticalArrangement = Arrangement.spacedBy(16.dp), // UI.md card spacing
         contentPadding = PaddingValues(
             top = 16.dp,
-            bottom = 100.dp // Extra padding to avoid bottom navigation bar
+            bottom = 150.dp // Extra padding to avoid bottom navigation bar and FABs
         )
     ) {
         // Process each school
@@ -324,6 +330,11 @@ fun SchoolCard(
     school: School,
     onSlotClick: (Slot) -> Unit
 ) {
+    var showSubjectInfoDialog by remember { mutableStateOf(false) }
+    
+    // Extract subjects from first slot (all slots have same subjects for a school)
+    val subjects = school.days.firstOrNull()?.slots?.firstOrNull()?.subjectPriorities ?: emptyList()
+    
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -331,18 +342,50 @@ fun SchoolCard(
             .clip(RoundedCornerShape(16.dp))
             .padding(16.dp)
     ) {
-        Text(
-            text = school.name,
-            style = MaterialTheme.typography.titleLarge, // UI.md section header style
-            color = YellowAccent,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 16.dp) // UI.md section spacing
-        )
+        // School name header with info button
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = school.name,
+                style = MaterialTheme.typography.titleLarge,
+                color = YellowAccent,
+                fontWeight = FontWeight.Bold
+            )
+            
+            // Show info button only if subjects are available
+            if (subjects.isNotEmpty()) {
+                IconButton(
+                    onClick = { showSubjectInfoDialog = true },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Info,
+                        contentDescription = "Show subject information",
+                        tint = YellowAccent,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+        }
 
         // Convert the school's days and slots into a table structure
         TableScheduleView(
             school = school,
             onSlotClick = onSlotClick
+        )
+    }
+    
+    // Subject info dialog
+    if (showSubjectInfoDialog) {
+        SchoolSubjectInfoDialog(
+            schoolName = school.name,
+            subjects = subjects,
+            onDismiss = { showSubjectInfoDialog = false }
         )
     }
 }
@@ -402,7 +445,7 @@ fun TableScheduleView(
                 allSlotTimes.forEach { timeLabel ->
                     Box(
                         modifier = Modifier
-                            .width(80.dp) // Fixed width for consistent sizing
+                            .width(96.dp) // Fixed width for consistent sizing
                             .padding(horizontal = 2.dp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -485,7 +528,7 @@ fun TableRow(
                     TableCell(
                         slot = slot,
                         modifier = Modifier
-                            .width(80.dp) // Fixed width for consistent sizing
+                            .width(96.dp) // Fixed width for consistent sizing
                             .padding(horizontal = 2.dp),
                         onClick = { onSlotClick(slot) }
                     )
@@ -493,7 +536,7 @@ fun TableRow(
                     // Empty cell with fixed dimensions
                     Box(
                         modifier = Modifier
-                            .width(80.dp) // Fixed width for consistent sizing
+                            .width(96.dp) // Fixed width for consistent sizing
                             .height(48.dp)
                             .padding(horizontal = 2.dp)
                             .background(Color(0xFF1E1E1E), RoundedCornerShape(4.dp))
@@ -557,9 +600,11 @@ fun TableCell(
                     )
                 }
             } else {
-                // Display first name and last 4 digits of roll number for assigned slots
+                // Display first name and last 4 digits of roll number + Subject for assigned slots
                 val firstName = slot.assignedVolunteerName?.split(" ")?.firstOrNull() ?: "Volunteer"
                 val rollLast4 = slot.assignedVolunteerRollNo?.takeLast(4) ?: ""
+                val subjectAbbr = slot.assignedSubject?.take(3) ?: ""
+                val secondLine = if (subjectAbbr.isNotEmpty() && rollLast4.isNotEmpty()) "$rollLast4 $subjectAbbr" else rollLast4 + subjectAbbr
 
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -575,9 +620,9 @@ fun TableCell(
                         overflow = TextOverflow.Ellipsis
                     )
 
-                    if (rollLast4.isNotEmpty()) {
+                    if (secondLine.isNotEmpty()) {
                         Text(
-                            text = rollLast4,
+                            text = secondLine,
                             style = MaterialTheme.typography.labelSmall, // Even smaller font for roll number
                             color = Color.White.copy(alpha = 0.8f), // Slightly transparent
                             fontWeight = FontWeight.Normal,
@@ -609,5 +654,192 @@ fun ColorLegendItem(color: Color, text: String) {
             style = MaterialTheme.typography.bodySmall,
             fontSize = 10.sp
         )
+    }
+}
+
+/**
+ * Dialog displaying subject information for a school in Create Schedule screen
+ */
+@Composable
+fun SchoolSubjectInfoDialog(
+    schoolName: String,
+    subjects: List<SubjectAllocation>,
+    onDismiss: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth(0.9f)
+                .wrapContentHeight(),
+            colors = CardDefaults.cardColors(
+                containerColor = NeutralCardSurface
+            ),
+            shape = RoundedCornerShape(16.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp)
+            ) {
+                // Header
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Subject Information",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = schoolName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = YellowAccent,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+
+                // Subject list header
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Subject",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFFB0B0B0),
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = "Classes",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFFB0B0B0),
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.width(80.dp)
+                    )
+                }
+
+                HorizontalDivider(
+                    modifier = Modifier.padding(bottom = 12.dp),
+                    color = Color(0xFF3A3A3A)
+                )
+
+                // Sort subjects by:
+                // 1. Available classes (count > 0) first
+                // 2. Then by priority (ascending, 1 = highest)
+                val sortedSubjects = subjects.sortedWith(
+                    compareBy(
+                        { if (it.classCount > 0) 0 else 1 }, // Available subjects first
+                        { it.priority } // Then by priority (1 = highest)
+                    )
+                )
+
+                if (sortedSubjects.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No subjects available",
+                            color = Color(0xFFB0B0B0),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(sortedSubjects) { subject ->
+                            SchoolSubjectInfoItem(
+                                subjectName = subject.subjectName,
+                                classCount = subject.classCount,
+                                priority = subject.priority
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Individual subject info item for school subjects
+ */
+@Composable
+fun SchoolSubjectInfoItem(
+    subjectName: String,
+    classCount: Int,
+    priority: Int
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = Color(0xFF1E1E1E)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = subjectName,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color.White,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = "Priority: $priority",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFFB0B0B0)
+                )
+            }
+
+            // Class count badge
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = if (classCount > 0) YellowAccent else Color(0xFF9E9E9E)
+            ) {
+                Text(
+                    text = classCount.toString(),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.Black,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
+        }
     }
 }

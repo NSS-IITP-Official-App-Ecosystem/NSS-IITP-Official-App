@@ -16,7 +16,8 @@ data class VolunteerPreset(
 data class VolunteerInfo(
     val rollNo: String = "",
     val name: String = "",
-    val group: String = ""
+    val group: String = "",
+    val classCount: Int = 0  // Number of classes this volunteer can teach
 )
 
 // Detailed information about a volunteer assignment

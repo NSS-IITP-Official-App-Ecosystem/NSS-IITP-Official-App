@@ -23,11 +23,7 @@ import com.phad.chatapp.features.scheduling.schedule.TeachingSlotsOptionsScreen
 import com.phad.chatapp.features.scheduling.schedule.TeachingSlotsScreen
 import com.phad.chatapp.features.scheduling.schedule.ScheduleGenerationScreen
 import com.phad.chatapp.features.scheduling.schedule.ScheduleCreationScreen
-import com.phad.chatapp.features.scheduling.schedule.SubjectAssignmentScreen
-import com.phad.chatapp.features.scheduling.schedule.SubjectPresetSelectionScreen
-import com.phad.chatapp.features.scheduling.schedule.SubjectAssignmentGridScreen
 import com.phad.chatapp.features.scheduling.schedule.ViewAssignmentsScreen
-import com.phad.chatapp.features.scheduling.schedule.ManageSubjectsScreen
 
 /**
  * Main composable for the Scheduling feature.
@@ -77,24 +73,11 @@ fun AppNavigation(
         composable("availabilityOptions") {
             AvailabilityOptionsScreen(navController = navController)
         }
-        composable("subjectAssignment") {
-            SubjectAssignmentScreen(navController = navController)
-        }
+
         composable("viewAssignments") {
             ViewAssignmentsScreen(navController = navController)
         }
-        composable("subjectPresetSelection") {
-            SubjectPresetSelectionScreen(navController = navController)
-        }
-        composable("subjectAssignmentGrid/{scheduleIds}/{pairingData}") { backStackEntry ->
-            val scheduleIds = backStackEntry.arguments?.getString("scheduleIds") ?: ""
-            val pairingData = backStackEntry.arguments?.getString("pairingData") ?: ""
-            SubjectAssignmentGridScreen(
-                navController = navController,
-                scheduleIds = scheduleIds,
-                pairingData = pairingData
-            )
-        }
+
         composable("volunteerPresets") {
             VolunteerPresetsScreen(navController = navController)
         }
@@ -139,17 +122,7 @@ fun AppNavigation(
                 vaIds = vaIds
             )
         }
-        composable("manageSubjects") {
-            ManageSubjectsScreen(
-                navController = navController,
-                onBackClick = onBackClick
-            )
-        }
-        composable("subjectPreference") {
-            com.phad.chatapp.features.scheduling.schedule.SubjectPreferenceScreen(
-                navController = navController,
-                onBackClick = onBackClick
-            )
-        }
+
+
     }
 } 

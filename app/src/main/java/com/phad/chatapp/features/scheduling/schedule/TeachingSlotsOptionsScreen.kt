@@ -80,17 +80,12 @@ suspend fun deleteAvailabilityData(
 ) {
     try {
         val db = FirebaseFirestore.getInstance()
-        val docRef = db.collection(VOLUNTEER_AVAILABILITY_COLLECTION).document(presetName)
+        val docRef = db.collection(TEACHING_SLOT_PRESETS_COLLECTION).document(presetId)
 
-        // Check if document exists
-        val docSnapshot = docRef.get().await()
-        if (docSnapshot.exists()) {
-            // Delete the document
-            docRef.delete().await()
-            onSuccess(presetId, presetName)
-        } else {
-            onError("No availability data found for $presetName")
-        }
+        // Delete the availability field using FieldValue.delete()
+        docRef.update("availability", com.google.firebase.firestore.FieldValue.delete()).await()
+        onSuccess(presetId, presetName)
+
     } catch (e: Exception) {
         Log.e(TAG, "Error deleting availability data", e)
         onError("Error: ${e.message}")
@@ -136,39 +131,38 @@ fun TeachingSlotsOptionsScreen(
     ) {
         Scaffold(
             topBar = {
-                TopAppBar(
-                        title = {
-                            Text(
-                                "Select Teaching Slots Preset",
-                                style = MaterialTheme.typography.titleLarge.copy(
-                                    fontSize = 22.sp // UI.md title font size
-                                ),
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(start = 8.dp) // UI.md title padding
-                            )
-                        },
-                        navigationIcon = {
-                            IconButton(
-                                onClick = { navController.navigateUp() },
-                                modifier = Modifier
-                                    .padding(8.dp) // UI.md navigation icon padding
-                                    .size(48.dp) // UI.md back button container size
-                            ) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Back",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(28.dp) // UI.md back arrow size
-                                )
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = Color.Transparent // UI.md transparent background
-                        ),
-                        modifier = Modifier.padding(top = 8.dp, bottom = 8.dp), // UI.md TopAppBar padding
-                        windowInsets = WindowInsets(0, 0, 0, 0)
+                // Header layout matching VolunteerPresetsScreen
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp, bottom = 8.dp) // TTW UI plan TopAppBar padding
+                        .padding(start = 4.dp, end = 20.dp), // Less padding at start for Back button
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Back button
+                    IconButton(
+                        onClick = { navController.navigateUp() },
+                        modifier = Modifier.size(48.dp) // TTW UI plan: 48dp touch target
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp) // TTW UI plan: 24dp icon size
+                        )
+                    }
+
+                    // Title
+                    Text(
+                        text = "Teaching Slots Presets",
+                        style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp),
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 8.dp)
                     )
+                }
             },
             containerColor = Color.Transparent,
             snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -178,7 +172,7 @@ fun TeachingSlotsOptionsScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
-                    .padding(horizontal = 20.dp, vertical = 16.dp) // UI.md content spacing: 20dp horizontal, 16dp vertical
+                    .padding(horizontal = 20.dp, vertical = 4.dp) // Reduced vertical padding to minimize space between header and cards
             ) {
 
 
@@ -288,7 +282,7 @@ fun TeachingSlotsOptionsScreen(
                                         .fillMaxWidth()
                                         .weight(1f),
                                     verticalArrangement = Arrangement.spacedBy(16.dp), // UI.md card spacing
-                                    contentPadding = PaddingValues(vertical = 16.dp) // UI.md content padding
+                                    contentPadding = PaddingValues(vertical = 4.dp) // Reduced vertical padding to minimize space between header and cards
                                 ) {
                                     items(presets.size) { index ->
                                         val preset = presets[index]
@@ -373,25 +367,25 @@ fun GroupFrequencyDisplay(
                         horizontalArrangement = Arrangement.spacedBy(6.dp) // Consistent 6dp spacing between chips
                     ) {
                         lineGroups.forEach { (group, count) ->
-                            // Group frequency chip with standardized dimensions
+                            // Group frequency chip - matching VolunteerPresetsScreen styling
                             Surface(
-                                shape = RoundedCornerShape(8.dp), // UI.md corner radius for compact look
-                                color = YellowAccent, // UI.md yellow accent color to match reference
+                                shape = RoundedCornerShape(8.dp), // TTW UI plan: 8dp corner radius
+                                color = YellowAccent, // TTW UI plan: YellowAccent background
                                 modifier = Modifier
                                     .padding(vertical = 2.dp)
-                                    .width(56.dp) // Standardized width for all chips
-                                    .height(28.dp) // Standardized height for all chips
+                                    .width(60.dp) // TTW UI plan: 60dp width
+                                    .height(28.dp) // TTW UI plan: 28dp height
                             ) {
                                 Box(
-                                    contentAlignment = Alignment.Center, // Center text within the standardized chip
+                                    contentAlignment = Alignment.Center, // TTW UI plan: centered text
                                     modifier = Modifier.fillMaxSize()
                                 ) {
                                     Text(
                                         text = "Gp $group: $count",
-                                        style = MaterialTheme.typography.bodySmall, // UI.md typography for secondary info
-                                        color = Color.Black, // Black text on yellow background for contrast
-                                        fontWeight = FontWeight.Medium,
-                                        textAlign = TextAlign.Center, // Center align text
+                                        style = MaterialTheme.typography.bodySmall, // Matching VolunteerPresetsScreen
+                                        color = Color.Black, // TTW UI plan: black text on yellow background
+                                        fontWeight = FontWeight.Medium, // Matching VolunteerPresetsScreen
+                                        textAlign = TextAlign.Center, // TTW UI plan: centered alignment
                                         maxLines = 1, // Ensure single line
                                         overflow = TextOverflow.Ellipsis // Handle overflow gracefully
                                     )
@@ -540,52 +534,36 @@ private fun expandGroupRanges(groupString: String): List<String> {
     return expandedGroups
 }
 
-// Helper function to calculate group frequencies from availability data
-suspend fun calculateGroupFrequencies(presetName: String): Map<String, Int> {
-    return try {
-        val db = FirebaseFirestore.getInstance()
-        val availabilityDoc = db.collection(VOLUNTEER_AVAILABILITY_COLLECTION)
-            .document(presetName)
-            .get()
-            .await()
+// Helper function to calculate group frequencies from availability map
+fun calculateGroupFrequenciesFromMap(availabilityMap: Map<String, Map<String, String>>): Map<String, Int> {
+    val groupFrequencies = mutableMapOf<String, Int>()
 
-        val groupFrequencies = mutableMapOf<String, Int>()
+    try {
+        // Iterate through each day's availability
+        for ((_, dayAvailability) in availabilityMap) {
+            // Iterate through each slot in the day
+            for ((_, groupsString) in dayAvailability) {
+                if (groupsString.isNotEmpty()) {
+                    // Split the groups string and process each entry
+                    val groupEntries = groupsString.split(",").map { it.trim() }.filter { it.isNotEmpty() }
 
-        if (availabilityDoc.exists()) {
-            try {
-                // Get the availability map from the document
-                val availabilityMap = availabilityDoc.get("availability") as? Map<String, Map<String, String>> ?: emptyMap()
-
-                // Iterate through each day's availability
-                for ((dayName, dayAvailability) in availabilityMap) {
-                    // Iterate through each slot in the day
-                    for ((slotIndex, groupsString) in dayAvailability) {
-                        if (groupsString.isNotEmpty()) {
-                            // Split the groups string and process each entry
-                            val groupEntries = groupsString.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-
-                            for (groupEntry in groupEntries) {
-                                // Expand ranges and count each individual group
-                                val expandedGroups = expandGroupRanges(groupEntry)
-                                for (group in expandedGroups) {
-                                    if (group.isNotEmpty()) {
-                                        groupFrequencies[group] = (groupFrequencies[group] ?: 0) + 1
-                                    }
-                                }
+                    for (groupEntry in groupEntries) {
+                        // Expand ranges and count each individual group
+                        val expandedGroups = expandGroupRanges(groupEntry)
+                        for (group in expandedGroups) {
+                            if (group.isNotEmpty()) {
+                                groupFrequencies[group] = (groupFrequencies[group] ?: 0) + 1
                             }
                         }
                     }
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error processing availability document: ${availabilityDoc.id}", e)
             }
         }
-
-        groupFrequencies
     } catch (e: Exception) {
-        Log.e(TAG, "Error calculating group frequencies for preset $presetName", e)
-        emptyMap()
+        Log.e(TAG, "Error calculating group frequencies", e)
     }
+
+    return groupFrequencies
 }
 
 // Function to fetch teaching slot presets from Firestore
@@ -613,17 +591,13 @@ suspend fun fetchTeachingSlotsWithAvailabilityData(
                 // Get schedule data for day count
                 val scheduleData = document.get("schedule") as? List<Map<String, Any>> ?: emptyList()
 
-                // Check if there's availability data for this preset using preset name as document ID
-                val availabilityDoc = db.collection(VOLUNTEER_AVAILABILITY_COLLECTION)
-                    .document(name)
-                    .get()
-                    .await()
-
-                val hasAvailabilityData = availabilityDoc.exists()
+                // Check for availability data directly in the document
+                val availabilityMap = document.get("availability") as? Map<String, Map<String, String>>
+                val hasAvailabilityData = availabilityMap != null && availabilityMap.isNotEmpty()
 
                 // Calculate group frequencies if availability data exists
-                val groupFrequencies = if (hasAvailabilityData) {
-                    calculateGroupFrequencies(name)
+                val groupFrequencies = if (hasAvailabilityData && availabilityMap != null) {
+                    calculateGroupFrequenciesFromMap(availabilityMap)
                 } else {
                     emptyMap()
                 }

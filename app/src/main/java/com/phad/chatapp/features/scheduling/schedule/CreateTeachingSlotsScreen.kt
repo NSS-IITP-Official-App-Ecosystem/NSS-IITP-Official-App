@@ -3,6 +3,7 @@ package com.phad.chatapp.features.scheduling.schedule
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -22,6 +23,10 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,6 +36,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -71,6 +77,7 @@ import kotlinx.coroutines.tasks.await
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import kotlin.math.roundToInt
 
 // Standardized Button Design System
 object StandardButtonDefaults {
@@ -123,6 +130,134 @@ fun StandardButton(
         contentPadding = StandardButtonDefaults.contentPadding,
         content = content
     )
+}
+
+// Swipe Wheel Picker Component
+@Composable
+fun SwipeWheelPicker(
+    items: List<String>,
+    selectedIndex: Int,
+    onSelectedIndexChange: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    itemHeight: Int = 48
+) {
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = selectedIndex)
+    val coroutineScope = rememberCoroutineScope()
+    
+    // Detect when scrolling stops and snap to nearest item
+    LaunchedEffect(listState.isScrollInProgress) {
+        if (!listState.isScrollInProgress) {
+            val firstVisibleIndex = listState.firstVisibleItemIndex
+            val firstVisibleOffset = listState.firstVisibleItemScrollOffset
+            
+            // Determine which item to snap to
+            val snapToIndex = if (firstVisibleOffset > itemHeight / 2) {
+                (firstVisibleIndex + 1).coerceIn(0, items.size - 1)
+            } else {
+                firstVisibleIndex
+            }
+            
+            if (snapToIndex != selectedIndex) {
+                onSelectedIndexChange(snapToIndex)
+            }
+            listState.animateScrollToItem(snapToIndex)
+        }
+    }
+    
+    Box(
+        modifier = modifier
+            .height((itemHeight * 3).dp)
+            .width(70.dp)
+    ) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(vertical = itemHeight.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            items(items.size) { index ->
+                val isSelected = index == selectedIndex
+                Box(
+                    modifier = Modifier
+                        .height(itemHeight.dp)
+                        .fillMaxWidth()
+                        .clickable {
+                            onSelectedIndexChange(index)
+                            coroutineScope.launch {
+                                listState.animateScrollToItem(index)
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = items[index],
+                        fontSize = if (isSelected) 28.sp else 18.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        color = if (isSelected) YellowAccent else Color.White.copy(alpha = 0.5f),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+        
+        // Selection indicator
+        Box(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .fillMaxWidth()
+                .height(itemHeight.dp)
+                .border(
+                    width = 2.dp,
+                    color = YellowAccent.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(8.dp)
+                )
+        )
+    }
+}
+
+// Time Wheel Picker combining Hour and Minute wheels
+@Composable
+fun TimeWheelPicker(
+    hour: Int,
+    minute: Int,
+    onTimeChange: (Int, Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val hours = (0..23).map { String.format("%02d", it) }
+    val minutes = (0..59).map { String.format("%02d", it) }
+    
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+        // Hour picker
+        SwipeWheelPicker(
+            items = hours,
+            selectedIndex = hour,
+            onSelectedIndexChange = { newHour ->
+                onTimeChange(newHour, minute)
+            }
+        )
+        
+        // Colon separator
+        Text(
+            text = ":",
+            fontSize = 32.sp,
+            fontWeight = FontWeight.Bold,
+            color = YellowAccent,
+            modifier = Modifier.padding(horizontal = 8.dp)
+        )
+        
+        // Minute picker
+        SwipeWheelPicker(
+            items = minutes,
+            selectedIndex = minute,
+            onSelectedIndexChange = { newMinute ->
+                onTimeChange(hour, newMinute)
+            }
+        )
+    }
 }
 
 // Data structure for time slot information with both class and free group times
@@ -190,9 +325,9 @@ fun CreateTeachingSlotsScreen(
     var sectionExpanded by remember { mutableStateOf(false) }
 
     // Dropdown options
-    val schoolCodes = listOf("RP", "AM", "UB", "FA", "KV", "TPS")
+    val schoolCodes = listOf("RP", "AM", "DP", "UB", "FA", "KV", "TPS")
     val classes = listOf("6", "7", "8", "9", "10", "11", "12")
-    val sections = listOf("B", "G", "N")
+    val sections = listOf("B", "G", "N", "A", "B", "C")
 
     // Generate preset name from selections
     val generatedPresetName = if (selectedSchoolCode.isNotEmpty() && selectedClass.isNotEmpty() && selectedSection.isNotEmpty()) {
@@ -214,6 +349,8 @@ fun CreateTeachingSlotsScreen(
     var subjectsList by remember { mutableStateOf<List<SubjectAllocation>>(emptyList()) }
     var availableSubjects by remember { mutableStateOf<List<String>>(emptyList()) }
     var showSubjectDialog by remember { mutableStateOf(false) }
+
+    var showCopyDialog by remember { mutableStateOf(false) }
 
     val daysOfWeek = listOf("Mon", "Tue", "Wed", "Thu", "Fri")
 
@@ -458,13 +595,14 @@ fun CreateTeachingSlotsScreen(
                         selectedDays = days
                         teachingSchedule = loadedSchedule
                         
-                        // Get subjects
+                        // Get subjects and sort by priority
                         val subjectsData = document.get("subjects") as? List<Map<String, Any>> ?: emptyList()
                         subjectsList = subjectsData.mapNotNull { map ->
                             val name = map["subjectName"] as? String
                             val count = (map["classCount"] as? Number)?.toInt() ?: 0
-                            if (name != null) SubjectAllocation(name, count) else null
-                        }
+                            val priority = (map["priority"] as? Number)?.toInt() ?: 0
+                            if (name != null) SubjectAllocation(name, count, priority) else null
+                        }.sortedBy { it.priority }
                     } else {
                         Log.e("CreateTeachingSlotsScreen", "Document does not exist for ID: $id")
                         saveErrorMessage = "Preset not found"
@@ -685,11 +823,12 @@ fun CreateTeachingSlotsScreen(
             )
         }
         
-        // Convert subjectsList to saveable format
-        val subjectsData = subjectsList.map { subject ->
+        // Convert subjectsList to saveable format with priority
+        val subjectsData = subjectsList.mapIndexed { index, subject ->
             mapOf(
                 "subjectName" to subject.subjectName,
-                "classCount" to subject.classCount
+                "classCount" to subject.classCount,
+                "priority" to (index + 1)  // Priority starts from 1
             )
         }
 
@@ -769,53 +908,55 @@ fun CreateTeachingSlotsScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 16.dp)
-                    .padding(top = 16.dp)
             ) {
                 // Top bar
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 16.dp),
+                        .padding(top = 16.dp, bottom = 8.dp)
+                        .padding(start = 4.dp, end = 20.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Back button
                     IconButton(
                         onClick = { navController.navigateUp() },
-                        modifier = Modifier.padding(end = 8.dp)
+                        modifier = Modifier.size(48.dp)
                     ) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
-                            tint = Color.White
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
                         )
                     }
 
                     // Title
                     Text(
                         text = if (isEditMode) "Edit Slots Preset" else "Create Slots Preset",
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp),
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 8.dp)
                     )
 
-                    // Save button - only show when grid exists
-                    if (teachingSchedule.isNotEmpty()) {
-                        StandardButton(
-                            onClick = {
-                                if (validateSchedule()) {
-                                    if (isEditMode && presetNameInput.isNotEmpty()) {
-                                        savePreset()
-                                    } else {
-                                        showSaveDialog = true
-                                    }
-                                }
-                            }
+                    // Copy Button (Circular)
+                    if (!isLoading) {
+                        Box(
+                            modifier = Modifier
+                                .padding(top = 2.dp, end = 4.dp)
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(YellowAccent)
+                                .clickable { showCopyDialog = true },
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = if (isEditMode) "Save" else "Create",
-                                fontWeight = FontWeight.Medium
+                            Icon(
+                                imageVector = Icons.Default.ContentCopy,
+                                contentDescription = "Copy Preset",
+                                tint = Color.Black,
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                     }
@@ -838,6 +979,7 @@ fun CreateTeachingSlotsScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 16.dp)
                             .padding(bottom = 120.dp), // Extra padding to clear bottom navigation bar
                         verticalArrangement = Arrangement.Top
                     ) {
@@ -871,7 +1013,7 @@ fun CreateTeachingSlotsScreen(
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(bottom = 16.dp),
+                                            .padding(bottom = 4.dp),
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
                                         daysOfWeek.forEach { day ->
@@ -889,7 +1031,7 @@ fun CreateTeachingSlotsScreen(
                                         }
                                     }
 
-                                    Spacer(modifier = Modifier.height(28.dp))
+                                    Spacer(modifier = Modifier.height(8.dp))
                                 }
 
                                 // Step 2: Number of slots per day - Compact UI
@@ -1002,56 +1144,17 @@ fun CreateTeachingSlotsScreen(
                                     if (subjectsList.isNotEmpty()) {
                                         Spacer(modifier = Modifier.height(12.dp))
                                         
-                                        // Display subjects in rows of 3
-                                        val rows = subjectsList.chunked(3)
-                                        rows.forEachIndexed { index, rowSubjects ->
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
-                                                rowSubjects.forEach { subject ->
-                                                    val shortName = if (subject.subjectName.length > 3) 
-                                                        subject.subjectName.take(3) 
-                                                    else subject.subjectName
-                                                    
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .weight(1f)
-                                                            .background(
-                                                                color = Color.White.copy(alpha = 0.1f),
-                                                                shape = RoundedCornerShape(8.dp)
-                                                            )
-                                                            .border(
-                                                                width = 1.dp,
-                                                                color = YellowAccent.copy(alpha = 0.3f),
-                                                                shape = RoundedCornerShape(8.dp)
-                                                            )
-                                                            .padding(vertical = 8.dp, horizontal = 4.dp),
-                                                        contentAlignment = Alignment.Center
-                                                    ) {
-                                                        Text(
-                                                            text = "$shortName : ${subject.classCount}",
-                                                            color = Color.White,
-                                                            style = MaterialTheme.typography.bodyMedium,
-                                                            fontWeight = FontWeight.Bold,
-                                                            maxLines = 1,
-                                                            overflow = TextOverflow.Clip
-                                                        )
-                                                    }
-                                                }
-                                                
-                                                // Fill empty spaces if last row has fewer than 3 items
-                                                if (rowSubjects.size < 3) {
-                                                    repeat(3 - rowSubjects.size) {
-                                                        Spacer(modifier = Modifier.weight(1f))
-                                                    }
-                                                }
+                                        DraggableSubjectGrid(
+                                            subjects = subjectsList,
+                                            onReorder = { fromIndex, toIndex ->
+                                                val mutableList = subjectsList.toMutableList()
+                                                // Simple swap operation
+                                                val temp = mutableList[fromIndex]
+                                                mutableList[fromIndex] = mutableList[toIndex]
+                                                mutableList[toIndex] = temp
+                                                subjectsList = mutableList
                                             }
-                                            
-                                            if (index < rows.size - 1) {
-                                                Spacer(modifier = Modifier.height(8.dp))
-                                            }
-                                        }
+                                        )
                                     } else {
                                         Spacer(modifier = Modifier.height(8.dp))
                                         Text(
@@ -1293,8 +1396,38 @@ fun CreateTeachingSlotsScreen(
                             }
                         }
                     }
+            }
+        }
+
+        // Manually positioned FAB (TTW_UI_plan.md spec)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(end = 24.dp, bottom = 48.dp),
+            contentAlignment = Alignment.BottomEnd
+        ) {
+            if (teachingSchedule.isNotEmpty()) {
+                FloatingActionButton(
+                    onClick = {
+                        if (validateSchedule()) {
+                            if (isEditMode && presetNameInput.isNotEmpty()) {
+                                savePreset()
+                            } else {
+                                showSaveDialog = true
+                            }
+                        }
+                    },
+                    containerColor = Color(0xFF4CAF50),
+                    contentColor = Color.White
+                ) {
+                    Icon(
+                        Icons.Default.Save,
+                        contentDescription = if (isEditMode) "Save" else "Create",
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
             }
+        }
 
         // Dialog for setting time range
         if (showRenameColumnDialog) {
@@ -1498,39 +1631,6 @@ fun CreateTeachingSlotsScreen(
                             }
                         }
 
-                        // Preview
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = YellowAccent.copy(alpha = 0.1f)
-                            ),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Text(
-                                    "Preview:",
-                                    color = YellowAccent,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.Medium
-                                )
-                                Text(
-                                    "Class: " + String.format("%02d:%02d-%02d:%02d", classTimeStartHour, classTimeStartMinute, classTimeEndHour, classTimeEndMinute),
-                                    color = Color.White,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    "Free Group: " + String.format("%02d:%02d-%02d:%02d", freeGroupTimeStartHour, freeGroupTimeStartMinute, freeGroupTimeEndHour, freeGroupTimeEndMinute),
-                                    color = Color.White,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-
                         // Error message
                         timePickerError?.let { error ->
                             Card(
@@ -1583,11 +1683,8 @@ fun CreateTeachingSlotsScreen(
 
         // Class Time Start Picker Dialog
         if (showClassTimeStartPicker) {
-            val dialogTimePickerState = rememberTimePickerState(
-                initialHour = classTimeStartHour,
-                initialMinute = classTimeStartMinute,
-                is24Hour = true
-            )
+            var tempHour by remember { mutableStateOf(classTimeStartHour) }
+            var tempMinute by remember { mutableStateOf(classTimeStartMinute) }
             
             AlertDialog(
                 onDismissRequest = { showClassTimeStartPicker = false },
@@ -1604,32 +1701,21 @@ fun CreateTeachingSlotsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        TimePicker(
-                            state = dialogTimePickerState,
-                            colors = TimePickerDefaults.colors(
-                                clockDialColor = SurfaceElevated,
-                                clockDialSelectedContentColor = Color.Black,
-                                clockDialUnselectedContentColor = Color.White,
-                                selectorColor = YellowAccent,
-                                containerColor = SurfaceElevated,
-                                periodSelectorBorderColor = YellowAccent,
-                                periodSelectorSelectedContainerColor = YellowAccent,
-                                periodSelectorUnselectedContainerColor =Color.Transparent,
-                                periodSelectorSelectedContentColor = Color.Black,
-                                periodSelectorUnselectedContentColor = Color.White,
-                                timeSelectorSelectedContainerColor = YellowAccent,
-                                timeSelectorUnselectedContainerColor = Color.Transparent,
-                                timeSelectorSelectedContentColor = Color.Black,
-                                timeSelectorUnselectedContentColor = Color.White
-                            )
+                        TimeWheelPicker(
+                            hour = tempHour,
+                            minute = tempMinute,
+                            onTimeChange = { h, m ->
+                                tempHour = h
+                                tempMinute = m
+                            }
                         )
                     }
                 },
                 confirmButton = {
                     StandardButton(
                         onClick = {
-                            classTimeStartHour = dialogTimePickerState.hour
-                            classTimeStartMinute = dialogTimePickerState.minute
+                            classTimeStartHour = tempHour
+                            classTimeStartMinute = tempMinute
                             timePickerError = null
                             showClassTimeStartPicker = false
                         }
@@ -1652,11 +1738,8 @@ fun CreateTeachingSlotsScreen(
 
         // Class Time End Picker Dialog
         if (showClassTimeEndPicker) {
-            val dialogTimePickerState = rememberTimePickerState(
-                initialHour = classTimeEndHour,
-                initialMinute = classTimeEndMinute,
-                is24Hour = true
-            )
+            var tempHour by remember { mutableStateOf(classTimeEndHour) }
+            var tempMinute by remember { mutableStateOf(classTimeEndMinute) }
             
             AlertDialog(
                 onDismissRequest = { showClassTimeEndPicker = false },
@@ -1673,32 +1756,21 @@ fun CreateTeachingSlotsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        TimePicker(
-                            state = dialogTimePickerState,
-                            colors = TimePickerDefaults.colors(
-                                clockDialColor = SurfaceElevated,
-                                clockDialSelectedContentColor = Color.Black,
-                                clockDialUnselectedContentColor = Color.White,
-                                selectorColor = YellowAccent,
-                                containerColor = SurfaceElevated,
-                                periodSelectorBorderColor = YellowAccent,
-                                periodSelectorSelectedContainerColor = YellowAccent,
-                                periodSelectorUnselectedContainerColor = Color.Transparent,
-                                periodSelectorSelectedContentColor = Color.Black,
-                                periodSelectorUnselectedContentColor = Color.White,
-                                timeSelectorSelectedContainerColor = YellowAccent,
-                                timeSelectorUnselectedContainerColor = Color.Transparent,
-                                timeSelectorSelectedContentColor = Color.Black,
-                                timeSelectorUnselectedContentColor = Color.White
-                            )
+                        TimeWheelPicker(
+                            hour = tempHour,
+                            minute = tempMinute,
+                            onTimeChange = { h, m ->
+                                tempHour = h
+                                tempMinute = m
+                            }
                         )
                     }
                 },
                 confirmButton = {
                     StandardButton(
                         onClick = {
-                            classTimeEndHour = dialogTimePickerState.hour
-                            classTimeEndMinute = dialogTimePickerState.minute
+                            classTimeEndHour = tempHour
+                            classTimeEndMinute = tempMinute
                             timePickerError = null
                             showClassTimeEndPicker = false
                         }
@@ -1721,11 +1793,8 @@ fun CreateTeachingSlotsScreen(
 
         // Free Group Time Start Picker Dialog
         if (showFreeGroupTimeStartPicker) {
-            val dialogTimePickerState = rememberTimePickerState(
-                initialHour = freeGroupTimeStartHour,
-                initialMinute = freeGroupTimeStartMinute,
-                is24Hour = true
-            )
+            var tempHour by remember { mutableStateOf(freeGroupTimeStartHour) }
+            var tempMinute by remember { mutableStateOf(freeGroupTimeStartMinute) }
             
             AlertDialog(
                 onDismissRequest = { showFreeGroupTimeStartPicker = false },
@@ -1742,32 +1811,21 @@ fun CreateTeachingSlotsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        TimePicker(
-                            state = dialogTimePickerState,
-                            colors = TimePickerDefaults.colors(
-                                clockDialColor = SurfaceElevated,
-                                clockDialSelectedContentColor = Color.Black,
-                                clockDialUnselectedContentColor = Color.White,
-                                selectorColor = YellowAccent,
-                                containerColor = SurfaceElevated,
-                                periodSelectorBorderColor = YellowAccent,
-                                periodSelectorSelectedContainerColor = YellowAccent,
-                                periodSelectorUnselectedContainerColor = Color.Transparent,
-                                periodSelectorSelectedContentColor = Color.Black,
-                                periodSelectorUnselectedContentColor = Color.White,
-                                timeSelectorSelectedContainerColor = YellowAccent,
-                                timeSelectorUnselectedContainerColor = Color.Transparent,
-                                timeSelectorSelectedContentColor = Color.Black,
-                                timeSelectorUnselectedContentColor = Color.White
-                            )
+                        TimeWheelPicker(
+                            hour = tempHour,
+                            minute = tempMinute,
+                            onTimeChange = { h, m ->
+                                tempHour = h
+                                tempMinute = m
+                            }
                         )
                     }
                 },
                 confirmButton = {
                     StandardButton(
                         onClick = {
-                            freeGroupTimeStartHour = dialogTimePickerState.hour
-                            freeGroupTimeStartMinute = dialogTimePickerState.minute
+                            freeGroupTimeStartHour = tempHour
+                            freeGroupTimeStartMinute = tempMinute
                             timePickerError = null
                             showFreeGroupTimeStartPicker = false
                         }
@@ -1790,11 +1848,8 @@ fun CreateTeachingSlotsScreen(
 
         // Free Group Time End Picker Dialog
         if (showFreeGroupTimeEndPicker) {
-            val dialogTimePickerState = rememberTimePickerState(
-                initialHour = freeGroupTimeEndHour,
-                initialMinute = freeGroupTimeEndMinute,
-                is24Hour = true
-            )
+            var tempHour by remember { mutableStateOf(freeGroupTimeEndHour) }
+            var tempMinute by remember { mutableStateOf(freeGroupTimeEndMinute) }
             
             AlertDialog(
                 onDismissRequest = { showFreeGroupTimeEndPicker = false },
@@ -1811,32 +1866,21 @@ fun CreateTeachingSlotsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        TimePicker(
-                            state = dialogTimePickerState,
-                            colors = TimePickerDefaults.colors(
-                                clockDialColor = SurfaceElevated,
-                                clockDialSelectedContentColor = Color.Black,
-                                clockDialUnselectedContentColor = Color.White,
-                                selectorColor = YellowAccent,
-                                containerColor = SurfaceElevated,
-                                periodSelectorBorderColor = YellowAccent,
-                                periodSelectorSelectedContainerColor = YellowAccent,
-                                periodSelectorUnselectedContainerColor = Color.Transparent,
-                                periodSelectorSelectedContentColor = Color.Black,
-                                periodSelectorUnselectedContentColor = Color.White,
-                                timeSelectorSelectedContainerColor = YellowAccent,
-                                timeSelectorUnselectedContainerColor = Color.Transparent,
-                                timeSelectorSelectedContentColor = Color.Black,
-                                timeSelectorUnselectedContentColor = Color.White
-                            )
+                        TimeWheelPicker(
+                            hour = tempHour,
+                            minute = tempMinute,
+                            onTimeChange = { h, m ->
+                                tempHour = h
+                                tempMinute = m
+                            }
                         )
                     }
                 },
                 confirmButton = {
                     StandardButton(
                         onClick = {
-                            freeGroupTimeEndHour = dialogTimePickerState.hour
-                            freeGroupTimeEndMinute = dialogTimePickerState.minute
+                            freeGroupTimeEndHour = tempHour
+                            freeGroupTimeEndMinute = tempMinute
                             timePickerError = null
                             showFreeGroupTimeEndPicker = false
                         }
@@ -1942,37 +1986,6 @@ fun CreateTeachingSlotsScreen(
                                     .weight(1f)
                                     .widthIn(min = 170.dp) // Further increased minimum width for full word visibility
                             )
-                        }
-
-                        // Enhanced preview section
-                        if (generatedPresetName.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(20.dp)) // Increased spacing
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = YellowAccent
-                                ),
-                                shape = RoundedCornerShape(12.dp),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(16.dp)
-                                ) {
-                                    Text(
-                                        text = "Preview:",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = Color.Black,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = generatedPresetName,
-                                        style = MaterialTheme.typography.titleLarge,
-                                        color = Color.Black,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
                         }
 
                         // Fallback text input for legacy names
@@ -2100,7 +2113,62 @@ fun CreateTeachingSlotsScreen(
                     }
                 }
             }
-        }
+
+    // --- Copy Preset Logic ---
+    if (showCopyDialog) {
+        CopyPresetDialog(
+            onDismiss = { showCopyDialog = false },
+            onPresetSelected = { preset ->
+                // Apply preset data
+                coroutineScope.launch {
+                    try {
+                        // 1. Set Slot Count and Days
+                        slotCountInput = preset.slotCount.toString()
+                        selectedDays = preset.days.toSet()
+                        
+                        // 2. Parse Schedule Data to restore grid
+                        val newSchedule = preset.days.map { day ->
+                             val daySlots = preset.schedule.find { (it["day"] as? String) == day }
+                             val slotFlags = daySlots?.get("slots") as? List<Boolean> ?: List(preset.slotCount) { false }
+                             
+                             DaySlots(
+                                 day = day,
+                                 slots = slotFlags.map { active ->
+                                     if (active) ScreenTeachingSlot(id = java.util.UUID.randomUUID().toString()) else null
+                                 }
+                             )
+                        }
+                        teachingSchedule = newSchedule
+                        
+                        // 3. Parse Column Names (Time Info)
+                        val newTimeInfo = preset.columnNames.map {
+                             ColumnTimeInfo(
+                                 classTime = it["classTime"] as? String ?: "",
+                                 freeGroupTime = it["freeGroupTime"] as? String ?: ""
+                             )
+                        }
+                        columnTimeInfoList = newTimeInfo
+
+                        // 4. Parse Subjects
+                        val newSubjects = preset.subjects.map {
+                             SubjectAllocation(
+                                 subjectName = it["subjectName"] as? String ?: "",
+                                 classCount = (it["classCount"] as? Number)?.toInt() ?: 0
+                             )
+                        }
+                        subjectsList = newSubjects
+
+                        showCopyDialog = false
+                        snackbarHostState.showSnackbar("Preset '${preset.name}' copied successfully!")
+                    } catch (e: Exception) {
+                        Log.e("CopyPreset", "Error applying preset", e)
+                        snackbarHostState.showSnackbar("Error copying preset: ${e.localizedMessage}")
+                    }
+                }
+            }
+        )
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -2262,15 +2330,225 @@ fun DayCheckbox(
     
 
 
-@Preview(showBackground = true, backgroundColor = 0xFF121212, widthDp = 360, heightDp = 740)
+
+// Helper Data Class for Preset Copying
+data class CopyPresetItem(
+    val id: String,
+    val name: String,
+    val days: List<String>,
+    val slotCount: Int,
+    val schedule: List<Map<String, Any>>,
+    val columnNames: List<Map<String, Any>>,
+    val subjects: List<Map<String, Any>>
+)
+
 @Composable
-fun CreateTeachingSlotsScreenPreview() {
-    SchedulingTheme {
-        Surface(
-            color = DarkBackground,
-            modifier = Modifier.fillMaxSize()
-        ) {
-            CreateTeachingSlotsScreen(rememberNavController())
+fun CopyPresetDialog(
+    onDismiss: () -> Unit,
+    onPresetSelected: (CopyPresetItem) -> Unit
+) {
+    var presets by remember { mutableStateOf<List<CopyPresetItem>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    val db = FirebaseFirestore.getInstance()
+
+    LaunchedEffect(Unit) {
+        try {
+            val result = db.collection("teachingSlotPresets").get().await()
+            presets = result.documents.mapNotNull { doc ->
+                try {
+                     val scheduleData = doc.get("schedule") as? List<Map<String, Any>> ?: emptyList()
+                     val days = scheduleData.mapNotNull { it["day"] as? String }
+                     
+                     // Helper to handle both legacy (String) and map (Map) columnNames
+                     val rawColumns = doc.get("columnNames") as? List<*> ?: emptyList<Any>()
+                     val columnNames = rawColumns.map { item ->
+                        when(item) {
+                            is Map<*, *> -> item as Map<String, Any>
+                            is String -> mapOf("classTime" to item, "freeGroupTime" to "")
+                            else -> mapOf("classTime" to "", "freeGroupTime" to "")
+                        }
+                     }
+
+                     val subjects = doc.get("subjects") as? List<Map<String, Any>> ?: emptyList()
+                     
+                     CopyPresetItem(
+                         id = doc.id,
+                         name = doc.getString("presetName") ?: "Unnamed",
+                         days = days,
+                         slotCount = columnNames.size,
+                         schedule = scheduleData,
+                         columnNames = columnNames,
+                         subjects = subjects
+                     )
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            isLoading = false
+        } catch (e: Exception) {
+            isLoading = false
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                "Copy From Preset",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+        },
+        containerColor = NeutralCardSurface,
+        titleContentColor = Color.White,
+        textContentColor = Color.White,
+        text = {
+            Column {
+                if (isLoading) {
+                    Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+                         CircularProgressIndicator(color = YellowAccent)
+                    }
+                } else if (presets.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
+                        Text(
+                            "No presets available",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFFB0B0B0)
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.heightIn(max = 400.dp)
+                    ) {
+                        itemsIndexed(presets) { _, preset ->
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onPresetSelected(preset) },
+                                colors = CardDefaults.cardColors(containerColor = DarkSurface),
+                                shape = RoundedCornerShape(12.dp),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                     Text(
+                                         preset.name,
+                                         color = Color.White,
+                                         style = MaterialTheme.typography.titleSmall,
+                                         fontWeight = FontWeight.Bold
+                                     )
+                                     Text(
+                                         text = "${preset.days.size} days, ${preset.slotCount} slots",
+                                         style = MaterialTheme.typography.bodySmall,
+                                         color = Color(0xFFB0B0B0),
+                                         modifier = Modifier.padding(top = 4.dp)
+                                     )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = YellowAccent
+                )
+            ) {
+                Text(
+                    "Cancel",
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    )
+}
+
+@Composable
+fun DraggableSubjectGrid(
+    subjects: List<SubjectAllocation>,
+    onReorder: (fromIndex: Int, toIndex: Int) -> Unit
+) {
+    var selectedIndex by remember { mutableStateOf<Int?>(null) }
+    
+    // Chunk subjects into rows of 3
+    val rows = subjects.chunked(3)
+    
+    Column(modifier = Modifier.fillMaxWidth()) {
+        rows.forEachIndexed { rowIndex, rowSubjects ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                rowSubjects.forEachIndexed { colIndex, subject ->
+                    val globalIndex = rowIndex * 3 + colIndex
+                    val isSelected = selectedIndex == globalIndex
+                    val shortName = if (subject.subjectName.length > 3) 
+                        subject.subjectName.take(3) 
+                    else subject.subjectName
+                    
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .background(
+                                color = if (isSelected) 
+                                    YellowAccent  // Selected: yellow background
+                                else 
+                                    Color.White.copy(alpha = 0.1f),  // Unselected: transparent white
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .border(
+                                width = if (isSelected) 2.dp else 1.dp,
+                                color = if (isSelected)
+                                    YellowAccent
+                                else
+                                    YellowAccent.copy(alpha = 0.3f),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .pointerInput(globalIndex, subjects.size, selectedIndex) {
+                                detectTapGestures(
+                                    onLongPress = {
+                                        // Long press to select
+                                        selectedIndex = globalIndex
+                                    },
+                                    onTap = {
+                                        // Click to swap with selected
+                                        if (selectedIndex != null && selectedIndex != globalIndex) {
+                                            onReorder(selectedIndex!!, globalIndex)
+                                            selectedIndex = null
+                                        }
+                                    }
+                                )
+                            }
+                            .padding(vertical = 8.dp, horizontal = 4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "$shortName : ${subject.classCount}",
+                            color = if (isSelected) Color.Black else Color.White,  // Selected: black text, Unselected: white text
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Clip
+                        )
+                    }
+                }
+                
+                // Fill empty spaces if last row has fewer than 3 items
+                if (rowSubjects.size < 3) {
+                    repeat(3 - rowSubjects.size) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+            
+            if (rowIndex < rows.size - 1) {
+                Spacer(modifier = Modifier.height(8.dp))
+            }
         }
     }
 }

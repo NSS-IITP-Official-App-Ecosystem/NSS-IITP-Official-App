@@ -14,7 +14,8 @@ data class TimeSlotInfo(
 
 data class SubjectAllocation(
     val subjectName: String = "",
-    val classCount: Int = 0
+    val classCount: Int = 0,
+    val priority: Int = 0  // Priority based on position (1 = highest)
 )
 
 data class TeachingSlot(

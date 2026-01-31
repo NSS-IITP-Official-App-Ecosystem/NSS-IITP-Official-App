@@ -19,11 +19,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.CardDefaults
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -64,6 +66,7 @@ data class AvailabilityPreset(
     val id: String = "",
     val presetName: String = "",
     val columnNames: List<String> = emptyList(),
+    val freeGroupTimes: List<String> = emptyList(),
     val schedule: List<AvailabilityDaySchedule> = emptyList()
 )
 
@@ -106,6 +109,62 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
     var availablePresets by remember { mutableStateOf<List<AvailabilityPreset>>(emptyList()) }
     var isLoadingPresets by remember { mutableStateOf(false) }
 
+    // Excel Upload State
+    // MIME type for .xlsx
+    val excelLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
+    ) { uri: android.net.Uri? ->
+        uri?.let {
+            coroutineScope.launch {
+                Log.d("ExcelDebug", "Launcher callback triggered. URI: $it")
+                isLoading = true
+                try {
+                     Log.d("ExcelDebug", "Calling parseExcelAndGetFreeGroups...")
+                     val newSlots = com.phad.chatapp.features.scheduling.schedule.ExcelAvailabilityParser.parseExcelAndGetFreeGroups(
+                         navController.context,
+                         it,
+                         preset!!
+                     )
+                     Log.d("ExcelDebug", "Parser returned ${newSlots.size} slots")
+                     
+                     if (newSlots.isNotEmpty()) {
+                        // Merge new slots: Update existing ones or add new ones
+                        val currentList = availabilityData.toMutableList()
+                        var updateCount = 0
+                        
+                        newSlots.forEach { newSlot ->
+                            val index = currentList.indexOfFirst { 
+                                it.dayIndex == newSlot.dayIndex && it.slotIndex == newSlot.slotIndex 
+                            }
+                            
+                            if (index != -1) {
+                                // Update existing
+                                currentList[index] = newSlot
+                            } else {
+                                // Add new
+                                currentList.add(newSlot)
+                            }
+                            updateCount++
+                        }
+                        
+                        availabilityData = currentList
+                        Log.d("ExcelDebug", "UI Updated with $updateCount slots")
+                        isLoading = false
+                        snackbarHostState.showSnackbar("Updated $updateCount slots from Excel")
+                     } else {
+                        Log.w("ExcelDebug", "No matching slots found in Excel")
+                        isLoading = false
+                        snackbarHostState.showSnackbar("No matching slots found in Excel")
+                     }
+                } catch (e: Exception) {
+                    Log.e("ExcelDebug", "Error in launcher coroutine", e)
+                    isLoading = false
+                    snackbarHostState.showSnackbar("Error parsing Excel: ${e.message}")
+                }
+            }
+        }
+    }
+
     // Update the LaunchedEffect to load the preset
     LaunchedEffect(presetId) {
         isLoading = true
@@ -126,8 +185,24 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
                 // Get preset name
                 val name = document.getString("presetName") ?: ""
 
-                // Get column names
-                val columnNames = document.get("columnNames") as? List<String> ?: emptyList()
+                // Get column names with safe parsing for both String and Map types
+                val rawColumns = document.get("columnNames") as? List<*> ?: emptyList<Any>()
+                val columnNames = mutableListOf<String>()
+                val freeGroupTimes = mutableListOf<String>()
+
+                rawColumns.forEach { item ->
+                    when (item) {
+                        is String -> {
+                            columnNames.add(item)
+                            freeGroupTimes.add(item)
+                        }
+                        is Map<*, *> -> {
+                            columnNames.add(item["classTime"] as? String ?: "")
+                            val freeTime = item["freeGroupTime"] as? String
+                            freeGroupTimes.add(if (!freeTime.isNullOrEmpty()) freeTime else item["classTime"] as? String ?: "")
+                        }
+                    }
+                }
 
                 // Get schedule days and slots
                 val scheduleList = mutableListOf<AvailabilityDaySchedule>()
@@ -145,22 +220,16 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
                     id = presetId,
                     presetName = name,
                     columnNames = columnNames,
+                    freeGroupTimes = freeGroupTimes,
                     schedule = scheduleList
                 )
 
-                // Now load the availability data separately using preset name as document ID
-                val availabilityDoc = db.collection(AVAILABILITY_COLLECTION)
-                    .document(name)
-                    .get()
-                    .await()
-
-                if (availabilityDoc.exists()) {
+                // Get availability data from the same document
+                val availabilityMap = document.get("availability") as? Map<String, Map<String, String>>
+                
+                if (availabilityMap != null) {
                     try {
-                        Log.d("SetAvailability", "Found availability document: ${availabilityDoc.id}")
-
-                        // Get the availability data map
-                        val availabilityMap = availabilityDoc.get("availability") as? Map<String, Map<String, String>> ?: emptyMap()
-                        Log.d("SetAvailability", "Availability map: $availabilityMap")
+                        Log.d("SetAvailability", "Found availability data in preset")
 
                         // Get the availability data
                         val updatedSlots = mutableListOf<AvailabilitySlot>()
@@ -210,7 +279,7 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
                         e.printStackTrace()
                     }
                 } else {
-                    Log.d("SetAvailability", "No existing availability data found")
+                    Log.d("SetAvailability", "No existing availability data found in preset")
                 }
             } else {
                 errorMessage = "Preset not found"
@@ -319,7 +388,23 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
                     try {
                         val id = document.id
                         val name = document.getString("presetName") ?: ""
-                        val columnNames = document.get("columnNames") as? List<String> ?: emptyList()
+                        val rawColumns = document.get("columnNames") as? List<*> ?: emptyList<Any>()
+                        val columnNames = mutableListOf<String>()
+                        val freeGroupTimes = mutableListOf<String>()
+
+                        rawColumns.forEach { item ->
+                            when (item) {
+                                is String -> {
+                                    columnNames.add(item)
+                                    freeGroupTimes.add(item)
+                                }
+                                is Map<*, *> -> {
+                                    columnNames.add(item["classTime"] as? String ?: "")
+                                    val freeTime = item["freeGroupTime"] as? String
+                                    freeGroupTimes.add(if (!freeTime.isNullOrEmpty()) freeTime else item["classTime"] as? String ?: "")
+                                }
+                            }
+                        }
 
                         // Get schedule days and slots
                         val scheduleList = mutableListOf<AvailabilityDaySchedule>()
@@ -338,6 +423,7 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
                                     id = id,
                                     presetName = name,
                                     columnNames = columnNames,
+                                    freeGroupTimes = freeGroupTimes,
                                     schedule = scheduleList
                                 )
                             )
@@ -365,48 +451,56 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
             try {
                 val db = FirebaseFirestore.getInstance()
 
-                // Load availability data for the selected preset using preset name as document ID
-                val availabilityDoc = db.collection(AVAILABILITY_COLLECTION)
-                    .document(selectedPreset.presetName)
+                // Load availability data from the selected preset document directly
+                // Note: availablePresets list might not have full details, so we fetch the doc or use if available?
+                // Actually loadAvailablePresets parses the doc. But check if we need to re-fetch to get 'availability' field 
+                // since AvailabilityPreset data class doesn't store the raw availability map.
+                
+                val presetDoc = db.collection(TEACHING_SLOT_PRESETS_COLLECTION)
+                    .document(selectedPreset.id) // Use ID for reliability
                     .get()
                     .await()
 
-                if (availabilityDoc.exists()) {
-                    val sourceAvailabilityMap = availabilityDoc.get("availability") as? Map<String, Map<String, String>> ?: emptyMap()
+                if (presetDoc.exists()) {
+                    val sourceAvailabilityMap = presetDoc.get("availability") as? Map<String, Map<String, String>> ?: emptyMap()
 
-                    // Convert the source data to match current preset structure
-                    val copiedSlots = mutableListOf<AvailabilitySlot>()
+                    if (sourceAvailabilityMap.isNotEmpty()) {
+                         // Convert the source data to match current preset structure
+                        val copiedSlots = mutableListOf<AvailabilitySlot>()
 
-                    preset?.schedule?.forEachIndexed { dayIndex, daySchedule ->
-                        val day = daySchedule.day
-                        val sourceDayData = sourceAvailabilityMap[day]
+                        preset?.schedule?.forEachIndexed { dayIndex, daySchedule ->
+                            val day = daySchedule.day
+                            val sourceDayData = sourceAvailabilityMap[day]
 
-                        if (sourceDayData != null) {
-                            daySchedule.slots.forEachIndexed { slotIndex, active ->
-                                if (active) {
-                                    val slotKey = slotIndex.toString()
-                                    val slotValue = sourceDayData[slotKey] ?: ""
+                            if (sourceDayData != null) {
+                                daySchedule.slots.forEachIndexed { slotIndex, active ->
+                                    if (active) {
+                                        val slotKey = slotIndex.toString()
+                                        val slotValue = sourceDayData[slotKey] ?: ""
 
-                                    if (slotValue.isNotEmpty()) {
-                                        copiedSlots.add(
-                                            AvailabilitySlot(
-                                                slotIndex = slotIndex,
-                                                dayIndex = dayIndex,
-                                                value = slotValue
+                                        if (slotValue.isNotEmpty()) {
+                                            copiedSlots.add(
+                                                AvailabilitySlot(
+                                                    slotIndex = slotIndex,
+                                                    dayIndex = dayIndex,
+                                                    value = slotValue
+                                                )
                                             )
-                                        )
+                                        }
                                     }
                                 }
                             }
                         }
+
+                        // Update the current availability data
+                        availabilityData = copiedSlots
+
+                        snackbarHostState.showSnackbar("Copied data from '${selectedPreset.presetName}'")
+                    } else {
+                        snackbarHostState.showSnackbar("No availability data found in '${selectedPreset.presetName}'")
                     }
-
-                    // Update the current availability data
-                    availabilityData = copiedSlots
-
-                    snackbarHostState.showSnackbar("Copied data from '${selectedPreset.presetName}'")
                 } else {
-                    snackbarHostState.showSnackbar("No availability data found for '${selectedPreset.presetName}'")
+                     snackbarHostState.showSnackbar("Preset '${selectedPreset.presetName}' not found")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error copying preset data", e)
@@ -489,22 +583,12 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
             }
 
             // Prepare data to save
-            val data = hashMapOf(
-                "presetName" to preset!!.presetName,
-                "availability" to availabilityMap
-            )
-
-            Log.d(TAG, "Prepared data to save: $data")
-
-            // Use preset name as document ID
-            val documentId = preset!!.presetName
-            Log.d(TAG, "Saving availability data with document ID: $documentId")
-
-            db.collection(AVAILABILITY_COLLECTION).document(documentId)
-                .set(data)
+            // Perform update on the teaching slot preset document
+            db.collection(TEACHING_SLOT_PRESETS_COLLECTION).document(preset!!.id)
+                .update("availability", availabilityMap)
                 .addOnSuccessListener {
                     isSaving = false
-                    Log.d(TAG, "✅ SUCCESS: Availability data saved with ID: $documentId")
+                    Log.d(TAG, "✅ SUCCESS: Availability data updated in preset: ${preset!!.id}")
 
                     coroutineScope.launch {
                         snackbarHostState.showSnackbar("Availability data saved successfully!")
@@ -516,7 +600,7 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
                 .addOnFailureListener { e ->
                     isSaving = false
                     saveError = "Failed to save: ${e.message}"
-                    Log.e(TAG, "❌ ERROR: Failed to save availability data", e)
+                    Log.e(TAG, "❌ ERROR: Failed to update availability data", e)
                     e.printStackTrace()
 
                     coroutineScope.launch {
@@ -541,29 +625,27 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
             .background(DarkBackground)
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 20.dp, vertical = 24.dp)
+            modifier = Modifier.fillMaxSize()
+                // Removed padding here to allow custom padding for header and content
         ) {
-            // Top bar with back button and title
+            // Top bar with back button and title - matching ManageVolunteersScreen
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 16.dp),
+                    .padding(top = 16.dp, bottom = 8.dp) // TTW UI plan TopAppBar padding
+                    .padding(start = 4.dp, end = 20.dp), // Less padding at start for Back button
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Back button with 48dp touch target
+                // Back button
                 IconButton(
                     onClick = { navController.navigateUp() },
-                    modifier = Modifier
-                        .size(48.dp)
-                        .padding(end = 8.dp)
+                    modifier = Modifier.size(48.dp) // TTW UI plan: 48dp touch target
                 ) {
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
                         tint = Color.White,
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.size(24.dp) // TTW UI plan: 24dp icon size
                     )
                 }
 
@@ -578,15 +660,25 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
                         .padding(start = 8.dp)
                 )
 
-                // Save button in header - only show when preset is loaded and not loading
+                // Copy Preset button in header - circular yellow button (TTW UI plan pattern)
                 if (preset != null && !isLoading) {
-                    // Save button
-                    StandardButton(
-                        onClick = { saveAvailabilityData() }
+                    Box(
+                        modifier = Modifier
+                            .padding(top = 2.dp, end = 4.dp)
+                            .size(40.dp) // Circular button size
+                            .clip(CircleShape)
+                            .background(YellowAccent)
+                            .clickable {
+                                loadAvailablePresets()
+                                showCopyDialog = true
+                            },
+                        contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = "Save",
-                            fontWeight = FontWeight.Medium
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = "Copy Preset",
+                            tint = Color.Black, // Black icon on yellow background
+                            modifier = Modifier.size(24.dp)
                         )
                     }
                 }
@@ -610,7 +702,7 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 16.dp),
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = DarkSurface
@@ -646,40 +738,10 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
                 // Show preset schedule for setting availability
                 Column(
                     modifier = Modifier
-                        .fillMaxSize()
+                        .fillMaxWidth() // Changed from fillMaxSize to allow content-based height
+                        .padding(horizontal = 20.dp) // Restore standard padding for content
                         .verticalScroll(rememberScrollState())
                 ) {
-                        // Copy button positioned first - full width
-                        if (preset != null && !isLoading) {
-                            // Copy button now uses StandardButton for consistent UI
-                            StandardButton(
-                                onClick = {
-                                    loadAvailablePresets()
-                                    showCopyDialog = true
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 4.dp, vertical = 8.dp)
-                            ) {
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.ContentCopy,
-                                        contentDescription = "Copy availability data",
-                                        tint = Color.Black, // StandardButton uses YellowAccent background, so black icon
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Text(
-                                        text = "Copy from Preset",
-                                        fontWeight = FontWeight.Medium,
-                                        color = Color.Black // StandardButton uses YellowAccent background, so black text
-                                    )
-                                }
-                            }
-                        }
-
                         // Preset name display
                         Text(
                             text = preset!!.presetName,
@@ -714,14 +776,16 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
                                     Column(
                                         modifier = Modifier
                                             .fillMaxWidth() // Always fill width for horizontal centering
-                                            .padding(8.dp),
+                                            .background(
+                                                YellowAccent.copy(alpha = 0.15f),
+                                                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+                                            ),
                                         horizontalAlignment = Alignment.CenterHorizontally // Always center horizontally
                                     ) {
                                     // Schedule table header with synchronized horizontal scrolling
                                     Row(
                                         modifier = Modifier
                                             .wrapContentWidth() // Only take up space needed for content
-                                            .background(NeutralCardSurface)
                                             .padding(vertical = 8.dp, horizontal = 4.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
@@ -733,7 +797,7 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
                                                 .padding(horizontal = 4.dp),
                                             style = MaterialTheme.typography.titleSmall,
                                             fontWeight = FontWeight.Bold,
-                                            color = Color.White
+                                            color = YellowAccent
                                         )
 
                                         // Horizontally scrollable slot headers using shared scroll state
@@ -744,21 +808,68 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
                                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
                                             // Slot column headers with fixed dimensions
-                                            preset!!.columnNames.forEach { columnName ->
+                                            preset!!.columnNames.forEachIndexed { index, classTime ->
+                                                val freeTime = preset!!.freeGroupTimes.getOrElse(index) { "" }
+
                                                 Column(
                                                     modifier = Modifier
-                                                        .width(80.dp) // Fixed width for consistent sizing
+                                                        .width(100.dp) // Increased width for richer header
                                                         .padding(horizontal = 2.dp),
                                                     horizontalAlignment = Alignment.CenterHorizontally
                                                 ) {
-                                                    Text(
-                                                        text = columnName,
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = Color.White,
-                                                        textAlign = TextAlign.Center,
-                                                        maxLines = 1
-                                                    )
+                                                    Card(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        shape = RoundedCornerShape(8.dp),
+                                                        colors = CardDefaults.cardColors(
+                                                            containerColor = YellowAccent.copy(alpha = 0.1f)
+                                                        )
+                                                    ) {
+                                                        Column(
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .padding(vertical = 6.dp, horizontal = 4.dp),
+                                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                                                        ) {
+                                                            // Class Time
+                                                            Text(
+                                                                text = "Class:",
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                fontWeight = FontWeight.Medium,
+                                                                color = YellowAccent,
+                                                                fontSize = 10.sp
+                                                            )
+                                                            Text(
+                                                                text = classTime,
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = Color.White,
+                                                                textAlign = TextAlign.Center,
+                                                                fontSize = 11.sp,
+                                                                maxLines = 1
+                                                            )
+
+                                                            Spacer(modifier = Modifier.height(4.dp))
+
+                                                            // Free Group Time
+                                                            Text(
+                                                                text = "Free:",
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                fontWeight = FontWeight.Medium,
+                                                                color = YellowAccent,
+                                                                fontSize = 10.sp
+                                                            )
+                                                            Text(
+                                                                text = freeTime.ifEmpty { "--:--" },
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = Color.White,
+                                                                textAlign = TextAlign.Center,
+                                                                fontSize = 11.sp,
+                                                                maxLines = 1
+                                                            )
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
@@ -767,7 +878,11 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
                                         // Schedule table rows
                                         Column(
                                             modifier = Modifier
-                                                .wrapContentWidth() // Only take up space needed for content
+                                                .fillMaxWidth() // Always fill width for horizontal centering
+                                                .background(
+                                                    NeutralCardSurface,
+                                                    shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp)
+                                                )
                                                 .padding(8.dp),
                                             horizontalAlignment = Alignment.CenterHorizontally // Always center horizontally
                                         ) {
@@ -800,7 +915,7 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
                                             daySchedule.slots.forEachIndexed { slotIndex, active ->
                                                 Box(
                                                     modifier = Modifier
-                                                        .width(80.dp) // Fixed width for consistent sizing
+                                                    .width(100.dp) // Match header width
                                                         .height(60.dp) // Fixed height for consistent sizing
                                                     .background(
                                                         color = if (active) {
@@ -882,8 +997,47 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
 
 
 
-                        // Bottom spacing for better layout
-                        Spacer(modifier = Modifier.height(24.dp))
+
+
+                        // Upload Excel button - at bottom of grid
+                        Spacer(modifier = Modifier.height(16.dp))
+                        // Upload Excel Button - centered and compact
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            StandardButton(
+                                onClick = {
+                                    try {
+                                        excelLauncher.launch("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                                    } catch (e: Exception) {
+                                        excelLauncher.launch("*/*")
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth(0.7f) // 70% width for more compact look
+                                    .padding(horizontal = 4.dp, vertical = 8.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.UploadFile,
+                                    contentDescription = "Upload Excel",
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Upload Excel",
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color.Black,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+
+
+                        // Bottom spacing for better layout and FAB clearance
+                        Spacer(modifier = Modifier.height(80.dp))
                 }
         }
 
@@ -1039,6 +1193,24 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
         }
     }
 
+    // Floating Action Button for Save - TTW UI plan specifications
+    if (preset != null && !isLoading) {
+         FloatingActionButton(
+            onClick = { saveAvailabilityData() },
+            containerColor = Color(0xFF4CAF50), // TTW UI plan: Green
+            contentColor = Color.White, // TTW UI plan: White icon
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 24.dp, bottom = 48.dp) // TTW UI plan: end=24dp, bottom=48dp
+        ) {
+            Icon(
+                Icons.Default.Save,
+                contentDescription = "Save",
+                modifier = Modifier.size(24.dp)
+            )
+        }
+    }
+
     // Copy preset selection dialog
     if (showCopyDialog) {
         AlertDialog(
@@ -1059,13 +1231,6 @@ fun SetAvailabilityScreen(navController: NavController, presetId: String = "new"
             textContentColor = Color.White,
             text = {
                 Column {
-                    Text(
-                        "Select a preset to copy availability data from:",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = Color.White,
-                        modifier = Modifier.padding(bottom = 16.dp)
-                    )
-
                     if (isLoadingPresets) {
                         Box(
                             modifier = Modifier

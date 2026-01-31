@@ -10,7 +10,8 @@ import java.time.LocalTime
 data class VolunteerInfo(
     val rollNo: String? = null,
     val name: String = "",
-    val group: String = ""
+    val group: String = "",
+    val classCount: Int = 0  // Number of classes this volunteer can teach
 )
 
 /**
@@ -24,10 +25,7 @@ data class OptimizedVolunteerAssignment(
     val dayIndex: Int = 0,        // Index into DAY_NAMES array (0-6)
     val slotIndex: Int = 0,       // Index into time slot array (0-n)
     val interviewScore: Int = 0,  // Interview score from students collection
-    val subjectPreference1: String = "", // First subject preference
-    val subjectPreference2: String = "", // Second subject preference
-    val subjectPreference3: String = "", // Third subject preference
-    val subjectCode: String? = null      // Assigned subject code
+    val assignedSubject: String? = null      // Assigned subject code
 )
 
 /**

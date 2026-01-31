@@ -14,6 +14,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.RadioButtonChecked
+import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.outlined.CheckCircleOutline
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
@@ -105,7 +107,8 @@ fun ScheduleGenerationScreen(navController: NavController) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 8.dp, bottom = 24.dp),
+                        .padding(top = 16.dp, bottom = 8.dp)
+                        .padding(start = 4.dp, end = 20.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                         // Back button
@@ -117,53 +120,20 @@ fun ScheduleGenerationScreen(navController: NavController) {
                                 Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = "Back",
                                 tint = Color.White,
-                                modifier = Modifier.size(28.dp)
+                                modifier = Modifier.size(24.dp)
                             )
                         }
 
                         // Title
                         Text(
                             text = "Generate Schedule",
-                            style = MaterialTheme.typography.titleLarge,
+                            style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp),
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier
                                 .weight(1f)
                                 .padding(start = 8.dp)
                         )
-
-                        // Continue button - only show when data is loaded and not in loading state
-                        if (!isLoading && volunteerPresets.isNotEmpty() && availabilityPresets.isNotEmpty()) {
-                            StandardButton(
-                                onClick = {
-                                    if (selectedVPPreset == null) {
-                                        coroutineScope.launch {
-                                            snackbarHostState.showSnackbar("Please select a volunteer preset")
-                                        }
-                                        return@StandardButton
-                                    }
-                                    if (selectedVAPresets.isEmpty()) {
-                                        coroutineScope.launch {
-                                            snackbarHostState.showSnackbar("Please select at least one availability preset")
-                                        }
-                                        return@StandardButton
-                                    }
-
-                                    // Create parameter string for the navigation
-                                    val vpId = selectedVPPreset!!.id
-                                    val vaIds = selectedVAPresets.joinToString(",") { it.id }
-
-                                    // Navigate to next screen
-                                    navController.navigate("scheduleCreation/$vpId/$vaIds")
-                                },
-                                enabled = selectedVPPreset != null && selectedVAPresets.isNotEmpty()
-                            ) {
-                                Text(
-                                    "Continue",
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                        }
                     }
             },
             snackbarHost = { SnackbarHost(snackbarHostState) }
@@ -393,6 +363,48 @@ fun ScheduleGenerationScreen(navController: NavController) {
                 }
             }
         }
+
+        // FAB for "Continue" action
+        if (!isLoading && volunteerPresets.isNotEmpty() && availabilityPresets.isNotEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(end = 24.dp, bottom = 48.dp),
+                contentAlignment = Alignment.BottomEnd
+            ) {
+                 FloatingActionButton(
+                    onClick = {
+                        if (selectedVPPreset == null) {
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar("Please select a volunteer preset")
+                            }
+                            return@FloatingActionButton
+                        }
+                        if (selectedVAPresets.isEmpty()) {
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar("Please select at least one availability preset")
+                            }
+                            return@FloatingActionButton
+                        }
+
+                        // Create parameter string for the navigation
+                        val vpId = selectedVPPreset!!.id
+                        val vaIds = selectedVAPresets.joinToString(",") { it.id }
+
+                        // Navigate to next screen
+                        navController.navigate("scheduleCreation/$vpId/$vaIds")
+                    },
+                    containerColor = Color(0xFF4CAF50), // Green color
+                    contentColor = Color.White
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.ArrowForward,
+                        contentDescription = "Continue",
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -426,66 +438,31 @@ private suspend fun loadVolunteerPresets(): List<PresetItem> {
 // Function to load availability presets from Firestore
 private suspend fun loadAvailabilityPresets(): List<PresetItem> {
     val db = FirebaseFirestore.getInstance()
-    val presetsCollection = db.collection(AVAILABILITY_COLLECTION)
+    // CHANGE: Fetch from teachingSlotPresets instead of volunteerAvailability
+    val presetsCollection = db.collection("teachingSlotPresets") 
 
     return try {
-        Log.d(TAG, "🔍 Starting to fetch availability presets from $AVAILABILITY_COLLECTION collection")
+        Log.d(TAG, "🔍 Starting to fetch availability presets from teachingSlotPresets collection")
         val snapshot = presetsCollection.get().await()
         Log.d(TAG, "📊 Fetched ${snapshot.documents.size} availability preset documents")
-
-        // Debug: dump all document IDs
-        snapshot.documents.forEachIndexed { index, doc ->
-            Log.d(TAG, "📄 Document $index: ID=${doc.id}, exists=${doc.exists()}")
-        }
 
         val presetsList = snapshot.documents.mapNotNull { doc ->
             try {
                 val id = doc.id
+                val name = doc.getString("presetName") ?: return@mapNotNull null
 
-                // Debug: dump entire document data
-                Log.d(TAG, "📝 Processing document ID=$id")
-                Log.d(TAG, "📝 Document data: ${doc.data}")
-
-                val name = doc.getString("presetName")
-                if (name == null) {
-                    Log.e(TAG, "❌ Document $id is missing 'presetName' field")
+                // Check for 'availability' field
+                val availabilityMap = doc.get("availability") as? Map<*, *>
+                
+                // Only consider it an "Availability Preset" if it has availability data
+                if (availabilityMap == null || availabilityMap.isEmpty()) {
+                    Log.d(TAG, "⚠️ Skipping preset '$name' ($id) - No availability data found")
                     return@mapNotNull null
                 }
 
-                Log.d(TAG, "📋 Processing preset '$name' (id: $id)")
+                val dayCount = availabilityMap.size
+                Log.d(TAG, "✅ Found preset: '$name' with $dayCount days of availability")
 
-                // Get availability map first
-                val availabilityMap = doc.get("availability") as? Map<*, *>
-                var dayCount = 0
-
-                if (availabilityMap != null) {
-                    // Count the number of days in the availability map
-                    dayCount = availabilityMap.size
-                    Log.d(TAG, "📆 Preset $name: Found $dayCount days in availability map: ${availabilityMap.keys}")
-                }
-
-                // If we couldn't determine from availability, use hardcoded values
-                if (dayCount == 0) {
-                    // Try the hardcoded values for known presets
-                    dayCount = when (name) {
-                        "tEST" -> 3
-                        "Test-3" -> 2
-                        "today" -> 1
-                        "RP - 1" -> 4
-                        "Raghopur" -> 2
-                        "AM - 1" -> 2
-                        else -> 1
-                    }
-                    Log.d(TAG, "📝 Using hardcoded/default value: $dayCount days for $name")
-                }
-
-                // Ensure we have at least 1 day
-                if (dayCount <= 0) {
-                    dayCount = 1
-                    Log.d(TAG, "⚠️ Corrected day count to minimum 1 for $name")
-                }
-
-                Log.d(TAG, "✅ Final preset: $name with $dayCount days (based on availability map)")
                 PresetItem(
                     id = id,
                     name = name,
@@ -497,14 +474,11 @@ private suspend fun loadAvailabilityPresets(): List<PresetItem> {
             }
         }
 
-        // Sort naturally by preset name (handles numbers correctly: AM 9B before AM 10G)
+        // Sort naturally by preset name
         val sortedPresets = presetsList.sortedWith(compareBy { naturalSortKey(it.name) })
 
         sortedPresets.also { presets ->
-            Log.d(TAG, "📋 Final sorted presets list (${presets.size} items):")
-            presets.forEachIndexed { index, preset ->
-                Log.d(TAG, "  [$index] ${preset.name}: ${preset.count} days")
-            }
+            Log.d(TAG, "📋 Final sorted availability presets list (${presets.size} items)")
         }
     } catch (e: Exception) {
         Log.e(TAG, "❌ Error loading availability presets", e)

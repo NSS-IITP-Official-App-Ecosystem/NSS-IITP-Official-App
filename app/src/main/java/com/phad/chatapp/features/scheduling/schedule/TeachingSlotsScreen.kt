@@ -115,51 +115,39 @@ fun TeachingSlotsScreen(navController: NavController) {
     ) {
         Scaffold(
             topBar = {
-                TopAppBar(
-                    title = {
-                        Text(
-                            "Teaching Slots",
-                            style = MaterialTheme.typography.titleLarge.copy(
-                                fontSize = 22.sp
-                            ),
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(start = 8.dp)
+                // Custom Header Row as per TTW_UI_plan.md
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp, bottom = 8.dp, start = 4.dp, end = 20.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Back Button
+                    IconButton(
+                        onClick = { navController.navigateUp() },
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
                         )
-                    },
-                    navigationIcon = {
-                        IconButton(
-                            onClick = { navController.navigateUp() },
-                            modifier = Modifier
-                                .padding(8.dp)
-                                .size(48.dp)
-                        ) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back",
-                                tint = Color.White,
-                                modifier = Modifier.size(28.dp)
-                            )
-                        }
-                    },
-                    actions = {
-                        // Standardized "New" button using StandardButton component
-                        StandardButton(
-                            onClick = { navController.navigate("createTeachingSlots") },
-                            modifier = Modifier.padding(end = 16.dp)
-                        ) {
-                            Text(
-                                text = "New",
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color.Transparent
-                    ),
-                    modifier = Modifier.padding(top = 8.dp, bottom = 8.dp),
-                    windowInsets = WindowInsets(0, 0, 0, 0)
-                )
+                    }
+
+                    // Title
+                    Text(
+                        text = "Teaching Slots",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontSize = 22.sp
+                        ),
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 8.dp)
+                    )
+                }
             },
             containerColor = Color.Transparent,
             contentWindowInsets = WindowInsets(0, 0, 0, 0)
@@ -311,6 +299,28 @@ fun TeachingSlotsScreen(navController: NavController) {
                         }
                     }
                 }
+            }
+        }
+
+        // Floating Action Button (Manual Positioning as per plan)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(bottom = 48.dp, end = 24.dp),
+            contentAlignment = Alignment.BottomEnd
+        ) {
+            FloatingActionButton(
+                onClick = { navController.navigate("createTeachingSlots") },
+                containerColor = Color(0xFF4CAF50), // Green as per plan
+                contentColor = Color.White,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.size(56.dp)
+            ) {
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = "Create New Preset",
+                    modifier = Modifier.size(24.dp)
+                )
             }
         }
 
@@ -506,25 +516,38 @@ fun TeachingSlotCard(
                     )
 
                     Column {
-                        val chunkedSubjects = slot.subjects.chunked(3)
+                        val chunkedSubjects = slot.subjects.chunked(4)
                         chunkedSubjects.forEach { rowSubjects ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(bottom = 2.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    .padding(bottom = 6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 rowSubjects.forEach { subject ->
                                     val shortName = subject.name.take(3)
-                                    Text(
-                                        text = "$shortName : ${subject.count}",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = Color.White, // Content White
-                                        fontWeight = FontWeight.Medium,
-                                        modifier = Modifier.weight(1f)
-                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .width(54.dp)
+                                            .height(26.dp)
+                                            .background(
+                                                color = YellowAccent,
+                                                shape = RoundedCornerShape(8.dp)
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "$shortName : ${subject.count}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontSize = 11.sp,
+                                            color = Color.Black,
+                                            fontWeight = FontWeight.Medium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
                                 }
-                                repeat(3 - rowSubjects.size) {
+                                repeat(4 - rowSubjects.size) {
                                     Spacer(modifier = Modifier.weight(1f))
                                 }
                             }
@@ -616,40 +639,8 @@ private suspend fun deleteTeachingSlot(slotId: String) {
     val db = FirebaseFirestore.getInstance()
 
     try {
-        // First, get the teaching slot document to retrieve the preset name
-        Log.d(TAG, "Fetching teaching slot document to get preset name: $slotId")
-
-        val teachingSlotDoc = db.collection(TEACHING_SLOT_PRESETS_COLLECTION)
-            .document(slotId)
-            .get()
-            .await()
-
-        if (teachingSlotDoc.exists()) {
-            val presetName = teachingSlotDoc.getString("presetName")
-
-            if (!presetName.isNullOrEmpty()) {
-                // Delete volunteer availability data using preset name as document ID
-                Log.d(TAG, "Deleting volunteer availability data for preset: $presetName")
-
-                val availabilityDocRef = db.collection(VOLUNTEER_AVAILABILITY_COLLECTION)
-                    .document(presetName)
-
-                // Check if availability document exists
-                val availabilityDoc = availabilityDocRef.get().await()
-                if (availabilityDoc.exists()) {
-                    availabilityDocRef.delete().await()
-                    Log.d(TAG, "Successfully deleted volunteer availability data for preset: $presetName")
-                } else {
-                    Log.d(TAG, "No volunteer availability data found for preset: $presetName")
-                }
-            } else {
-                Log.w(TAG, "Teaching slot document has no presetName field: $slotId")
-            }
-        } else {
-            Log.w(TAG, "Teaching slot document not found: $slotId")
-        }
-
-        // Then delete the teaching slot preset document
+        // Just delete the teaching slot preset document
+        // This will automatically remove any availability data stored within it as well
         db.collection(TEACHING_SLOT_PRESETS_COLLECTION)
             .document(slotId)
             .delete()
@@ -657,7 +648,7 @@ private suspend fun deleteTeachingSlot(slotId: String) {
 
         Log.d(TAG, "Teaching slot preset successfully deleted: $slotId")
     } catch (e: Exception) {
-        Log.e(TAG, "Error deleting teaching slot preset and associated data: $slotId", e)
+        Log.e(TAG, "Error deleting teaching slot preset: $slotId", e)
         throw e
     }
 }
