@@ -25,7 +25,7 @@ android {
         applicationId = "com.phad.chatapp"
         minSdk = 26
         targetSdk = 35
-        versionCode = 47
+        versionCode = 51
         versionName = "1.1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -206,6 +206,9 @@ dependencies {
 
     // Location services for attendance tracking
     implementation("com.google.android.gms:play-services-location:21.1.0")
+    
+    // Play Integrity API for app attestation (server-side clone detection)
+    implementation("com.google.android.play:integrity:1.3.0")
 
     // CameraX for face recognition
     val cameraxVersion = "1.3.1"

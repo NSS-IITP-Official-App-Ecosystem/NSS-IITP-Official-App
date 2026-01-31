@@ -46,7 +46,7 @@ import com.phad.chatapp.ui.components.DimmedHomeBackground
 import com.phad.chatapp.ui.components.GradientHeader
 import com.phad.chatapp.utils.SessionManager
 import com.phad.chatapp.utils.LocationPermissionHelper
-import com.phad.chatapp.utils.CloneDetectionUtils
+import com.phad.chatapp.utils.PlayIntegrityManager
 import com.phad.chatapp.viewmodels.QRAttendanceViewModel
 import com.phad.chatapp.viewmodels.QRAttendanceViewModelFactory
 import com.phad.chatapp.viewmodels.ScanResult
@@ -99,9 +99,10 @@ class NssQRScanFragment : Fragment() {
     // State for showing location dialog
     private var showLocationDialog by mutableStateOf(false)
     
-    // State for showing clone detection dialog
-    private var showCloneDetectionDialog by mutableStateOf(false)
-    private var cloneDetectionResult: CloneDetectionUtils.CloneDetectionResult? = null
+    // State for Play Integrity verification
+    private var integrityCheckState by mutableStateOf<PlayIntegrityManager.IntegrityResult?>(null)
+    private var showIntegrityBlockedDialog by mutableStateOf(false)
+    private var integrityErrorMessage by mutableStateOf("")
 
     
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -146,12 +147,23 @@ class NssQRScanFragment : Fragment() {
         composeOverlay.setContent {
             val uiState by viewModel.studentUiState.collectAsState()
 
-            // Show clone detection dialog if detected
-            if (showCloneDetectionDialog && cloneDetectionResult != null) {
-                CloneDetectionBlockDialog(
-                    detectionResult = cloneDetectionResult!!,
+            // Show integrity check loading state
+            val currentIntegrityState = integrityCheckState
+            if (currentIntegrityState == PlayIntegrityManager.IntegrityResult.Loading) {
+                IntegrityCheckLoadingDialog()
+            }
+            
+            // Show integrity blocked dialog if verification failed
+            if (showIntegrityBlockedDialog) {
+                IntegrityBlockedDialog(
+                    message = integrityErrorMessage,
+                    canRetry = (currentIntegrityState as? PlayIntegrityManager.IntegrityResult.Failure)?.canRetry ?: false,
+                    onRetry = {
+                        showIntegrityBlockedDialog = false
+                        performIntegrityCheck()
+                    },
                     onDismiss = {
-                        showCloneDetectionDialog = false
+                        showIntegrityBlockedDialog = false
                         parentFragmentManager.popBackStack()
                     }
                 )
@@ -191,23 +203,9 @@ class NssQRScanFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        // Clone detection - check if app is running in cloned environment
-        Log.d(TAG, "Performing clone detection check...")
-        CloneDetectionUtils.logDetectionDetails(requireContext())
-        val detectionResult = CloneDetectionUtils.getCloneDetectionDetails(requireContext())
-        
-        if (detectionResult.isCloned) {
-            Log.w(TAG, "Clone app detected: ${detectionResult.reason}")
-            cloneDetectionResult = detectionResult
-            showCloneDetectionDialog = true
-            // Don't proceed with camera/permissions if cloned
-            return
-        }
-        
-        Log.d(TAG, "Clone detection passed - app is running in normal environment")
-
-        // Auto-check and request permissions if needed
-        requestPermissionsIfNeeded()
+        // Play Integrity verification - server-side check before allowing QR scanning
+        Log.d(TAG, "Starting Play Integrity verification...")
+        performIntegrityCheck()
 
         // Observe UI state for navigation and camera control
         lifecycleScope.launch {
@@ -252,6 +250,38 @@ class NssQRScanFragment : Fragment() {
         super.onPause()
         // Stop refreshing location when leaving scan screen
         viewModel.stopStudentLocationUpdates()
+    }
+    
+    /**
+     * Perform Play Integrity verification before allowing QR scanning.
+     * This is an async operation that updates UI state based on result.
+     */
+    private fun performIntegrityCheck() {
+        integrityCheckState = PlayIntegrityManager.IntegrityResult.Loading
+        
+        lifecycleScope.launch {
+            val userId = sessionManager.fetchRollNumber() ?: "unknown"
+            Log.d(TAG, "Verifying integrity for user: $userId")
+            
+            val result = PlayIntegrityManager.verifyIntegrity(requireContext(), userId)
+            integrityCheckState = result
+            
+            when (result) {
+                is PlayIntegrityManager.IntegrityResult.Success -> {
+                    Log.d(TAG, "Integrity verification passed - proceeding to QR scanner")
+                    // Integrity passed, proceed with permissions and camera
+                    requestPermissionsIfNeeded()
+                }
+                is PlayIntegrityManager.IntegrityResult.Failure -> {
+                    Log.w(TAG, "Integrity verification failed: ${result.message}")
+                    integrityErrorMessage = result.message
+                    showIntegrityBlockedDialog = true
+                }
+                is PlayIntegrityManager.IntegrityResult.Loading -> {
+                    // Should not reach here
+                }
+            }
+        }
     }
     
     private fun allPermissionsGranted(): Boolean {
@@ -791,9 +821,49 @@ fun LocationEnableDialog(
     )
 }
 
+/**
+ * Loading dialog shown while Play Integrity verification is in progress
+ */
 @Composable
-fun CloneDetectionBlockDialog(
-    detectionResult: CloneDetectionUtils.CloneDetectionResult,
+fun IntegrityCheckLoadingDialog() {
+    AlertDialog(
+        onDismissRequest = { /* Non-dismissable during verification */ },
+        icon = {
+            CircularProgressIndicator(
+                modifier = Modifier.size(48.dp),
+                color = Color(0xFF2196F3)
+            )
+        },
+        title = {
+            Text(
+                text = "Verifying App",
+                fontWeight = FontWeight.Bold,
+                fontSize = 20.sp
+            )
+        },
+        text = {
+            Text(
+                text = "Please wait while we verify your app...",
+                fontSize = 14.sp,
+                color = Color(0xFF757575),
+                textAlign = TextAlign.Center
+            )
+        },
+        confirmButton = { /* No buttons during loading */ },
+        containerColor = Color.White,
+        shape = RoundedCornerShape(16.dp)
+    )
+}
+
+/**
+ * Dialog shown when Play Integrity verification fails.
+ * Shows a polite message asking user to install from Play Store.
+ */
+@Composable
+fun IntegrityBlockedDialog(
+    message: String,
+    canRetry: Boolean,
+    onRetry: () -> Unit,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
@@ -801,36 +871,28 @@ fun CloneDetectionBlockDialog(
         icon = {
             Icon(
                 imageVector = Icons.Default.Error,
-                contentDescription = "Clone App Detected",
-                tint = Color(0xFFE53935),
+                contentDescription = "Verification Failed",
+                tint = Color(0xFFFFA726),
                 modifier = Modifier.size(56.dp)
             )
         },
         title = {
             Text(
-                text = "Cloned App Detected",
+                text = "Feature Unavailable",
                 fontWeight = FontWeight.Bold,
-                fontSize = 22.sp,
-                color = Color(0xFFE53935)
+                fontSize = 20.sp,
+                color = Color(0xFF4B4B4B)
             )
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    text = "Attendance marking is not allowed in cloned apps. Please use the official app installed from Play Store.",
+                    text = message,
                     fontSize = 15.sp,
-                    fontWeight = FontWeight.Medium,
                     color = Color(0xFF4B4B4B),
-                    textAlign = TextAlign.Center
+                    textAlign = TextAlign.Center,
+                    lineHeight = 22.sp
                 )
-
-//                Text(
-//                    text = "Please use the official app installed from Play Store.",
-//                    fontSize = 14.sp,
-//                    color = Color(0xFF757575),
-//                    lineHeight = 20.sp,
-//                    textAlign = TextAlign.Center
-//                )
             }
         },
         confirmButton = {
@@ -840,7 +902,14 @@ fun CloneDetectionBlockDialog(
                     containerColor = Color(0xFF2196F3)
                 )
             ) {
-                Text("Exit", fontSize = 16.sp)
+                Text("OK", fontSize = 16.sp)
+            }
+        },
+        dismissButton = {
+            if (canRetry) {
+                TextButton(onClick = onRetry) {
+                    Text("Retry", color = Color(0xFF757575))
+                }
             }
         },
         containerColor = Color.White,

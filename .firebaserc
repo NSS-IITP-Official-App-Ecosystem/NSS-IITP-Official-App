@@ -1,5 +1,7 @@
 {
   "projects": {
-    "default": "chatapp-24fae"
+    "default": "nssiitp-app",
+    "test": "chatapp-24fae",
+    "prod": "nssiitp-app"
   }
 }
