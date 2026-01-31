@@ -37,6 +37,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -98,6 +99,8 @@ data class ProfileUiState(
     val profileImageUrl: String = "",
     val wings: List<String> = emptyList(),
     val subjectPreferences: List<String> = emptyList(),
+    val classesPerWeek: String = "0",
+    val assignedSlots: List<String> = emptyList(), // New field for assigned slots
     // New semester-based statistics fields
     val sem1Hours: String = "0/0",
     val sem2Hours: String = "0/0",
@@ -124,6 +127,7 @@ fun ProfileScreen(
     onSem2HoursClick: () -> Unit,
     onFaqsClick: () -> Unit = {},
     onSubjectPreferenceClick: () -> Unit = {},
+    onUpdateClassesPerWeek: (String) -> Unit = {},
     currentInterface: String,
     teachingWing: Boolean
 ) {
@@ -131,6 +135,7 @@ fun ProfileScreen(
     val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
+    var showClassesDialog by remember { mutableStateOf(false) }
     
     // Determine user type
     val isAdmin = !state.isStudent
@@ -400,6 +405,41 @@ fun ProfileScreen(
                         Spacer(modifier = Modifier.height(16.dp))
                         
                         if (currentInterface == "Teaching Wing") {
+                            // Assigned Slots Section
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = "Assigned Slot(s)", 
+                                    color = onSurfaceColor.copy(alpha = 0.7f),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                if (state.assignedSlots.isNotEmpty()) {
+                                    state.assignedSlots.forEach { slot ->
+                                        Text(
+                                            text = slot, 
+                                            color = onSurfaceColor,
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            modifier = Modifier.padding(top = 2.dp)
+                                        )
+                                    }
+                                } else {
+                                    Text(
+                                        text = "None",
+                                        color = onSurfaceColor.copy(alpha = 0.5f),
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontStyle = FontStyle.Italic
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
                             // Subject Preference Section for TTW users
                             Column(
                                 modifier = Modifier
@@ -447,6 +487,41 @@ fun ProfileScreen(
                                             modifier = Modifier.padding(bottom = 4.dp)
                                         )
                                     }
+                                }
+                            }
+
+                            // Classes Per Week Section
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { showClassesDialog = true }
+                                    .padding(vertical = 4.dp)
+                                    .padding(top = 8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = "Number of classes per week", 
+                                            color = onSurfaceColor.copy(alpha = 0.7f),
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        Text(
+                                            text = state.classesPerWeek,
+                                            color = onSurfaceColor,
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "Edit Classes Per Week",
+                                        tint = onSurfaceColor
+                                    )
                                 }
                             }
                         } else {
@@ -512,6 +587,70 @@ fun ProfileScreen(
         }
     }
     
+
+    // Classes Per Week Dialog
+    if (showClassesDialog) {
+        var classesInput by remember { mutableStateOf(state.classesPerWeek) }
+        AlertDialog(
+            onDismissRequest = { showClassesDialog = false },
+            containerColor = Color(0xff1E1E1E), // Dark container
+            titleContentColor = Color.White,
+            textContentColor = Color.White,
+            title = {
+                Text(
+                    text = "Weekly Classes",
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFFFCC00) // TTW Yellow accent
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "How many classes do you want to conduct in a week in the government school?",
+                        fontSize = 16.sp,
+                        color = Color.White.copy(alpha = 0.9f)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    androidx.compose.material3.OutlinedTextField(
+                        value = classesInput,
+                        onValueChange = { classesInput = it },
+                        singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                        ),
+                        colors = androidx.compose.material3.TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedIndicatorColor = Color(0xFFFFCC00),
+                            unfocusedIndicatorColor = Color.White.copy(alpha = 0.5f),
+                            cursorColor = Color(0xFFFFCC00)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showClassesDialog = false
+                        onUpdateClassesPerWeek(classesInput)
+                    }
+                ) {
+                    Text("Save", color = Color(0xFFFFCC00), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showClassesDialog = false }
+                ) {
+                    Text("Cancel", color = Color.White.copy(alpha = 0.7f))
+                }
+            }
+        )
+    }
+
     // Logout confirmation dialog
     if (showLogoutDialog) {
         AlertDialog(

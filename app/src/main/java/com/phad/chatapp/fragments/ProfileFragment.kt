@@ -124,6 +124,13 @@ class ProfileFragment : Fragment() {
                         }
                         findNavController().navigate(R.id.schedulingFragment, bundle)
                     },
+                    onUpdateClassesPerWeek = { newValue ->
+                        if (newValue.isNotEmpty()) {
+                            viewModel.updateClassesPerWeek(newValue)
+                            // Also update local state to reflect change immediately
+                            _uiState.update { it.copy(classesPerWeek = newValue) }
+                        }
+                    },
                     currentInterface = "Teaching Wing",
                     teachingWing = teachingWing
                 )
@@ -241,6 +248,27 @@ class ProfileFragment : Fragment() {
         loadProfileFromSession()
         
         Log.d(TAG, "=== PROFILE FRAGMENT INITIALIZATION COMPLETE ===")
+        
+        // Sync ViewModel state to local state
+        lifecycleScope.launch {
+            viewModel.uiState.collect { vmState ->
+                // Only update if data is actually loaded in VM (simple check)
+                if (vmState.classesPerWeek != "0" || vmState.subjectPreferences.isNotEmpty() || vmState.assignedSlots.isNotEmpty()) {
+                    Log.d(TAG, "Syncing ViewModel state to Fragment: classes=${vmState.classesPerWeek}, prefs=${vmState.subjectPreferences.size}, slots=${vmState.assignedSlots.size}")
+                    _uiState.update { local ->
+                        local.copy(
+                            classesPerWeek = vmState.classesPerWeek,
+                            subjectPreferences = vmState.subjectPreferences,
+                            assignedSlots = vmState.assignedSlots,
+                            // Sync other potentially enhanced fields if VM is source of truth
+                            subjectPreference1 = vmState.subjectPreference1,
+                            subjectPreference2 = vmState.subjectPreference2,
+                            subjectPreference3 = vmState.subjectPreference3
+                        )
+                    }
+                }
+            }
+        }
     }
     
     private fun logout() {
@@ -484,6 +512,15 @@ class ProfileFragment : Fragment() {
                     .get()
                     .await()
                 
+                // Fetch classesPerWeek safely (can be String or Number)
+                val rawClasses = userDoc.get("classesPerWeek")
+                val classesCount = rawClasses?.toString() ?: "0"
+                
+                Log.d(TAG, "Loaded classesPerWeek in Fragment: $classesCount (type: ${rawClasses?.javaClass?.simpleName})")
+                
+                // Update local state
+                _uiState.update { it.copy(classesPerWeek = classesCount) }
+
                 val prefIds = userDoc.get("subjectPreferences") as? List<String> ?: emptyList()
                 
                 if (prefIds.isNotEmpty()) {

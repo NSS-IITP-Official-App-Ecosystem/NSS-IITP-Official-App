@@ -525,7 +525,7 @@ fun ViewAssignmentsScreen(navController: NavController) {
                             isExporting = true
                             coroutineScope.launch {
                                 try {
-                                    val result = generateAndSharePDF(context, filteredAssignments, selectedSchool)
+                                    val result = generateAndSharePDF(context, assignments, selectedSchool)
                                     isExporting = false
                                     snackbarHostState.showSnackbar(result)
                                 } catch (e: Exception) {
@@ -1292,8 +1292,10 @@ private suspend fun generateAndSharePDF(
             color = android.graphics.Color.BLACK
         }
         
-        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-        val pdfFileName = "schedule_${selectedSchool ?: "All"}_$timestamp.pdf"
+        // Format date like "5 Feb"
+        val dateFormat = SimpleDateFormat("d MMM", Locale.getDefault())
+        val dateString = dateFormat.format(Date())
+        val pdfFileName = "Teaching Schedule ($dateString).pdf"
         
         var pageNumber = 1
         // For each section, create a page in the PDF
@@ -1638,8 +1640,19 @@ private suspend fun loadAssignments(): List<SubjectAssignmentDetails> {
                     schoolName = scheduleName.trim()
                 }
                 
+
                 // Get day and slot names with defaults if list is too short or empty
-                val dayName = if (assignment.dayIndex < dayNames.size) dayNames[assignment.dayIndex] else "Day ${assignment.dayIndex + 1}"
+                val STANDARD_DAYS = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+                val isStandardDays = dayNames.any { it in STANDARD_DAYS }
+
+                val dayName = if (isStandardDays && assignment.dayIndex < STANDARD_DAYS.size) {
+                    STANDARD_DAYS[assignment.dayIndex]
+                } else if (assignment.dayIndex < dayNames.size) {
+                    dayNames[assignment.dayIndex]
+                } else {
+                    "Day ${assignment.dayIndex + 1}"
+                }
+                
                 val slotName = if (assignment.slotIndex < slotNames.size) slotNames[assignment.slotIndex] else "Slot ${assignment.slotIndex + 1}"
                 
                 val subjectName = SubjectConstants.SUBJECT_NAMES[assignment.subjectCode] ?: assignment.subjectCode

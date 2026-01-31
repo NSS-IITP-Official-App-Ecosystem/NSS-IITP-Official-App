@@ -4,6 +4,8 @@ import android.util.Log
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -40,6 +42,7 @@ import androidx.navigation.NavController
 import com.google.firebase.firestore.FirebaseFirestore
 
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 import com.phad.chatapp.features.scheduling.firebase.FirebaseManager
 import com.phad.chatapp.features.scheduling.models.VolunteerInfo
@@ -69,7 +72,7 @@ enum class SortField {
 
 private const val TAG = "ManageVolunteersScreen"
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ManageVolunteersScreen(
     navController: NavController,
@@ -605,6 +608,55 @@ fun ManageVolunteersScreen(
         applyFiltersAndSort()
     }
 
+    // Function to sync class counts from database (Long press feature)
+    fun syncClassesFromDatabase() {
+        isLoading = true
+        coroutineScope.launch {
+            try {
+                // Fetch all students from ttwStudents to get latest classesPerWeek
+                val snapshot = FirebaseFirestore.getInstance()
+                    .collection("ttwStudents")
+                    .get()
+                    .await()
+
+                val dbCounts = mutableMapOf<String, Int>()
+                
+                for (doc in snapshot.documents) {
+                    val rollNo = doc.id
+                    val rawCount = doc.get("classesPerWeek")
+                    // Handle String or Number safely
+                    val count = when (rawCount) {
+                        is String -> rawCount.toIntOrNull() ?: 0
+                        is Number -> rawCount.toInt()
+                        else -> 0
+                    }
+                    // Always add to map, even if 0, to support overwriting existing values with 0
+                    dbCounts[rollNo] = count
+                }
+
+                // Update users list
+                val updatedUsers = users.map { user ->
+                    // If user exists in DB, use that value.
+                    // If user is NOT in DB, we default to 0 to ensure the "sync" reflects the DB's state (which is empty/0 for them).
+                    // This matches the "replace existing" requirement.
+                    val newCount = dbCounts[user.uid] ?: 0
+                    user.copy(classCount = newCount)
+                }
+                
+                users = updatedUsers
+                applyFiltersAndSort()
+                
+                snackbarHostState.showSnackbar("Synced class counts for ${dbCounts.size} students from database")
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Error syncing from database: ${e.message}", e)
+                snackbarHostState.showSnackbar("Failed to sync: ${e.message}")
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
     // Add this function to check available collections in Firestore
     fun checkAvailableCollections() {
         isLoading = true
@@ -949,11 +1001,16 @@ fun ManageVolunteersScreen(
                                 Box(
                                     modifier = Modifier
                                         .width(60.dp) // Reduced width to give more space to name
-                                        .clickable {
-                                            if (filteredUsers.isNotEmpty()) {
-                                                handleIncrementAll()
+                                        .combinedClickable(
+                                            onClick = {
+                                                if (filteredUsers.isNotEmpty()) {
+                                                    handleIncrementAll()
+                                                }
+                                            },
+                                            onLongClick = {
+                                                syncClassesFromDatabase()
                                             }
-                                        },
+                                        ),
                                     contentAlignment = Alignment.CenterStart
                                 ) {
                                     Text(

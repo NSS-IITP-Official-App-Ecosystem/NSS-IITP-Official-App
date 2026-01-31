@@ -66,8 +66,8 @@ fun VolunteersListDialog(
     // Filter volunteers based on criteria
     val filteredVolunteers = volunteers.filter { volunteer ->
         val assignmentMatch = when (filterMode) {
-            1 -> volunteer.isAssigned // Assigned
-            2 -> !volunteer.isAssigned // Unassigned
+            1 -> volunteer.assignedSlots.isNotEmpty() || volunteer.assignedSlot != null // Assigned (Any slot)
+            2 -> volunteer.assignedSlots.isEmpty() && volunteer.assignedSlot == null // Unassigned (No slots)
             else -> true // All
         }
 
@@ -491,46 +491,61 @@ fun VolunteerListItem(
                             .padding(start = 4.dp),
                         horizontalAlignment = Alignment.CenterHorizontally // Center alignment
                     ) {
-                        if (volunteer.isAssigned && volunteer.assignedSlot != null) {
-                            val slot = volunteer.assignedSlot!!
+                        if (volunteer.assignedSlots.isNotEmpty() || volunteer.assignedSlot != null) {
+                            // Combine list and single slot (fallback)
+                            val slotsToShow = if (volunteer.assignedSlots.isNotEmpty()) {
+                                volunteer.assignedSlots
+                            } else {
+                                listOfNotNull(volunteer.assignedSlot)
+                            }
                             
-                            // Assigned State - Subject Name Only, Larger
-                            val rank = if (slot.assignedSubject != null) {
-                                val idx = volunteer.subjectPreferences.indexOfFirst { it.equals(slot.assignedSubject, ignoreCase = true) }
-                                if (idx != -1) " (#${idx + 1})" else ""
-                            } else ""
-                            
-                            Text(
-                                text = (slot.assignedSubject ?: "N/A") + rank,
-                                color = YellowAccent,
-                                style = MaterialTheme.typography.titleLarge.copy( // Larger font for subject
-                                    fontSize = 18.sp // Reduced from 20.sp
-                                ),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                textAlign = TextAlign.Center
-                            )
-                            
-                            Spacer(modifier = Modifier.height(2.dp))
-                            
-                            // Split slot details into two lines
-                            Text(
-                                text = "${slot.schoolName} • ${slot.dayName}",
-                                color = Color(0xFF2E7D32), // Success green
-                                style = MaterialTheme.typography.bodyMedium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                textAlign = TextAlign.Center
-                            )
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                slotsToShow.forEach { slot ->
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        // Assigned State - Subject Name Only, Larger
+                                        val rank = if (slot.assignedSubject != null) {
+                                            val idx = volunteer.subjectPreferences.indexOfFirst { it.equals(slot.assignedSubject, ignoreCase = true) }
+                                            if (idx != -1) " (#${idx + 1})" else ""
+                                        } else ""
+                                        
+                                        Text(
+                                            text = (slot.assignedSubject ?: "N/A") + rank,
+                                            color = YellowAccent,
+                                            style = MaterialTheme.typography.titleLarge.copy( // Larger font for subject
+                                                fontSize = 18.sp // Reduced from 20.sp
+                                            ),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            textAlign = TextAlign.Center
+                                        )
+                                        
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        
+                                        // Split slot details into two lines
+                                        Text(
+                                            text = "${slot.schoolName} • ${slot.dayName}",
+                                            color = Color(0xFF2E7D32), // Success green
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            textAlign = TextAlign.Center
+                                        )
 
-                            Text(
-                                text = slot.timeLabel,
-                                color = Color(0xFF2E7D32), // Success green
-                                style = MaterialTheme.typography.bodyMedium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                textAlign = TextAlign.Center
-                            )
+                                        Text(
+                                            text = slot.timeLabel,
+                                            color = Color(0xFF2E7D32), // Success green
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
+                                }
+                            }
                         } else {
                             // Unassigned State - Just the preferences list
                             val prefsText = if (volunteer.subjectPreferences.isNotEmpty()) {

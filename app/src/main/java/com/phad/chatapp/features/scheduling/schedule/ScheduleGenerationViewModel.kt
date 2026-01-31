@@ -72,7 +72,8 @@ data class Volunteer(
     val interviewScore: Int = 0,  // For ranking volunteers (higher is better)
     val subjectPreferences: List<String> = emptyList(),  // Array of subject preferences (1st = index 0, 2nd = index 1, etc.)
     var isAssigned: Boolean = false,
-    var assignedSlot: Slot? = null
+    var assignedSlot: Slot? = null,
+    var assignedSlots: List<Slot> = emptyList() // Track all assigned slots
 )
 
 // Group count information for TFV calculation
@@ -1312,7 +1313,7 @@ class ScheduleGenerationViewModel : ViewModel() {
         val matchingVolunteers = availableVolunteers.filter { volunteer ->
             preferenceLevel < volunteer.subjectPreferences.size &&
             volunteer.subjectPreferences[preferenceLevel].equals(subjectToAssign.subjectName, ignoreCase = true)
-        }.sortedByDescending { it.interviewScore }  // Highest score first
+        }.sortedWith(compareByDescending<Volunteer> { it.classCount }.thenByDescending { it.interviewScore })
 
         if (matchingVolunteers.isEmpty()) {
              Log.d(ALGO_TAG, "⏩ SKIP: No volunteers have '${subjectToAssign.subjectName}' as Preference #${preferenceLevel + 1}")
@@ -1372,7 +1373,8 @@ class ScheduleGenerationViewModel : ViewModel() {
         val updatedVolunteer = volunteer.copy(
             classCount = volunteer.classCount - 1,  // NEW: Decrement
             isAssigned = if (volunteer.classCount - 1 == 0) true else volunteer.isAssigned,  // Only mark fully assigned if no classes left
-            assignedSlot = updatedSlot
+            assignedSlot = updatedSlot,
+            assignedSlots = volunteer.assignedSlots + updatedSlot
         )
 
         Log.d(ALGO_TAG, "📉 UPDATE STATE:")
@@ -1441,14 +1443,18 @@ class ScheduleGenerationViewModel : ViewModel() {
             _currentSlot.value = updatedSlot
         }
 
-        // Decrement the group count for the assigned volunteer's group
-        val volunteerGroup = volunteer.group
-        val updatedGroupCounts = _groupCounts.value.toMutableMap()
-        val currentCount = updatedGroupCounts[volunteerGroup] ?: 0
-        if (currentCount > 0) {
-            updatedGroupCounts[volunteerGroup] = currentCount - 1
-            _groupCounts.value = updatedGroupCounts
-            Log.d(ALGO_TAG, "   Group ${volunteerGroup}: Available count ${currentCount} -> ${currentCount - 1}")
+        // Decrement the group count ONLY IF volunteer has no more classes
+        if (updatedVolunteer.classCount == 0) {
+            val volunteerGroup = volunteer.group
+            val updatedGroupCounts = _groupCounts.value.toMutableMap()
+            val currentCount = updatedGroupCounts[volunteerGroup] ?: 0
+            if (currentCount > 0) {
+                updatedGroupCounts[volunteerGroup] = currentCount - 1
+                _groupCounts.value = updatedGroupCounts
+                Log.d(ALGO_TAG, "   Group ${volunteerGroup}: Available count ${currentCount} -> ${currentCount - 1} (Volunteer fully assigned)")
+            }
+        } else {
+            Log.d(ALGO_TAG, "   Group ${volunteer.group}: Count unchanged (Volunteer still has ${updatedVolunteer.classCount} classes)")
         }
 
 
@@ -1547,7 +1553,8 @@ class ScheduleGenerationViewModel : ViewModel() {
         val updatedVolunteer = volunteer.copy(
             classCount = newClassCount,
             isAssigned = if (newClassCount <= 0) true else volunteer.isAssigned,
-            assignedSlot = updatedSlot
+            assignedSlot = updatedSlot,
+            assignedSlots = volunteer.assignedSlots + updatedSlot
         )
         
         // NEW: Track this assignment for future adjacency checks
@@ -1595,15 +1602,19 @@ class ScheduleGenerationViewModel : ViewModel() {
             _currentSlot.value = updatedSlot
         }
 
-        // Decrement the group count for the assigned volunteer's group
+        // Decrement the group count ONLY IF volunteer has no more classes
         val volunteerGroup = volunteer.group
-        val updatedGroupCounts = _groupCounts.value.toMutableMap()
-        val currentCount = updatedGroupCounts[volunteerGroup] ?: 0
-        if (currentCount > 0) {
-            updatedGroupCounts[volunteerGroup] = currentCount - 1
-            _groupCounts.value = updatedGroupCounts
+        if (updatedVolunteer.classCount <= 0) {
+            val updatedGroupCounts = _groupCounts.value.toMutableMap()
+            val currentCount = updatedGroupCounts[volunteerGroup] ?: 0
+            if (currentCount > 0) {
+                updatedGroupCounts[volunteerGroup] = currentCount - 1
+                _groupCounts.value = updatedGroupCounts
 
-            Log.d(TAG, "📊 Updated group counts after manual assignment: Group $volunteerGroup count reduced to ${currentCount - 1}")
+                Log.d(TAG, "📊 Updated group counts after manual assignment: Group $volunteerGroup count reduced to ${currentCount - 1} (Volunteer fully assigned)")
+            }
+        } else {
+            Log.d(TAG, "📊 Group counts unchanged after manual assignment: Group $volunteerGroup (Volunteer still has ${updatedVolunteer.classCount} classes)")
         }
 
         // Recalculate TFV for all slots
@@ -1618,39 +1629,39 @@ class ScheduleGenerationViewModel : ViewModel() {
         val db = FirebaseFirestore.getInstance()
         val scheduleId = UUID.randomUUID().toString()
 
-        // Group assignments by teaching slot preset (school name)
-        val assignmentsByPreset = _assignedVolunteers.value.groupBy { volunteer ->
-            volunteer.assignedSlot?.schoolName ?: "Unknown"
-        }
+        // Group assignments by teaching slot preset (school name) based on SLOTS instead of volunteers
+        // This ensures that volunteers with multiple classes have ALL their classes saved
+        val assignedSlots = _slots.value.filter { it.assignedVolunteerId != null }
+        val slotsByPreset = assignedSlots.groupBy { it.schoolName }
 
         Log.d(TAG, "💾 Saving optimized schedule with document-level preset organization")
-        Log.d(TAG, "📊 Found ${assignmentsByPreset.size} teaching slot presets with assignments")
+        Log.d(TAG, "📊 Found ${slotsByPreset.size} teaching slot presets with ${assignedSlots.size} total assignments")
 
         // Create a batch to save all preset documents
         val batch = db.batch()
 
-        for ((presetName, volunteers) in assignmentsByPreset) {
-            if (presetName == "Unknown" || volunteers.isEmpty()) {
-                Log.w(TAG, "⚠️ Skipping preset '$presetName' with ${volunteers.size} volunteers")
+        for ((presetName, slots) in slotsByPreset) {
+            if (presetName == "Unknown" || slots.isEmpty()) {
+                Log.w(TAG, "⚠️ Skipping preset '$presetName' with ${slots.size} slots")
                 continue
             }
 
-            Log.d(TAG, "🏫 Processing preset '$presetName' with ${volunteers.size} volunteers")
+            Log.d(TAG, "🏫 Processing preset '$presetName' with ${slots.size} assigned slots")
 
-            // Create optimized preset document data
-            val presetDocumentData = createPresetDocumentData(presetName, volunteers, scheduleId)
+            // Create optimized preset document data using slots
+            val presetDocumentData = createPresetDocumentData(presetName, slots, scheduleId)
 
             // Create document reference with preset name as document ID
             val presetDocRef = db.collection(GENERATED_SCHEDULES_COLLECTION).document(presetName)
             batch.set(presetDocRef, presetDocumentData)
 
-            Log.d(TAG, "📝 Adding optimized preset document '$presetName' with ${volunteers.size} total volunteers")
+            Log.d(TAG, "📝 Adding optimized preset document '$presetName' with ${slots.size} assignments")
         }
 
         // Commit all preset documents in a single batch
         batch.commit().await()
 
-        Log.d(TAG, "🎉 Successfully saved optimized schedule with ${assignmentsByPreset.size} preset documents")
+        Log.d(TAG, "🎉 Successfully saved optimized schedule with ${slotsByPreset.size} preset documents")
         return scheduleId
     }
 
@@ -1782,43 +1793,50 @@ class ScheduleGenerationViewModel : ViewModel() {
     /**
      * Create optimized preset document data using indices instead of redundant strings
      */
+    /**
+     * Create optimized preset document data using indices instead of redundant strings
+     * Updated to accept Slots instead of Volunteers to handle multiple classes per volunteer correctly
+     */
     private suspend fun createPresetDocumentData(
         presetName: String,
-        volunteers: List<Volunteer>,
+        slots: List<Slot>,
         scheduleId: String
     ): Map<String, Any> {
-        // Extract reference data from the first volunteer's slot
-        val firstSlot = volunteers.firstOrNull()?.assignedSlot
-        val referenceData = if (firstSlot != null) {
-            extractReferenceDataFromSlots(volunteers.mapNotNull { it.assignedSlot })
+        // Extract reference data from the slots
+        val referenceData = if (slots.isNotEmpty()) {
+            extractReferenceDataFromSlots(slots)
         } else {
             ScheduleReferenceData()
         }
 
-        Log.d(TAG, "🔍 Fetching enhanced volunteer details for ${volunteers.size} volunteers")
+        Log.d(TAG, "🔍 Fetching enhanced volunteer details for ${slots.size} assignments")
 
         // Create optimized volunteer assignments with enhanced data from students collection
-        val optimizedAssignments = volunteers.map { volunteer ->
-            val slot = volunteer.assignedSlot!!
+        val optimizedAssignments = slots.map { slot ->
+            val rollNo = slot.assignedVolunteerRollNo ?: ""
+            val name = slot.assignedVolunteerName ?: ""
+            val group = slot.assignedVolunteerGroup ?: ""
 
             // Fetch additional volunteer details from students collection (with generateSchedule fallback)
             val volunteerDetails = try {
-                fetchVolunteerDetails(volunteer.rollNo)
+                if (rollNo.isNotEmpty()) {
+                    fetchVolunteerDetails(rollNo)
+                } else {
+                    null
+                }
             } catch (e: Exception) {
-                Log.e(TAG, "Error fetching details for volunteer ${volunteer.rollNo}", e)
+                Log.e(TAG, "Error fetching details for volunteer $rollNo", e)
                 null
             }
 
-            Log.d(TAG, "📋 Volunteer ${volunteer.name} (${volunteer.rollNo}): " +
-                    "Interview Score: ${volunteerDetails?.interviewScore ?: 0}, " +
-                    "Preferences: [${volunteerDetails?.subjectPreference1 ?: ""}, " +
-                    "${volunteerDetails?.subjectPreference2 ?: ""}, " +
-                    "${volunteerDetails?.subjectPreference3 ?: ""}]")
+            if (name.isNotEmpty()) {
+                Log.d(TAG, "📋 Assignment: ${name} (${rollNo}) -> ${slot.schoolName} ${slot.timeLabel}")
+            }
 
             OptimizedVolunteerAssignment(
-                volunteerName = volunteer.name,
-                volunteerRollNo = volunteer.rollNo,
-                volunteerGroup = volunteer.group,
+                volunteerName = name,
+                volunteerRollNo = rollNo,
+                volunteerGroup = group,
                 dayIndex = slot.dayIndex,
                 slotIndex = slot.slotIndex,
                 interviewScore = volunteerDetails?.interviewScore ?: 0,
@@ -1830,7 +1848,7 @@ class ScheduleGenerationViewModel : ViewModel() {
         }
 
         // Create group availability data
-        val groupAvailabilityData = extractGroupAvailabilityData(volunteers.mapNotNull { it.assignedSlot })
+        val groupAvailabilityData = extractGroupAvailabilityData(slots)
 
         // Group optimized assignments by slot for organized structure
         val optimizedSlotAssignments = optimizedAssignments.groupBy { assignment ->
@@ -1857,7 +1875,8 @@ class ScheduleGenerationViewModel : ViewModel() {
 
         return mapOf(
             "name" to presetName,
-            "totalVolunteers" to volunteers.size,
+            "totalVolunteers" to slots.mapNotNull { it.assignedVolunteerId }.distinct().size,
+            "totalAssignments" to slots.size,
 
             // Reference data (stored once per preset) - removed schoolName field
             "referenceData" to mapOf(

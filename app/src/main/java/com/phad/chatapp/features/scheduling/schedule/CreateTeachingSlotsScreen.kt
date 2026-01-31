@@ -350,6 +350,9 @@ fun CreateTeachingSlotsScreen(
     var availableSubjects by remember { mutableStateOf<List<String>>(emptyList()) }
     var showSubjectDialog by remember { mutableStateOf(false) }
 
+    // State to preserve availability data
+    var existingAvailability by remember { mutableStateOf<Map<String, Any>?>(null) }
+
     var showCopyDialog by remember { mutableStateOf(false) }
 
     val daysOfWeek = listOf("Mon", "Tue", "Wed", "Thu", "Fri")
@@ -501,9 +504,31 @@ fun CreateTeachingSlotsScreen(
                 StandardButton(
                     onClick = {
                         // Save changes
-                        subjectsList = tempCounts.mapNotNull { (name, count) ->
-                            if (count > 0) SubjectAllocation(name, count) else null
-                        }.sortedBy { it.subjectName }
+                        // Save changes - Preserve order
+                        val newSubjectsList = mutableListOf<SubjectAllocation>()
+                        val processedSubjects = mutableSetOf<String>()
+
+                        // 1. Keep existing subjects in their original order if they still have count > 0
+                        subjectsList.forEach { existing ->
+                            val newCount = tempCounts[existing.subjectName] ?: 0
+                            if (newCount > 0) {
+                                newSubjectsList.add(SubjectAllocation(existing.subjectName, newCount))
+                                processedSubjects.add(existing.subjectName)
+                            }
+                        }
+
+                        // 2. Add new subjects (that weren't in the list before)
+                        // Filter availableSubjects to find ones that have count > 0 and weren't processed
+                        val newSubjects = availableSubjects.filter { subjectName ->
+                             val count = tempCounts[subjectName] ?: 0
+                             count > 0 && !processedSubjects.contains(subjectName)
+                        }.map { subjectName ->
+                             SubjectAllocation(subjectName, tempCounts[subjectName] ?: 0)
+                        } // availableSubjects is already sorted, so these will be sorted
+
+                        newSubjectsList.addAll(newSubjects)
+                        
+                        subjectsList = newSubjectsList
                         
                         showSubjectDialog = false
                     }
@@ -603,6 +628,9 @@ fun CreateTeachingSlotsScreen(
                             val priority = (map["priority"] as? Number)?.toInt() ?: 0
                             if (name != null) SubjectAllocation(name, count, priority) else null
                         }.sortedBy { it.priority }
+
+                        // Preserve availability data
+                        existingAvailability = document.get("availability") as? Map<String, Any>
                     } else {
                         Log.e("CreateTeachingSlotsScreen", "Document does not exist for ID: $id")
                         saveErrorMessage = "Preset not found"
@@ -839,6 +867,11 @@ fun CreateTeachingSlotsScreen(
             "schedule" to scheduleData,
             "subjects" to subjectsData
         )
+
+        // Add back existing availability data if present
+        if (existingAvailability != null) {
+            presetData["availability"] = existingAvailability!!
+        }
 
         try {
             // Always use preset name as document ID for both create and update operations
