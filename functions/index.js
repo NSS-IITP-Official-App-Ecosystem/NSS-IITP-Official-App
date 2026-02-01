@@ -175,17 +175,11 @@ exports.verifyPlayIntegrity = onRequest({ region: 'asia-south1' }, async (req, r
     console.log(`[PlayIntegrity] ✅ Integrity verification PASSED for user: ${userId}`);
     console.log(`[PlayIntegrity] App: ${appRecognitionVerdict}, License: ${licensingVerdict}, Device: ${deviceVerdict.join(', ')}`);
 
-    // Store verification result in Firestore for audit
-    const db = admin.firestore();
-    await db.collection('integrity_logs').add({
-      userId: userId,
-      authUid: decoded.uid,
-      verdict: 'PASSED',
-      appRecognitionVerdict: appRecognitionVerdict,
-      licensingVerdict: licensingVerdict,
-      deviceVerdict: deviceVerdict,
-      timestamp: admin.firestore.FieldValue.serverTimestamp()
-    });
+    // Log successful verification
+    console.log(`[PlayIntegrity] ✅ Integrity verification PASSED for user: ${userId}`);
+    console.log(`[PlayIntegrity] App: ${appRecognitionVerdict}, License: ${licensingVerdict}, Device: ${deviceVerdict.join(', ')}`);
+
+    // Integrity log saving removed as per request to save storage/writes.
 
     res.json({ allowed: true, reason: 'Integrity check passed' });
 

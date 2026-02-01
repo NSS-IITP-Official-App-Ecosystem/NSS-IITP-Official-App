@@ -197,7 +197,8 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
                                 ?: (assignment["subjectCode"] as? String) 
                                 ?: "Assigned"
 
-                    val dayName = dayNames.getOrNull(dayIndex) ?: "Day ${dayIndex + 1}"
+                    val standardDays = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+                    val dayName = standardDays.getOrNull(dayIndex) ?: "Day ${dayIndex + 1}"
                     val timeName = timeSlotNames.getOrNull(slotIndex) ?: "Slot ${slotIndex + 1}"
                     
                     // Format: "Monday, 10:00 AM - Maths (School A)"

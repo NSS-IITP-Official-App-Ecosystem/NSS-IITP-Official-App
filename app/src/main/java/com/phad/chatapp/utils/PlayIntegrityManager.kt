@@ -11,6 +11,8 @@ import com.phad.chatapp.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
@@ -35,6 +37,14 @@ object PlayIntegrityManager {
     // Production project: nssiitp-app
     private const val VERIFY_INTEGRITY_URL = 
         "https://asia-south1-nssiitp-app.cloudfunctions.net/verifyPlayIntegrity"
+
+    // Shared Preferences for Integrity Cache
+    private const val PREFS_NAME = "nss_integrity_prefs"
+    private const val KEY_LAST_VERIFIED = "last_verified_timestamp"
+    private const val CACHE_DURATION_MS = 24 * 60 * 60 * 1000L // 24 Hours
+    
+    // Mutex for request deduplication
+    private val verificationMutex = Mutex()
     
     /**
      * Result of Play Integrity verification
@@ -58,87 +68,102 @@ object PlayIntegrityManager {
      * 
      * In DEBUG builds: Performs check but logs result without blocking.
      * In RELEASE builds: Blocks QR scanning if integrity check fails.
-     * 
+     *
      * @param context Application context
      * @param userId User's roll number for logging/tracking
+     * @param forceRefresh If true, ignores cache and forces a new network check
      * @return IntegrityResult indicating success or failure
      */
-    suspend fun verifyIntegrity(context: Context, userId: String): IntegrityResult {
+    suspend fun verifyIntegrity(
+        context: Context, 
+        userId: String, 
+        forceRefresh: Boolean = false
+    ): IntegrityResult {
         return withContext(Dispatchers.IO) {
-            try {
-                Log.d(TAG, "Starting verification for user: $userId")
-                
-                // Step 1: Check for multi-user profile (Second Space, Work Profile, etc.)
-                val multiUserCheck = checkMultiUserProfile(context)
-                if (multiUserCheck != null) {
-                    Log.w(TAG, "Multi-user profile detected: ${multiUserCheck.message}")
-                    return@withContext handleResult(multiUserCheck)
+            // Use Mutex to serialize requests and prevent race conditions
+            // (e.g. Silent Check vs User Action happening at same time)
+            verificationMutex.withLock {
+                // Check cache AGAIN inside the lock.
+                // If a previous request just finished and updated the cache, we can return success immediately.
+                if (!forceRefresh && isCacheValid(context)) {
+                    Log.i(TAG, "✅ Integrity cache valid (< 24h). Skipping network check.")
+                    return@withLock IntegrityResult.Success
                 }
-                
-                // Step 2: Play Integrity verification
-                Log.d(TAG, "Starting Play Integrity verification...")
-                val nonce = generateNonce(userId)
-                Log.d(TAG, "Generated nonce: ${nonce.take(20)}...")
-                
-                // Request integrity token from Play Integrity API
-                val integrityManager = IntegrityManagerFactory.create(context)
-                val tokenRequest = IntegrityTokenRequest.builder()
-                    .setNonce(nonce)
-                    .build()
-                
-                Log.d(TAG, "Requesting integrity token from Play Integrity API...")
-                val tokenResponse = integrityManager.requestIntegrityToken(tokenRequest).await()
-                val integrityToken = tokenResponse.token()
-                
-                if (integrityToken.isNullOrEmpty()) {
-                    Log.e(TAG, "Received empty integrity token")
-                    return@withContext handleResult(
-                        IntegrityResult.Failure(
-                            message = "Could not verify app integrity. Please try again.",
-                            canRetry = true
+
+                try {
+                    Log.d(TAG, "Starting verification for user: $userId")
+                    
+                    // Step 1: Check for multi-user profile
+                    val multiUserCheck = checkMultiUserProfile(context)
+                    if (multiUserCheck != null) {
+                        Log.w(TAG, "Multi-user profile detected: ${multiUserCheck.message}")
+                        return@withLock handleResult(context, multiUserCheck)
+                    }
+                    
+                    // Step 2: Play Integrity verification
+                    Log.d(TAG, "Starting Play Integrity verification...")
+                    val nonce = generateNonce(userId)
+                    
+                    // Request integrity token from Play Integrity API
+                    val integrityManager = IntegrityManagerFactory.create(context)
+                    val tokenRequest = IntegrityTokenRequest.builder()
+                        .setNonce(nonce)
+                        .build()
+                    
+                    Log.d(TAG, "Requesting integrity token from Play Integrity API...")
+                    val tokenResponse = integrityManager.requestIntegrityToken(tokenRequest).await()
+                    val integrityToken = tokenResponse.token()
+                    
+                    if (integrityToken.isNullOrEmpty()) {
+                        Log.e(TAG, "Received empty integrity token")
+                        return@withLock handleResult(context, 
+                            IntegrityResult.Failure(
+                                message = "Could not verify app integrity. Please try again.",
+                                canRetry = true
+                            )
                         )
-                    )
+                    }
+                    
+                    Log.d(TAG, "Received integrity token, sending to backend for verification...")
+                    
+                    // Send token to backend for verification
+                    val verificationResult = verifyTokenWithBackend(integrityToken, userId, nonce)
+                    
+                    handleResult(context, verificationResult)
+                    
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error during integrity verification", e)
+                    
+                    // Handle specific error cases
+                    val result = when {
+                        e.message?.contains("NETWORK") == true -> {
+                            IntegrityResult.Failure(
+                                message = "Network error. Please check your connection and try again.",
+                                canRetry = true
+                            )
+                        }
+                        e.message?.contains("API_NOT_AVAILABLE") == true -> {
+                            IntegrityResult.Failure(
+                                message = "Play services unavailable. Please update Google Play Services.",
+                                canRetry = false
+                            )
+                        }
+                        e.message?.contains("PLAY_STORE_NOT_FOUND") == true -> {
+                            IntegrityResult.Failure(
+                                message = "To mark attendance, please use the official app installed from the Google Play Store.",
+                                canRetry = false
+                            )
+                        }
+                        else -> {
+                            IntegrityResult.Failure(
+                                message = "Verification failed (${e.message ?: "Unknown"}). Please try again.",
+                                canRetry = true
+                            )
+                        }
+                    }
+                    
+                    handleResult(context, result)
                 }
-                
-                Log.d(TAG, "Received integrity token, sending to backend for verification...")
-                
-                // Send token to backend for verification
-                val verificationResult = verifyTokenWithBackend(integrityToken, userId, nonce)
-                
-                handleResult(verificationResult)
-                
-            } catch (e: Exception) {
-                Log.e(TAG, "Error during integrity verification", e)
-                
-                // Handle specific error cases
-                val result = when {
-                    e.message?.contains("NETWORK") == true -> {
-                        IntegrityResult.Failure(
-                            message = "Network error. Please check your connection and try again.",
-                            canRetry = true
-                        )
-                    }
-                    e.message?.contains("API_NOT_AVAILABLE") == true -> {
-                        IntegrityResult.Failure(
-                            message = "Play services unavailable. Please update Google Play Services.",
-                            canRetry = false
-                        )
-                    }
-                    e.message?.contains("PLAY_STORE_NOT_FOUND") == true -> {
-                        IntegrityResult.Failure(
-                            message = "To mark attendance, please use the official app installed from the Google Play Store.",
-                            canRetry = false
-                        )
-                    }
-                    else -> {
-                        IntegrityResult.Failure(
-                            message = "Verification failed. Please try again.",
-                            canRetry = true
-                        )
-                    }
-                }
-                
-                handleResult(result)
             }
         }
     }
@@ -148,11 +173,13 @@ object PlayIntegrityManager {
      * DEBUG: Log only, always return Success
      * RELEASE: Return actual result
      */
-    private fun handleResult(result: IntegrityResult): IntegrityResult {
+    private fun handleResult(context: Context, result: IntegrityResult): IntegrityResult {
         return if (BuildConfig.DEBUG) {
             when (result) {
                 is IntegrityResult.Success -> {
                     Log.i(TAG, "✅ DEBUG MODE: Integrity check PASSED")
+                    // Update cache even in debug mode for testing
+                    updateCache(context)
                 }
                 is IntegrityResult.Failure -> {
                     Log.w(TAG, "⚠️ DEBUG MODE: Integrity check FAILED (but allowing anyway)")
@@ -171,6 +198,8 @@ object PlayIntegrityManager {
             when (result) {
                 is IntegrityResult.Success -> {
                     Log.i(TAG, "✅ RELEASE MODE: Integrity check PASSED - QR scanning allowed")
+                    // Save success to cache
+                    updateCache(context)
                 }
                 is IntegrityResult.Failure -> {
                     Log.w(TAG, "🚫 RELEASE MODE: Integrity check FAILED - QR scanning BLOCKED")
@@ -180,6 +209,34 @@ object PlayIntegrityManager {
             }
             result
         }
+    }
+
+    /**
+     * Check if a valid successful verification exists within the last 24 hours.
+     */
+    private fun isCacheValid(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val lastVerified = prefs.getLong(KEY_LAST_VERIFIED, 0)
+        val currentTime = System.currentTimeMillis()
+        
+        val isValid = (currentTime - lastVerified) < CACHE_DURATION_MS
+        
+        if (isValid) {
+            Log.d(TAG, "Cache Valid: Last verified ${(currentTime - lastVerified) / 1000 / 60} min ago")
+        } else {
+            Log.d(TAG, "Cache Expired or Missing. Needs verification.")
+        }
+        
+        return isValid
+    }
+
+    /**
+     * Update the cache with the current timestamp upon successful verification.
+     */
+    private fun updateCache(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putLong(KEY_LAST_VERIFIED, System.currentTimeMillis()).apply()
+        Log.d(TAG, "Integrity cache updated to NOW")
     }
     
     /**
@@ -256,7 +313,7 @@ object PlayIntegrityManager {
                     Log.e(TAG, "Backend error: $responseCode - $errorBody")
                     
                     IntegrityResult.Failure(
-                        message = "Verification failed. Please try again.",
+                        message = "Verification failed (Server $responseCode). Please try again.",
                         canRetry = true
                     )
                 }
@@ -264,7 +321,7 @@ object PlayIntegrityManager {
             } catch (e: Exception) {
                 Log.e(TAG, "Error calling backend", e)
                 IntegrityResult.Failure(
-                    message = "Network error. Please check your connection.",
+                    message = "Network error (${e.message}). Please check your connection.",
                     canRetry = true
                 )
             }
@@ -370,6 +427,42 @@ object PlayIntegrityManager {
             Log.e(TAG, "Error checking multi-user profile", e)
             // On error, don't block - let Play Integrity handle it
             return null
+        }
+    }
+    
+    /**
+     * Perform a silent background verification to update the cache.
+     * Call this when app opens or from a worker.
+     * It swallows errors and only logs them, preventing UI blocking.
+     */
+    suspend fun performSilentBackgroundCheck(context: Context, userId: String) {
+        if (isCacheValid(context)) {
+            Log.d(TAG, "Silent Check: Cache already valid, skipping.")
+            return
+        }
+        
+        Log.d(TAG, "Silent Check: Cache expired. Refreshing in background...")
+        try {
+            // We call verifyIntegrity with forceRefresh=true effectively,
+            // but we don't care about the return value, just the side effect (cache update).
+            // NOTE: verifyIntegrity internal logic already updates cache on Success.
+            
+            withContext(Dispatchers.IO) {
+                // Manually duplicate logic slightly to avoid modifying the main public method signature if it gets complex,
+                // BUT actually re-using verifyIntegrity(forceRefresh=true) is cleaner.
+                // We just need to ensure verifyIntegrity exposes forceRefresh.
+                // Since we updated verifyIntegrity signature in previous step, we can use it.
+                
+               val result = verifyIntegrity(context, userId, forceRefresh = true)
+               
+               if (result is IntegrityResult.Success) {
+                   Log.i(TAG, "Silent Check: ✅ Success. Cache updated.")
+               } else {
+                   Log.w(TAG, "Silent Check: ❌ Failed. Cache remains expired.")
+               }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Silent Check: Error", e)
         }
     }
 }

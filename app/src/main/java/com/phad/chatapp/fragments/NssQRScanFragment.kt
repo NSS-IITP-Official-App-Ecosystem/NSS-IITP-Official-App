@@ -204,7 +204,12 @@ class NssQRScanFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         // Play Integrity verification - server-side check before allowing QR scanning
-        Log.d(TAG, "Starting Play Integrity verification...")
+        // Modified Logic:
+        // 1. PlayIntegrityManager.verifyIntegrity() now internally checks cache (< 24h).
+        // 2. If valid, it returns Success IMMEDIATELY (non-blocking).
+        // 3. If expired, it performs the network check.
+        // This solves the "Crowded Space" issue by using yesterday's cached success.
+        Log.d(TAG, "Starting Play Integrity verification (Cache-aware)...")
         performIntegrityCheck()
 
         // Observe UI state for navigation and camera control

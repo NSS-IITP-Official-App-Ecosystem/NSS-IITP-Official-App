@@ -1,6 +1,6 @@
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 
 # Try importing firebase_admin
@@ -139,13 +139,18 @@ def group_attendees_by_time(db):
                 grouped['No Timestamp'].append(roll)
                 continue
             
-            # Convert Firestore timestamp to datetime
+            # Convert Firestore timestamp to datetime (IST Hardcoded)
             try:
+                ist = timezone(timedelta(hours=5, minutes=30))
+
                 if hasattr(timestamp, 'seconds'):
-                    # Firestore Timestamp
-                    dt = datetime.fromtimestamp(timestamp.seconds)
+                    # Firestore Timestamp -> UTC -> IST
+                    dt = datetime.fromtimestamp(timestamp.seconds, timezone.utc).astimezone(ist)
                 elif isinstance(timestamp, datetime):
-                    dt = timestamp
+                    if timestamp.tzinfo is None:
+                        dt = timestamp.replace(tzinfo=timezone.utc).astimezone(ist)
+                    else:
+                        dt = timestamp.astimezone(ist)
                 else:
                     # Try parsing as string if needed
                     grouped['Invalid Timestamp'].append(roll)

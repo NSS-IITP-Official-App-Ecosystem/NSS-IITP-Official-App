@@ -124,7 +124,8 @@ def extract_assignments(schedules: list) -> list:
                 continue
             
             # Get day and slot names
-            day_name = day_names[day_index] if day_index < len(day_names) else f"Day {day_index + 1}"
+            standard_days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+            day_name = standard_days[day_index] if 0 <= day_index < 7 else f"Day {day_index + 1}"
             time_slot = time_slot_names[slot_index] if slot_index < len(time_slot_names) else f"Slot {slot_index + 1}"
             
             assignments.append({
