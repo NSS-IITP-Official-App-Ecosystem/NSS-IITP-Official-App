@@ -1313,7 +1313,7 @@ class ScheduleGenerationViewModel : ViewModel() {
         val matchingVolunteers = availableVolunteers.filter { volunteer ->
             preferenceLevel < volunteer.subjectPreferences.size &&
             volunteer.subjectPreferences[preferenceLevel].equals(subjectToAssign.subjectName, ignoreCase = true)
-        }.sortedWith(compareByDescending<Volunteer> { it.classCount }.thenByDescending { it.interviewScore })
+        }.sortedWith(compareBy<Volunteer> { it.assignedSlots.size }.thenByDescending { it.interviewScore })
 
         if (matchingVolunteers.isEmpty()) {
              Log.d(ALGO_TAG, "⏩ SKIP: No volunteers have '${subjectToAssign.subjectName}' as Preference #${preferenceLevel + 1}")
