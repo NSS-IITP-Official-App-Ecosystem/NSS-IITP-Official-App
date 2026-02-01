@@ -41,6 +41,7 @@ import com.phad.chatapp.features.scheduling.models.SubjectConstants
 import com.phad.chatapp.features.scheduling.ui.theme.DarkBackground
 import com.phad.chatapp.features.scheduling.ui.theme.NeutralCardSurface
 import com.phad.chatapp.features.scheduling.ui.theme.YellowAccent
+import com.phad.chatapp.utils.ScheduleExcelGenerator
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import android.content.Context
@@ -80,6 +81,7 @@ fun ViewAssignmentsScreen(navController: NavController) {
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
     var isExporting by remember { mutableStateOf(false) }
+    var showExportDialog by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     
     // Highlighted cells for search
@@ -522,17 +524,7 @@ fun ViewAssignmentsScreen(navController: NavController) {
                 FloatingActionButton(
                     onClick = {
                         if (!isExporting) {
-                            isExporting = true
-                            coroutineScope.launch {
-                                try {
-                                    val result = generateAndSharePDF(context, assignments, selectedSchool)
-                                    isExporting = false
-                                    snackbarHostState.showSnackbar(result)
-                                } catch (e: Exception) {
-                                    isExporting = false
-                                    snackbarHostState.showSnackbar("Export failed: ${e.message}")
-                                }
-                            }
+                            showExportDialog = true
                         }
                     },
                     modifier = Modifier
@@ -569,6 +561,69 @@ fun ViewAssignmentsScreen(navController: NavController) {
                 showFilterDialog = false
             },
             assignments = assignments
+        )
+    }
+
+
+    if (showExportDialog) {
+        AlertDialog(
+            onDismissRequest = { showExportDialog = false },
+            title = {
+                Text(
+                    text = "Export Schedule",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = "Choose the format for export:",
+                    color = Color.White
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showExportDialog = false
+                        isExporting = true
+                        coroutineScope.launch {
+                            try {
+                                val result = ScheduleExcelGenerator.generateAndShareExcel(context, assignments, selectedSchool)
+                                isExporting = false
+                                snackbarHostState.showSnackbar(result)
+                            } catch (e: Exception) {
+                                isExporting = false
+                                snackbarHostState.showSnackbar("Excel Export failed: ${e.message}")
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
+                ) {
+                    Text("Excel (.xlsx)")
+                }
+            },
+            dismissButton = {
+                Button(
+                    onClick = {
+                        showExportDialog = false
+                        isExporting = true
+                        coroutineScope.launch {
+                            try {
+                                val result = generateAndSharePDF(context, assignments, selectedSchool)
+                                isExporting = false
+                                snackbarHostState.showSnackbar(result)
+                            } catch (e: Exception) {
+                                isExporting = false
+                                snackbarHostState.showSnackbar("PDF Export failed: ${e.message}")
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F))
+                ) {
+                    Text("PDF (.pdf)")
+                }
+            },
+            containerColor = Color(0xFF222222)
         )
     }
 }
