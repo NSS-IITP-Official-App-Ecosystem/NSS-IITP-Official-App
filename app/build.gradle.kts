@@ -36,6 +36,11 @@ android {
         }
         
         multiDexEnabled = true
+        
+        // Add Cloudinary credentials from local.properties as BuildConfig fields
+        buildConfigField("String", "CLOUDINARY_CLOUD_NAME", "\"${localProperties.getProperty("cloudinary.cloud_name") ?: ""}\"")
+        buildConfigField("String", "CLOUDINARY_API_KEY", "\"${localProperties.getProperty("cloudinary.api_key") ?: ""}\"")
+        buildConfigField("String", "CLOUDINARY_API_SECRET", "\"${localProperties.getProperty("cloudinary.api_secret") ?: ""}\"")
     }
 
     signingConfigs {
@@ -122,6 +127,7 @@ android {
 }
 
 dependencies {
+    implementation(libs.androidx.ui.text)
     // Core library desugaring
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 
@@ -185,9 +191,23 @@ dependencies {
     implementation("com.google.auth:google-auth-library-oauth2-http:1.11.0")
     implementation("com.google.guava:guava:31.1-android")
     
+    // Cloudinary for file uploads
+    implementation("com.cloudinary:cloudinary-android:3.1.2")
+    
     // HTTP Client and JSON serialization
     implementation("com.squareup.okhttp3:okhttp:4.11.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3") {
+        // Force compatible version with Kotlin 1.9.22
+        version {
+            strictly("1.6.3")
+        }
+    }
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.6.3") {
+        version {
+            strictly("1.6.3")
+        }
+    }
+
 
     // Jetpack Compose dependencies
     implementation("androidx.activity:activity-compose:1.8.2")

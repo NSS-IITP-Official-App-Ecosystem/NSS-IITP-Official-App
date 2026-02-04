@@ -35,7 +35,7 @@ import kotlinx.coroutines.tasks.await
 
 import com.phad.chatapp.MainActivity
 import com.phad.chatapp.R
-import com.phad.chatapp.utils.DriveServiceHelper
+import com.phad.chatapp.utils.CloudinaryHelper
 import com.phad.chatapp.utils.SessionManager
 import com.phad.chatapp.adapters.UpdateCardAdapter
 import com.phad.chatapp.models.Update
@@ -47,6 +47,7 @@ import com.phad.chatapp.utils.NotificationHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.navigation.fragment.findNavController
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -69,7 +70,7 @@ class NssHomeFragment : Fragment() {
     private lateinit var sessionManager: SessionManager
     private val db = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
-    private lateinit var driveServiceHelper: DriveServiceHelper
+    private lateinit var cloudinaryHelper: CloudinaryHelper
     private lateinit var sharedPreferences: SharedPreferences
     
     // Caching system for updates
@@ -84,25 +85,46 @@ class NssHomeFragment : Fragment() {
     
     // Create update dialog
     private var createUpdateDialog: Dialog? = null
-    private var selectedImageUri: Uri? = null
-    private var selectedDocumentUri: Uri? = null
+    private var selectedImageUris: MutableList<Uri> = mutableListOf()
+    private var selectedDocumentUris: MutableList<Uri> = mutableListOf()
+    private var externalLinks: MutableList<String> = mutableListOf()
     
-    // Image picker launcher
+    // Image picker launcher - supports multiple selection
     private val imagePicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            result.data?.data?.let { uri ->
-                selectedImageUri = uri
-                showSelectedImage(uri)
+            result.data?.let { data ->
+                // Handle multiple images
+                data.clipData?.let { clipData ->
+                    for (i in 0 until clipData.itemCount) {
+                        clipData.getItemAt(i).uri?.let { uri ->
+                            selectedImageUris.add(uri)
+                        }
+                    }
+                } ?: data.data?.let { uri ->
+                    // Single image selected
+                    selectedImageUris.add(uri)
+                }
+                showSelectedImages()
             }
         }
     }
     
-    // Document picker launcher
+    // Document picker launcher - supports multiple selection
     private val documentPicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            result.data?.data?.let { uri ->
-                selectedDocumentUri = uri
-                showSelectedDocument(uri)
+            result.data?.let { data ->
+                // Handle multiple documents
+                data.clipData?.let { clipData ->
+                    for (i in 0 until clipData.itemCount) {
+                        clipData.getItemAt(i).uri?.let { uri ->
+                            selectedDocumentUris.add(uri)
+                        }
+                    }
+                } ?: data.data?.let { uri ->
+                    // Single document selected
+                    selectedDocumentUris.add(uri)
+                }
+                showSelectedDocuments()
             }
         }
     }
@@ -132,7 +154,10 @@ class NssHomeFragment : Fragment() {
                     },
                     onEditPost = { update -> showCreateUpdateDialog(update) },
                     onDeletePost = { update -> confirmDeletePost(update) },
-                    onBatchDeleteClick = { showBatchDeleteDialog() }
+                    onBatchDeleteClick = { showBatchDeleteDialog() },
+                    onRefresh = { 
+                        refreshUpdates()
+                    }
                 )
             }
         }
@@ -142,7 +167,7 @@ class NssHomeFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         
         sessionManager = SessionManager(requireContext())
-        driveServiceHelper = DriveServiceHelper.getInstance(requireContext())
+        cloudinaryHelper = CloudinaryHelper.getInstance(requireContext())
         sharedPreferences = requireContext().getSharedPreferences("nss_update_cache", android.content.Context.MODE_PRIVATE)
         
         loadGreetingAndNextClass()
@@ -236,6 +261,20 @@ class NssHomeFragment : Fragment() {
         }
     }
     
+    
+    private fun refreshUpdates() {
+        Log.d(TAG, "NssHomeFragment - Manual refresh triggered")
+        // Set refreshing state
+        _uiState.update { it.copy(isRefreshing = true) }
+        
+        // Clear cache to force fresh load
+        updateCache = null
+        sharedPreferences.edit().putLong(CACHE_KEY_LAST_REFRESH, 0).apply()
+        
+        // Load fresh updates
+        loadUpdates()
+    }
+    
     private fun shouldRefreshUpdates(): Boolean {
         val lastRefresh = sharedPreferences.getLong(CACHE_KEY_LAST_REFRESH, 0)
         val now = System.currentTimeMillis()
@@ -293,6 +332,16 @@ class NssHomeFragment : Fragment() {
                         val instagramUrl = doc.getString("instagramUrl")
                         val postType = doc.getString("postType") ?: "text"
                         val hasExternalLink = doc.getBoolean("hasExternalLink") ?: false
+                        
+                        // Read new list fields
+                        @Suppress("UNCHECKED_CAST")
+                        val imageUrls = doc.get("imageUrls") as? List<String>
+                        @Suppress("UNCHECKED_CAST")
+                        val documentUrls = doc.get("documentUrls") as? List<String>
+                        @Suppress("UNCHECKED_CAST")
+                        val documentNames = doc.get("documentNames") as? List<String>
+                        @Suppress("UNCHECKED_CAST")
+                        val externalLinks = doc.get("externalLinks") as? List<String>
 
                         var update = Update(
                             id = id,
@@ -312,14 +361,13 @@ class NssHomeFragment : Fragment() {
                             postType = postType,
                             hasExternalLink = hasExternalLink,
                             timestamp = timestamp,
-                            updateType = updateType
+                            updateType = updateType,
+                            // New list fields
+                            imageUrls = imageUrls,
+                            documentUrls = documentUrls,
+                            documentNames = documentNames,
+                            externalLinks = externalLinks
                         )
-                        
-                        // Process Drive URL
-                        val finalImageUrl = update.mediaUrl ?: update.imageUrl
-                        if (!finalImageUrl.isNullOrEmpty()) {
-                            update = update.copy(imageUrl = driveServiceHelper.processGoogleDriveUrl(finalImageUrl))
-                        }
                         
                         update
                     } catch (e: Exception) {
@@ -342,11 +390,12 @@ class NssHomeFragment : Fragment() {
                 updateCache = CachedUpdate(updates, System.currentTimeMillis())
                 sharedPreferences.edit().putLong(CACHE_KEY_LAST_REFRESH, System.currentTimeMillis()).apply()
                 
-                _uiState.update { it.copy(updates = updates) }
+                _uiState.update { it.copy(updates = updates, isRefreshing = false) }
             }
             .addOnFailureListener { e ->
                 Log.e(TAG, "Error loading updates", e)
                 Toast.makeText(context, "Failed to load updates.", Toast.LENGTH_SHORT).show()
+                _uiState.update { it.copy(isRefreshing = false) }
             }
     }
 
@@ -389,8 +438,9 @@ class NssHomeFragment : Fragment() {
         }
 
         // Reset selected media
-        selectedImageUri = null
-        selectedDocumentUri = null
+        selectedImageUris.clear()
+        selectedDocumentUris.clear()
+        externalLinks.clear()
 
         // Find views in the dialog
         val dialog = createUpdateDialog ?: return
@@ -472,17 +522,19 @@ class NssHomeFragment : Fragment() {
         mediaPreviewContainer.visibility = View.GONE
         documentPreviewContainer.visibility = View.GONE
 
-        // Set up attach image button
+        // Set up attach image button - allow multiple selection
         attachImageButton.setOnClickListener {
             val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
+            intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
             imagePicker.launch(intent)
         }
 
-        // Set up attach document button
+        // Set up attach document button - allow multiple selection
         attachDocumentButton.setOnClickListener {
             val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
                 type = "*/*"
+                putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
             }
             documentPicker.launch(intent)
         }
@@ -490,14 +542,14 @@ class NssHomeFragment : Fragment() {
         // Set up remove media button
         val removeMediaButton = dialog.findViewById<ImageButton>(R.id.removeMediaButton)
         removeMediaButton.setOnClickListener {
-            selectedImageUri = null
+            selectedImageUris.clear()
             mediaPreviewContainer.visibility = View.GONE
         }
 
         // Set up remove document button
         val removeDocumentButton = dialog.findViewById<ImageButton>(R.id.removeDocumentButton)
         removeDocumentButton.setOnClickListener {
-            selectedDocumentUri = null
+            selectedDocumentUris.clear()
             documentPreviewContainer.visibility = View.GONE
         }
 
@@ -550,7 +602,7 @@ class NssHomeFragment : Fragment() {
             // Text Post Validation
             if (currentPostType == "text") {
                 val content = updateContentInput.text.toString().trim()
-                if (content.isEmpty() && selectedImageUri == null && selectedDocumentUri == null) {
+                if (content.isEmpty() && selectedImageUris.isEmpty() && selectedDocumentUris.isEmpty()) {
                     Toast.makeText(requireContext(), "Please enter content or attach media/document", Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
@@ -582,45 +634,68 @@ class NssHomeFragment : Fragment() {
 
             val isVideo = !instagramUrl.isNullOrEmpty()
 
-            // Update vs Create Logic
-            if (existingUpdate != null) {
-                 if (selectedImageUri != null) {
-                      uploadMedia(selectedImageUri!!) { mediaUrl: String ->
-                           if (selectedDocumentUri != null) {
-                                uploadDocument(selectedDocumentUri!!) { documentUrl: String, documentName: String ->
-                                     updatePost(existingUpdate, content, title, link, mediaUrl, documentUrl, documentName, isVideo, instagramUrl, currentPostType, hasExternalLink, crossPost)
-                                }
-                           } else {
-                                updatePost(existingUpdate, content, title, link, mediaUrl, existingUpdate.documentUrl, existingUpdate.documentName, isVideo, instagramUrl, currentPostType, hasExternalLink, crossPost)
-                           }
-                      }
-                 } else if (selectedDocumentUri != null) {
-                      uploadDocument(selectedDocumentUri!!) { documentUrl: String, documentName: String ->
-                           val oldMediaUrl = existingUpdate.mediaUrl ?: existingUpdate.imageUrl
-                           updatePost(existingUpdate, content, title, link, oldMediaUrl, documentUrl, documentName, isVideo, instagramUrl, currentPostType, hasExternalLink, crossPost)
-                      }
-                 } else {
-                      val oldMediaUrl = existingUpdate.mediaUrl ?: existingUpdate.imageUrl
-                      updatePost(existingUpdate, content, title, link, oldMediaUrl, existingUpdate.documentUrl, existingUpdate.documentName, isVideo, instagramUrl, currentPostType, hasExternalLink, crossPost)
-                 }
-            } else {
-                 if (selectedImageUri != null) {
-                     uploadMedia(selectedImageUri!!) { mediaUrl: String ->
-                         if (selectedDocumentUri != null) {
-                             uploadDocument(selectedDocumentUri!!) { documentUrl: String, documentName: String ->
-                                 createUpdate(content, title, link, mediaUrl, documentUrl, documentName, false, null, currentPostType, hasExternalLink, crossPost)
-                             }
-                         } else {
-                             createUpdate(content, title, link, mediaUrl, null, null, false, instagramUrl, currentPostType, hasExternalLink, crossPost)
-                         }
-                     }
-                 } else if (selectedDocumentUri != null) {
-                     uploadDocument(selectedDocumentUri!!) { documentUrl: String, documentName: String ->
-                         createUpdate(content, title, link, null, documentUrl, documentName, false, instagramUrl, currentPostType, hasExternalLink, crossPost)
-                     }
-                 } else {
-                     createUpdate(content, title, link, null, null, null, isVideo, instagramUrl, currentPostType, hasExternalLink, crossPost)
-                 }
+            // Upload all media concurrently and then save
+            lifecycleScope.launch {
+                try {
+                    // Upload all images concurrently
+                    val imageUrls = if (selectedImageUris.isNotEmpty()) {
+                        selectedImageUris.map { uri ->
+                            withContext(Dispatchers.IO) {
+                                cloudinaryHelper.uploadImage(uri, "nss_updates/images")
+                            }
+                        }
+                    } else {
+                        emptyList()
+                    }
+                    
+                    // Upload all documents concurrently
+                    val documentData = if (selectedDocumentUris.isNotEmpty()) {
+                        selectedDocumentUris.map { uri ->
+                            withContext(Dispatchers.IO) {
+                                val url = cloudinaryHelper.uploadDocument(uri, "nss_updates/documents")
+                                val name = getDocumentName(uri)
+                                Pair(url, name)
+                            }
+                        }
+                    } else {
+                        emptyList()
+                    }
+                    
+                    val documentUrls = documentData.map { it.first }
+                    val documentNames = documentData.map { it.second }
+                    
+                    // Parse multiple links from input (comma or newline separated)
+                    val links = if (link.isNotEmpty()) {
+                        link.split("[,\n]".toRegex())
+                            .map { it.trim() }
+                            .filter { it.isNotEmpty() }
+                    } else {
+                        emptyList()
+                    }
+                    
+                    // Create or update post
+                    if (existingUpdate != null) {
+                        updatePost(
+                            existingUpdate, content, title,
+                            imageUrls, documentUrls, documentNames, links,
+                            isVideo, instagramUrl, currentPostType, hasExternalLink, crossPost
+                        )
+                    } else {
+                        createUpdate(
+                            content, title,
+                            imageUrls, documentUrls, documentNames, links,
+                            isVideo, instagramUrl, currentPostType, hasExternalLink, crossPost
+                        )
+                    }
+                } catch (e: Exception) {
+                    val errorMsg = "Failed to upload: ${e.localizedMessage}"
+                    Log.e(TAG, errorMsg, e)
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(requireContext(), errorMsg, Toast.LENGTH_SHORT).show()
+                        dialog.findViewById<Button>(R.id.postUpdateButton)?.isEnabled = true
+                        dialog.findViewById<Button>(R.id.cancelButton)?.isEnabled = true
+                    }
+                }
             }
         }
 
@@ -640,18 +715,30 @@ class NssHomeFragment : Fragment() {
             .show()
     }
 
-    private fun showSelectedImage(uri: Uri) {
+    private fun showSelectedImages() {
         val mediaPreviewContainer = createUpdateDialog?.findViewById<FrameLayout>(R.id.mediaPreviewContainer)
         val mediaPreview = createUpdateDialog?.findViewById<ImageView>(R.id.mediaPreview)
+
+        if (selectedImageUris.isEmpty()) {
+            mediaPreviewContainer?.visibility = View.GONE
+            return
+        }
 
         mediaPreviewContainer?.visibility = View.VISIBLE
 
         mediaPreview?.let {
             try {
+                // Show first image with count
                 Glide.with(requireContext())
-                    .load(uri)
+                    .load(selectedImageUris.first())
                     .centerCrop()
                     .into(it)
+                
+                // Update remove button text to show count
+                val removeButton = createUpdateDialog?.findViewById<ImageButton>(R.id.removeMediaButton)
+                if (selectedImageUris.size > 1) {
+                    removeButton?.contentDescription = "Remove ${selectedImageUris.size} images"
+                }
             } catch (e: FileNotFoundException) {
                 Toast.makeText(requireContext(), "Failed to load image", Toast.LENGTH_SHORT).show()
                 mediaPreviewContainer?.visibility = View.GONE
@@ -659,13 +746,23 @@ class NssHomeFragment : Fragment() {
         }
     }
 
-    private fun showSelectedDocument(uri: Uri) {
+    private fun showSelectedDocuments() {
         val documentPreviewContainer = createUpdateDialog?.findViewById<LinearLayout>(R.id.documentPreviewContainer)
         val documentNameText = createUpdateDialog?.findViewById<TextView>(R.id.documentNameText)
 
-        // Get document name from URI
-        val documentName = getDocumentName(uri)
-        documentNameText?.text = documentName
+        if (selectedDocumentUris.isEmpty()) {
+            documentPreviewContainer?.visibility = View.GONE
+            return
+        }
+
+        // Show first document with count
+        val documentName = getDocumentName(selectedDocumentUris.first())
+        val displayText = if (selectedDocumentUris.size > 1) {
+            "$documentName (+${selectedDocumentUris.size - 1} more)"
+        } else {
+            documentName
+        }
+        documentNameText?.text = displayText
 
         documentPreviewContainer?.visibility = View.VISIBLE
     }
@@ -690,31 +787,27 @@ class NssHomeFragment : Fragment() {
             // Validate the URI is accessible
             val inputStream = requireContext().contentResolver.openInputStream(uri)
             inputStream?.close()
-
+            
             // Show a loading indication
             Toast.makeText(requireContext(), "Uploading image...", Toast.LENGTH_SHORT).show()
-
-            // Generate a unique filename for the image
-            val filename = "nss_update_image_${System.currentTimeMillis()}_${UUID.randomUUID()}.jpg"
-
+            
             // Log the upload attempt for debugging
-            Log.d(TAG, "Uploading image to Google Drive: $filename")
-
-            // Upload to Google Drive instead of Firebase Storage
-            driveServiceHelper.uploadFileToDrive(uri, filename, "image/jpeg") { success, driveFileId, webViewLink ->
-                if (success && webViewLink != null) {
-                    // Convert to a direct media URL for better Glide compatibility
-                    val directMediaUrl = driveServiceHelper.getDirectMediaUrl(webViewLink, true)
-
-                    Log.d(TAG, "Upload completed. Drive ID: $driveFileId")
-                    Log.d(TAG, "Original URL: $webViewLink")
-                    Log.d(TAG, "Direct media URL: $directMediaUrl")
-
-                    onComplete(directMediaUrl)
-                } else {
-                    val errorMsg = "Failed to upload to Google Drive"
-                    Log.e(TAG, errorMsg)
-                    requireActivity().runOnUiThread {
+            Log.d(TAG, "Uploading image to Cloudinary")
+            
+            // Upload to Cloudinary using coroutines
+            lifecycleScope.launch(Dispatchers.IO) {
+                try {
+                    val downloadUrl = cloudinaryHelper.uploadImage(uri, "nss_updates/images")
+                    
+                    // Call the callback on main thread
+                    withContext(Dispatchers.Main) {
+                        Log.d(TAG, "Image uploaded successfully: $downloadUrl")
+                        onComplete(downloadUrl)
+                    }
+                } catch (e: Exception) {
+                    val errorMsg = "Failed to upload image: ${e.localizedMessage}"
+                    Log.e(TAG, errorMsg, e)
+                    withContext(Dispatchers.Main) {
                         Toast.makeText(requireContext(), errorMsg, Toast.LENGTH_SHORT).show()
                         createUpdateDialog?.findViewById<Button>(R.id.postUpdateButton)?.isEnabled = true
                         createUpdateDialog?.findViewById<Button>(R.id.cancelButton)?.isEnabled = true
@@ -735,38 +828,30 @@ class NssHomeFragment : Fragment() {
             // Validate the URI is accessible
             val inputStream = requireContext().contentResolver.openInputStream(uri)
             inputStream?.close()
-
+            
             // Show a loading indication
             Toast.makeText(requireContext(), "Uploading document...", Toast.LENGTH_SHORT).show()
-
+            
             // Get document name from URI
             val documentName = getDocumentName(uri)
-
-            // Get MIME type of the document
-            val mimeType = requireContext().contentResolver.getType(uri) ?: "application/octet-stream"
-
-            // Generate a unique filename for the document
-            val filename = "nss_update_doc_${System.currentTimeMillis()}_${UUID.randomUUID()}_$documentName"
-
+            
             // Log the upload attempt for debugging
-            Log.d(TAG, "Uploading document to Google Drive: $filename (${mimeType})")
-
-            // Upload to Google Drive instead of Firebase Storage
-            driveServiceHelper.uploadFileToDrive(uri, filename, mimeType) { success, driveFileId, webViewLink ->
-                if (success && driveFileId != null) {
-                    // Use the standard file view URL format that works without Google auth
-                    // This is the format that's working in the group chat
-                    val directFileUrl = "https://drive.google.com/file/d/${driveFileId}/view?usp=sharing"
-
-                    Log.d(TAG, "Upload completed. Drive ID: $driveFileId")
-                    Log.d(TAG, "Original URL: $webViewLink")
-                    Log.d(TAG, "Direct file URL: $directFileUrl")
-
-                    onComplete(directFileUrl, documentName)
-                } else {
-                    val errorMsg = "Failed to upload to Google Drive"
-                    Log.e(TAG, errorMsg)
-                    requireActivity().runOnUiThread {
+            Log.d(TAG, "Uploading document to Cloudinary: $documentName")
+            
+            // Upload to Cloudinary using coroutines
+            lifecycleScope.launch(Dispatchers.IO) {
+                try {
+                    val downloadUrl = cloudinaryHelper.uploadDocument(uri, "nss_updates/documents")
+                    
+                    // Call the callback on main thread
+                    withContext(Dispatchers.Main) {
+                        Log.d(TAG, "Document uploaded successfully: $downloadUrl")
+                        onComplete(downloadUrl, documentName)
+                    }
+                } catch (e: Exception) {
+                    val errorMsg = "Failed to upload document: ${e.localizedMessage}"
+                    Log.e(TAG, errorMsg, e)
+                    withContext(Dispatchers.Main) {
                         Toast.makeText(requireContext(), errorMsg, Toast.LENGTH_SHORT).show()
                         createUpdateDialog?.findViewById<Button>(R.id.postUpdateButton)?.isEnabled = true
                         createUpdateDialog?.findViewById<Button>(R.id.cancelButton)?.isEnabled = true
@@ -794,10 +879,10 @@ class NssHomeFragment : Fragment() {
     private fun createUpdate(
         content: String,
         title: String?,
-        link: String?,
-        mediaUrl: String?,
-        documentUrl: String?,
-        documentName: String?,
+        imageUrls: List<String>,
+        documentUrls: List<String>,
+        documentNames: List<String>,
+        externalLinks: List<String>,
         isVideo: Boolean = false,
         instagramUrl: String? = null,
         postType: String = "text",
@@ -823,7 +908,7 @@ class NssHomeFragment : Fragment() {
         // Determine updateType based on cross-post setting
         val updateType = if (crossPost) 3 else 2 // 3=Both, 2=NSS only
 
-        // Create the update object
+        // Create the update object with new list fields
         val update = Update(
             id = customDocId,
             authorId = userRollNumber,
@@ -831,18 +916,23 @@ class NssHomeFragment : Fragment() {
             authorImageUrl = authorImageUrl,
             title = title,
             content = content,
-            externalLink = if (link.isNullOrEmpty()) null else link,
-            documentName = documentName,
-            documentUrl = documentUrl,
-            imageName = if (mediaUrl != null && !isVideo) "image_${System.currentTimeMillis()}.jpg" else null,
-            imageUrl = if (!isVideo) mediaUrl else null,
-            mediaUrl = mediaUrl, // Keep for backward compatibility
+            externalLink = null, // Keep old field null
+            documentName = null, // Keep old field null
+            documentUrl = null, // Keep old field null
+            imageName = null, // Keep old field null
+            imageUrl = null, // Keep old field null
+            mediaUrl = null, // Keep old field null
             isVideo = isVideo,
             instagramUrl = instagramUrl,
             postType = postType,
             hasExternalLink = hasExternalLink,
             timestamp = timestamp,
-            updateType = updateType
+            updateType = updateType,
+            // New list fields
+            imageUrls = if (imageUrls.isNotEmpty()) imageUrls else null,
+            documentUrls = if (documentUrls.isNotEmpty()) documentUrls else null,
+            documentNames = if (documentNames.isNotEmpty()) documentNames else null,
+            externalLinks = if (externalLinks.isNotEmpty()) externalLinks else null
         )
 
         // Save to NSS updates collection first
@@ -894,10 +984,10 @@ class NssHomeFragment : Fragment() {
         originalUpdate: Update,
         content: String,
         title: String?,
-        link: String?,
-        mediaUrl: String?,
-        documentUrl: String?,
-        documentName: String?,
+        imageUrls: List<String>,
+        documentUrls: List<String>,
+        documentNames: List<String>,
+        externalLinks: List<String>,
         isVideo: Boolean,
         instagramUrl: String?,
         postType: String,
@@ -910,17 +1000,21 @@ class NssHomeFragment : Fragment() {
         val updatedUpdate = originalUpdate.copy(
             title = title,
             content = content,
-            externalLink = if (link.isNullOrEmpty()) null else link,
-            mediaUrl = mediaUrl,
-            imageUrl = if (!isVideo) mediaUrl else null,
-            imageName = if (mediaUrl != null && mediaUrl != originalUpdate.mediaUrl) "image_${System.currentTimeMillis()}.jpg" else originalUpdate.imageName,
-            documentUrl = documentUrl,
-            documentName = documentName,
+            externalLink = null,
+            mediaUrl = null,
+            imageUrl = null,
+            imageName = null,
+            documentUrl = null,
+            documentName = null,
             isVideo = isVideo,
             instagramUrl = instagramUrl,
             postType = postType,
             hasExternalLink = hasExternalLink,
-            updateType = updateType
+            updateType = updateType,
+            imageUrls = if (imageUrls.isNotEmpty()) imageUrls else null,
+            documentUrls = if (documentUrls.isNotEmpty()) documentUrls else null,
+            documentNames = if (documentNames.isNotEmpty()) documentNames else null,
+            externalLinks = if (externalLinks.isNotEmpty()) externalLinks else null
         )
 
         // Update in NSS collection

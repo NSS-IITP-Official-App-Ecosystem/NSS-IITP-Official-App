@@ -34,7 +34,7 @@ import kotlinx.coroutines.tasks.await
 
 import com.phad.chatapp.MainActivity
 import com.phad.chatapp.R
-import com.phad.chatapp.utils.DriveServiceHelper
+import com.phad.chatapp.utils.CloudinaryHelper
 import com.phad.chatapp.utils.SessionManager
 import com.phad.chatapp.adapters.UpdateCardAdapter
 import com.phad.chatapp.models.Update
@@ -46,6 +46,7 @@ import com.phad.chatapp.utils.NotificationHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.navigation.fragment.findNavController
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -68,7 +69,7 @@ class HomeFragment : Fragment() {
     private lateinit var sessionManager: SessionManager
     private val db = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
-    private lateinit var driveServiceHelper: DriveServiceHelper
+    private lateinit var cloudinaryHelper: CloudinaryHelper
     private lateinit var sharedPreferences: SharedPreferences
     
     // Caching system for updates
@@ -137,6 +138,9 @@ class HomeFragment : Fragment() {
                         val intent = Intent(requireContext(), com.phad.chatapp.activities.UpdateDetailActivity::class.java)
                         intent.putExtra(com.phad.chatapp.activities.UpdateDetailActivity.EXTRA_UPDATE, update)
                         startActivity(intent)
+                    },
+                    onRefresh = { 
+                        refreshUpdates()
                     }
                 )
             }
@@ -147,7 +151,7 @@ class HomeFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         
         sessionManager = SessionManager(requireContext())
-        driveServiceHelper = DriveServiceHelper.getInstance(requireContext())
+        cloudinaryHelper = CloudinaryHelper.getInstance(requireContext())
         sharedPreferences = requireContext().getSharedPreferences("update_cache", android.content.Context.MODE_PRIVATE)
         
         // Debug logging for session manager
@@ -249,6 +253,20 @@ class HomeFragment : Fragment() {
         }
     }
     
+    
+    private fun refreshUpdates() {
+        Log.d(TAG, "HomeFragment - Manual refresh triggered")
+        // Set refreshing state
+        _uiState.update { it.copy(isRefreshing = true) }
+        
+        // Clear cache to force fresh load
+        updateCache = null
+        sharedPreferences.edit().putLong(CACHE_KEY_LAST_REFRESH, 0).apply()
+        
+        // Load fresh updates
+        loadUpdates()
+    }
+    
     private fun shouldRefreshUpdates(): Boolean {
         val lastRefresh = sharedPreferences.getLong(CACHE_KEY_LAST_REFRESH, 0)
         val now = System.currentTimeMillis()
@@ -324,12 +342,6 @@ class HomeFragment : Fragment() {
                             updateType = updateType
                         )
                         
-                        // Process Drive URL
-                        val finalImageUrl = update.mediaUrl ?: update.imageUrl
-                        if (!finalImageUrl.isNullOrEmpty()) {
-                            update = update.copy(imageUrl = driveServiceHelper.processGoogleDriveUrl(finalImageUrl))
-                        }
-                        
                         update
                     } catch (e: Exception) {
                         Log.e(TAG, "Error parsing individual update document ${doc.id}", e)
@@ -349,11 +361,12 @@ class HomeFragment : Fragment() {
                 updateCache = CachedUpdate(updates, System.currentTimeMillis())
                 sharedPreferences.edit().putLong(CACHE_KEY_LAST_REFRESH, System.currentTimeMillis()).apply()
                 
-                _uiState.update { it.copy(updates = updates) }
+                _uiState.update { it.copy(updates = updates, isRefreshing = false) }
             }
             .addOnFailureListener { e ->
                 Log.e(TAG, "Error loading updates", e)
                 Toast.makeText(context, "Failed to load updates.", Toast.LENGTH_SHORT).show()
+                _uiState.update { it.copy(isRefreshing = false) }
             }
     }
     
@@ -627,27 +640,23 @@ class HomeFragment : Fragment() {
             // Show a loading indication
             Toast.makeText(requireContext(), "Uploading image...", Toast.LENGTH_SHORT).show()
             
-            // Generate a unique filename for the image
-            val filename = "update_image_${System.currentTimeMillis()}_${UUID.randomUUID()}.jpg"
-            
             // Log the upload attempt for debugging
-            Log.d(TAG, "Uploading image to Google Drive: $filename")
+            Log.d(TAG, "Uploading image to Cloudinary")
             
-            // Upload to Google Drive instead of Firebase Storage
-            driveServiceHelper.uploadFileToDrive(uri, filename, "image/jpeg") { success, driveFileId, webViewLink ->
-                if (success && webViewLink != null) {
-                    // Convert to a direct media URL for better Glide compatibility
-                    val directMediaUrl = driveServiceHelper.getDirectMediaUrl(webViewLink, true)
+            // Upload to Cloudinary using coroutines
+            lifecycleScope.launch(Dispatchers.IO) {
+                try {
+                    val downloadUrl = cloudinaryHelper.uploadImage(uri, "updates/images")
                     
-                    Log.d(TAG, "Upload completed. Drive ID: $driveFileId")
-                    Log.d(TAG, "Original URL: $webViewLink")
-                    Log.d(TAG, "Direct media URL: $directMediaUrl")
-                    
-                    onComplete(directMediaUrl)
-                } else {
-                    val errorMsg = "Failed to upload to Google Drive"
-                    Log.e(TAG, errorMsg)
-                    requireActivity().runOnUiThread {
+                    // Call the callback on main thread
+                    withContext(Dispatchers.Main) {
+                        Log.d(TAG, "Image uploaded successfully: $downloadUrl")
+                        onComplete(downloadUrl)
+                    }
+                } catch (e: Exception) {
+                    val errorMsg = "Failed to upload image: ${e.localizedMessage}"
+                    Log.e(TAG, errorMsg, e)
+                    withContext(Dispatchers.Main) {
                         Toast.makeText(requireContext(), errorMsg, Toast.LENGTH_SHORT).show()
                         createUpdateDialog?.findViewById<Button>(R.id.postUpdateButton)?.isEnabled = true
                         createUpdateDialog?.findViewById<Button>(R.id.cancelButton)?.isEnabled = true
@@ -675,31 +684,23 @@ class HomeFragment : Fragment() {
             // Get document name from URI
             val documentName = getDocumentName(uri)
             
-            // Get MIME type of the document
-            val mimeType = requireContext().contentResolver.getType(uri) ?: "application/octet-stream"
-            
-            // Generate a unique filename for the document 
-            val filename = "update_doc_${System.currentTimeMillis()}_${UUID.randomUUID()}_$documentName"
-            
             // Log the upload attempt for debugging
-            Log.d(TAG, "Uploading document to Google Drive: $filename (${mimeType})")
+            Log.d(TAG, "Uploading document to Cloudinary: $documentName")
             
-            // Upload to Google Drive instead of Firebase Storage
-            driveServiceHelper.uploadFileToDrive(uri, filename, mimeType) { success, driveFileId, webViewLink ->
-                if (success && driveFileId != null) {
-                    // Use the standard file view URL format that works without Google auth
-                    // This is the format that's working in the group chat
-                    val directFileUrl = "https://drive.google.com/file/d/${driveFileId}/view?usp=sharing"
+            // Upload to Cloudinary using coroutines
+            lifecycleScope.launch(Dispatchers.IO) {
+                try {
+                    val downloadUrl = cloudinaryHelper.uploadDocument(uri, "updates/documents")
                     
-                    Log.d(TAG, "Upload completed. Drive ID: $driveFileId")
-                    Log.d(TAG, "Original URL: $webViewLink")
-                    Log.d(TAG, "Direct file URL: $directFileUrl")
-                    
-                    onComplete(directFileUrl, documentName)
-                } else {
-                    val errorMsg = "Failed to upload to Google Drive"
-                    Log.e(TAG, errorMsg)
-                    requireActivity().runOnUiThread {
+                    // Call the callback on main thread
+                    withContext(Dispatchers.Main) {
+                        Log.d(TAG, "Document uploaded successfully: $downloadUrl")
+                        onComplete(downloadUrl, documentName)
+                    }
+                } catch (e: Exception) {
+                    val errorMsg = "Failed to upload document: ${e.localizedMessage}"
+                    Log.e(TAG, errorMsg, e)
+                    withContext(Dispatchers.Main) {
                         Toast.makeText(requireContext(), errorMsg, Toast.LENGTH_SHORT).show()
                         createUpdateDialog?.findViewById<Button>(R.id.postUpdateButton)?.isEnabled = true
                         createUpdateDialog?.findViewById<Button>(R.id.cancelButton)?.isEnabled = true

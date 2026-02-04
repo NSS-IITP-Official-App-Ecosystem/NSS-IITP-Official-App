@@ -24,7 +24,13 @@ data class Update(
     val viewCount: Long = 0, // Track post views for analytics
     val likeCount: Long = 0, // Track post likes for engagement
     val timestamp: Long = 0,
-    val updateType: Int = 1 // 1=Teaching Wing, 2=NSS only, 3=Both
+    val updateType: Int = 1, // 1=Teaching Wing, 2=NSS only, 3=Both
+    
+    // Multiple attachments support
+    val imageUrls: List<String>? = null,        // Multiple images
+    val documentUrls: List<String>? = null,     // Multiple document URLs
+    val documentNames: List<String>? = null,    // Corresponding document names
+    val externalLinks: List<String>? = null     // Multiple links
 ) : Serializable {
     // No-argument constructor for Firestore
     constructor() : this(
@@ -47,7 +53,11 @@ data class Update(
         viewCount = 0,
         likeCount = 0,
         timestamp = 0,
-        updateType = 1
+        updateType = 1,
+        imageUrls = null,
+        documentUrls = null,
+        documentNames = null,
+        externalLinks = null
     )
     
     fun getTimeAgo(): String {
@@ -65,6 +75,34 @@ data class Update(
                 formatter.format(date)
             }
         }
+    }
+    
+    // Helper methods to get all attachments (merges old and new fields)
+    fun getAllImages(): List<String> {
+        val images = mutableListOf<String>()
+        imageUrl?.let { images.add(it) }
+        imageUrls?.let { images.addAll(it) }
+        return images.distinct()
+    }
+    
+    fun getAllDocuments(): List<Pair<String, String>> {
+        val documents = mutableListOf<Pair<String, String>>() // Pair of (url, name)
+        if (documentUrl != null && documentName != null) {
+            documents.add(documentUrl to documentName)
+        }
+        if (documentUrls != null && documentNames != null) {
+            documentUrls.zip(documentNames).forEach { (url, name) ->
+                documents.add(url to name)
+            }
+        }
+        return documents.distinct()
+    }
+    
+    fun getAllLinks(): List<String> {
+        val links = mutableListOf<String>()
+        externalLink?.let { links.add(it) }
+        externalLinks?.let { links.addAll(it) }
+        return links.distinct()
     }
     
     

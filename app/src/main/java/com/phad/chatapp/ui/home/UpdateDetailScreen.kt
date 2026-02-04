@@ -1,9 +1,15 @@
 package com.phad.chatapp.ui.home
 
+import android.app.DownloadManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Environment
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -11,9 +17,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.runtime.Composable
+import androidx.core.content.FileProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -21,10 +31,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.phad.chatapp.models.Update
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -54,7 +70,7 @@ fun UpdateDetailScreen(
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFFE6D8EF))
+                    .background(Color(0xFFFFF8E1))
             ) {
                 Icon(
                     imageVector = Icons.Default.ArrowBack,
@@ -89,34 +105,36 @@ fun UpdateDetailScreen(
                 )
             }
 
-            // Attachments (Links and Documents)
-            if (!update.externalLink.isNullOrEmpty() || !update.documentUrl.isNullOrEmpty()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    if (!update.externalLink.isNullOrEmpty()) {
+            // Links Section
+            val allLinks = update.getAllLinks()
+            if (allLinks.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    allLinks.forEach { link ->
                         SuggestionChip(
                             onClick = {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(update.externalLink))
-                                context.startActivity(intent)
+                                try {
+                                    val url = link.trim()
+                                    if (url.isEmpty()) {
+                                        android.widget.Toast.makeText(context, "Link is empty", android.widget.Toast.LENGTH_SHORT).show()
+                                        return@SuggestionChip
+                                    }
+                                    
+                                    val finalUrl = if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                                        "https://$url"
+                                    } else {
+                                        url
+                                    }
+                                    
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(finalUrl))
+                                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    android.util.Log.e("UpdateDetail", "Failed to open link: $link", e)
+                                    android.widget.Toast.makeText(context, "Cannot open link: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                                }
                             },
-                            label = { Text("Open Link") },
-                            icon = { Icon(Icons.Default.Link, null) },
-                            colors = SuggestionChipDefaults.suggestionChipColors(
-                                containerColor = Color(0xFFE0E0E0)
-                            )
-                        )
-                    }
-
-                    if (!update.documentUrl.isNullOrEmpty()) {
-                        SuggestionChip(
-                            onClick = {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(update.documentUrl))
-                                context.startActivity(intent)
-                            },
-                            label = { Text(update.documentName ?: "Document") },
-                            icon = { Icon(Icons.Default.Description, null) },
+                            label = { Text("Open Link", fontSize = 13.sp) },
+                            icon = { Icon(Icons.Default.Link, null, modifier = Modifier.size(16.dp)) },
                             colors = SuggestionChipDefaults.suggestionChipColors(
                                 containerColor = Color(0xFFE0E0E0)
                             )
@@ -125,17 +143,38 @@ fun UpdateDetailScreen(
                 }
             }
 
-            // Image
-            if (!update.imageUrl.isNullOrEmpty()) {
-                AsyncImage(
-                    model = update.imageUrl,
-                    contentDescription = "Post Image",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 400.dp)
-                        .clip(RoundedCornerShape(12.dp)),
-                    contentScale = ContentScale.Fit
-                )
+            // Documents Section
+            val allDocuments = update.getAllDocuments()
+            if (allDocuments.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    allDocuments.forEach { (url, name) ->
+                        DocumentChipWithMenu(
+                            documentName = name,
+                            documentUrl = url
+                        )
+                    }
+                }
+            }
+
+            // Images Section - Horizontal Scrollable Row
+            val allImages = update.getAllImages()
+            if (allImages.isNotEmpty()) {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(allImages) { imageUrl ->
+                        AsyncImage(
+                            model = imageUrl,
+                            contentDescription = "Post Image",
+                            modifier = Modifier
+                                .width(300.dp)
+                                .heightIn(max = 400.dp)
+                                .clip(RoundedCornerShape(12.dp)),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
+                }
             }
 
             // Full Content
@@ -150,6 +189,120 @@ fun UpdateDetailScreen(
             
             // Bottom spacing
             Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+fun DocumentChipWithMenu(
+    documentName: String,
+    documentUrl: String
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    
+    Row(
+        modifier = Modifier
+            .widthIn(min = 150.dp, max = 300.dp) // Ensure proper width
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color(0xFFE0E0E0))
+            .clickable {
+                // Preview: Download to cache and open
+                scope.launch {
+                    try {
+                        android.widget.Toast.makeText(context, "Opening $documentName...", android.widget.Toast.LENGTH_SHORT).show()
+                        
+                        withContext(Dispatchers.IO) {
+                            val cacheDir = context.cacheDir
+                            val file = File(cacheDir, documentName)
+                            
+                            // Download file to cache
+                            URL(documentUrl).openStream().use { input ->
+                                file.outputStream().use { output ->
+                                    input.copyTo(output)
+                                }
+                            }
+                            
+                            withContext(Dispatchers.Main) {
+                                // Open file with appropriate app
+                                val uri = FileProvider.getUriForFile(
+                                    context,
+                                    "${context.packageName}.fileprovider",
+                                    file
+                                )
+                                
+                                val intent = Intent(Intent.ACTION_VIEW).apply {
+                                    setDataAndType(uri, "application/pdf")
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                
+                                try {
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        "No PDF viewer app found. Please install one.",
+                                        android.widget.Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("DocumentChip", "Failed to open document", e)
+                        android.widget.Toast.makeText(
+                            context,
+                            "Failed to open document: ${e.message}",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            }
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = documentName,
+            color = Color.Black,
+            fontSize = 14.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false)
+        )
+        
+        IconButton(
+            onClick = {
+                // Download to permanent storage
+                try {
+                    val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                    val request = DownloadManager.Request(Uri.parse(documentUrl))
+                        .setTitle(documentName)
+                        .setDescription("Downloading document")
+                        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                        .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, documentName)
+                        .setAllowedOverMetered(true)
+                        .setAllowedOverRoaming(true)
+                    
+                    downloadManager.enqueue(request)
+                    android.widget.Toast.makeText(context, "Downloading $documentName...", android.widget.Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    android.util.Log.e("DocumentChip", "Failed to download", e)
+                    android.widget.Toast.makeText(
+                        context,
+                        "Failed to download: ${e.message}",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
+            },
+            modifier = Modifier.size(24.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Download,
+                contentDescription = "Download",
+                tint = Color.DarkGray,
+                modifier = Modifier.size(18.dp)
+            )
         }
     }
 }

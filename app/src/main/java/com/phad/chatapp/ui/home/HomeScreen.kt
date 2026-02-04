@@ -47,7 +47,8 @@ data class HomeUiState(
     val userName: String = "User...",
     val updates: List<Update> = emptyList(),
     val isAdmin: Boolean = false,
-    val isNssInterface: Boolean = false
+    val isNssInterface: Boolean = false,
+    val isRefreshing: Boolean = false
 )
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -60,7 +61,8 @@ fun HomeScreen(
     onUpdateClick: (Update) -> Unit,
     onEditPost: (Update) -> Unit = {},
     onDeletePost: (Update) -> Unit = {},
-    onBatchDeleteClick: () -> Unit = {}
+    onBatchDeleteClick: () -> Unit = {},
+    onRefresh: () -> Unit = {}
 ) {
     val backgroundColor = Color(0xff0d0302)
     val configuration = LocalConfiguration.current
@@ -216,7 +218,7 @@ fun HomeScreen(
                                 .width(90.dp)
                                 .height(36.dp)
                                 .clip(RoundedCornerShape(18.dp))
-                                .background(Color(0xFFE6D8EF))
+                                .background(Color(0xFFFFF8E1))
                                 .clickable(
                                     interactionSource = remember { MutableInteractionSource() },
                                     indication = null
@@ -235,7 +237,7 @@ fun HomeScreen(
                                     .width(45.dp)
                                     .height(36.dp)
                                     .clip(RoundedCornerShape(18.dp))
-                                    .background(Color(0xFFB8A0C8))
+                                    .background(Color(0xFFFFC107))
                             )
                             
                             // Toggle buttons with icons
@@ -288,13 +290,17 @@ fun HomeScreen(
                                 isAdmin = state.isAdmin,
                                 onEditClick = onEditPost,
                                 onDeleteClick = onDeletePost,
-                                onReadMoreClick = { showDetailScreen = it }
+                                onReadMoreClick = { showDetailScreen = it },
+                                isRefreshing = state.isRefreshing,
+                                onRefresh = onRefresh
                             )
                             1 -> ReelsTab(
                                 updates = state.updates.filter { it.postType == "reel" },
                                 isAdmin = state.isAdmin,
                                 onEditClick = onEditPost,
-                                onDeleteClick = onDeletePost
+                                onDeleteClick = onDeletePost,
+                                isRefreshing = state.isRefreshing,
+                                onRefresh = onRefresh
                             )
                         }
                     }
@@ -312,7 +318,7 @@ fun HomeScreen(
 
                     FloatingActionButton(
                         onClick = { showMenu = !showMenu },
-                        containerColor = Color(0xFFB8A0C8)
+                        containerColor = Color(0xFFFFC107)
                     ) {
                         Icon(
                             if (showMenu) Icons.Filled.Close else Icons.Filled.Add,
@@ -354,7 +360,9 @@ fun UpdatesTab(
     isAdmin: Boolean,
     onEditClick: (Update) -> Unit,
     onDeleteClick: (Update) -> Unit,
-    onReadMoreClick: (Update) -> Unit
+    onReadMoreClick: (Update) -> Unit,
+    isRefreshing: Boolean = false,
+    onRefresh: () -> Unit = {}
 ) {
     if (updates.isEmpty()) {
         Box(
@@ -386,7 +394,9 @@ fun ReelsTab(
     updates: List<Update>,
     isAdmin: Boolean,
     onEditClick: (Update) -> Unit,
-    onDeleteClick: (Update) -> Unit
+    onDeleteClick: (Update) -> Unit,
+    isRefreshing: Boolean = false,
+    onRefresh: () -> Unit = {}
 ) {
     if (updates.isEmpty()) {
         Box(
