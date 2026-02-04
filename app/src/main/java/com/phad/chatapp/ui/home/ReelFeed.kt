@@ -22,7 +22,9 @@ fun ReelFeed(
     isAdmin: Boolean = false,
     onUpdateClick: (Update) -> Unit,
     onEditClick: (Update) -> Unit = {},
-    onDeleteClick: (Update) -> Unit = {}
+    onDeleteClick: (Update) -> Unit = {},
+    onDismiss: () -> Unit = {},
+    isInFullView: Boolean = false // New param
 ) {
     if (updates.isEmpty()) {
         Box(
@@ -49,7 +51,9 @@ fun ReelFeed(
                 isAdmin = isAdmin,
                 onUpdateClick = onUpdateClick,
                 onEditClick = onEditClick,
-                onDeleteClick = onDeleteClick
+                onDeleteClick = onDeleteClick,
+                onDismiss = onDismiss,
+                isInFullView = isInFullView
             )
         }
     }

@@ -22,6 +22,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.MoreVert
@@ -72,225 +73,151 @@ fun ReelItem(
     update: Update,
     isVisible: Boolean,
     isAdmin: Boolean = false,
-    onUpdateClick: (Update) -> Unit,
+    onUpdateClick: (Update) -> Unit = {},
     onEditClick: (Update) -> Unit = {},
-    onDeleteClick: (Update) -> Unit = {}
+    onDeleteClick: (Update) -> Unit = {},
+    onDismiss: () -> Unit = {},
+    isInFullView: Boolean = false // New param
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
-            .clickable { onUpdateClick(update) }
+            // .clickable removed
     ) {
         if (update.postType == "text") {
             TextPostView(
                 update = update,
                 isAdmin = isAdmin,
                 onEditClick = onEditClick,
-                onDeleteClick = onDeleteClick
+                onDeleteClick = onDeleteClick,
+                onDismiss = onDismiss,
+                isInFullView = isInFullView,
+                onReadMoreClick = { onUpdateClick(update) }
             )
         } else {
-            // Content Layer for Reels
-            when {
-            !update.instagramUrl.isNullOrEmpty() -> {
-                InstagramPlayer(instagramUrl = update.instagramUrl!!, isVisible = isVisible)
-            }
-            update.isVideo && !update.mediaUrl.isNullOrEmpty() -> {
-                ExoVideoPlayer(videoUrl = update.mediaUrl, isVisible = isVisible)
-            }
-            !update.imageUrl.isNullOrEmpty() -> {
-                AsyncImage(
-                    model = update.imageUrl,
-                    contentDescription = "Update Image",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            }
-            else -> {
-                // Text-only background (gradient)
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    Color(0xFF1E1E1E),
-                                    Color(0xFF2D2D2D)
-                                )
-                            )
-                        )
-                )
-            }
-        }
-
-        // Overlay Gradient for better text readability
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color.Transparent,
-                            Color.Black.copy(alpha = 0.6f),
-                            Color.Black.copy(alpha = 0.9f)
-                        )
-                    )
-                )
-        )
-
-        // Info Layer (Bottom)
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .fillMaxWidth()
-                .padding(16.dp)
-                .padding(bottom = 60.dp) // Space for bottom navigation if needed
-        ) {
-            // Author & Date
+            // NEW Top Bar Header (Reel Style)
+            // Sticked to the top, darker background
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(bottom = 8.dp)
-            ) {
-
-
-                AsyncImage(
-                    model = update.authorImageUrl ?: R.drawable.default_profile_image,
-                    contentDescription = "Author",
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(Color.Gray),
-                    contentScale = ContentScale.Crop,
-                    error = rememberVectorPainter(Icons.Default.Person) // Use a safe vector icon
-                )
-                
-                Column(modifier = Modifier.padding(start = 12.dp)) {
-                    Text(
-                        text = update.authorName,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
-                    )
-                    Text(
-                        text = formatDate(update.timestamp),
-                        color = Color.White.copy(alpha = 0.7f),
-                        fontSize = 12.sp
-                    )
-                }
-            }
-            
-            // Title
-            if (!update.title.isNullOrEmpty()) {
-                Text(
-                    text = update.title!!, // Safe given the check
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(bottom = 4.dp)
-                )
-            }
-            
-            // Content (Truncated or scrollable in popup)
-            if (!update.content.isNullOrEmpty()) {
-                Text(
-                    text = update.content!!, // Safe given the check
-                    color = Color.White.copy(alpha = 0.9f),
-                    fontSize = 14.sp,
-                    maxLines = 4,
-                    overflow = TextOverflow.Ellipsis,
-                    lineHeight = 20.sp
-                )
-            }
-
-            // Attachments Indicators
-            if (!update.documentUrl.isNullOrEmpty() || !update.externalLink.isNullOrEmpty()) {
-                Row(modifier = Modifier.padding(top = 8.dp)) {
-                    if (!update.documentUrl.isNullOrEmpty()) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.Description,
-                                contentDescription = "Doc",
-                                tint = Color.Yellow,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Text(
-                                text = " Document",
-                                color = Color.Yellow,
-                                fontSize = 12.sp
-                            )
-                        }
-                    }
-                    if (!update.externalLink.isNullOrEmpty()) {
-                        Spacer(modifier = Modifier.size(16.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.Link,
-                                contentDescription = "Link",
-                                tint = Color.Cyan,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Text(
-                                text = " Link",
-                                color = Color.Cyan,
-                                fontSize = 12.sp
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // Admin Controls (Top Right)
-        if (isAdmin) {
-            Box(
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(16.dp)
-                    .padding(top = 24.dp)
+                    .fillMaxWidth()
+                    .background(Color(0xFF121212)) // Darker Header (was 1E1E1E)
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                // Cross Button to go back
                 androidx.compose.material3.IconButton(
-                    onClick = { showMenu = true }
+                    onClick = onDismiss,
+                    modifier = Modifier.size(32.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = "Options",
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close",
                         tint = Color.White
                     )
                 }
                 
-                androidx.compose.material3.DropdownMenu(
-                    expanded = showMenu,
-                    onDismissRequest = { showMenu = false }
-                ) {
-                    androidx.compose.material3.DropdownMenuItem(
-                        text = { Text("Edit Post") },
-                        onClick = { 
-                            showMenu = false
-                            onEditClick(update)
-                        }
-                    )
-                    androidx.compose.material3.DropdownMenuItem(
-                        text = { Text("Delete Post") },
-                        onClick = { 
-                            showMenu = false
-                            onDeleteClick(update)
-                        }
+                Spacer(modifier = Modifier.size(12.dp))
+                
+                // Title + Time
+                Column(modifier = Modifier.weight(1f)) {
+                    if (!update.title.isNullOrEmpty()) {
+                        Text(
+                            text = update.title!!, // Safe
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Text(
+                        text = formatDate(update.timestamp),
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 11.sp
                     )
                 }
+
+                // Admin Controls (Moved to Top Right inside Header)
+                if (isAdmin) {
+                    Box {
+                        androidx.compose.material3.IconButton(
+                            onClick = { showMenu = true }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = "Options",
+                                tint = Color.White
+                            )
+                        }
+                        
+                        androidx.compose.material3.DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false }
+                        ) {
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("Edit Post") },
+                                onClick = { 
+                                    showMenu = false
+                                    onEditClick(update)
+                                }
+                            )
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("Delete Post") },
+                                onClick = { 
+                                    showMenu = false
+                                    onDeleteClick(update)
+                                }
+                            )
+                        }
+                    }
+                }
             }
-        }
+
+            // Content Layer for Reels
+            // Fills remaining space
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                when {
+                    !update.instagramUrl.isNullOrEmpty() -> {
+                        InstagramPlayer(instagramUrl = update.instagramUrl!!, isVisible = isVisible)
+                    }
+                    update.isVideo && !update.mediaUrl.isNullOrEmpty() -> {
+                        ExoVideoPlayer(videoUrl = update.mediaUrl, isVisible = isVisible)
+                    }
+                    !update.imageUrl.isNullOrEmpty() -> {
+                        AsyncImage(
+                            model = update.imageUrl,
+                            contentDescription = "Update Image",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Fit // Fit to ensure full image is visible
+                        )
+                    }
+                    else -> {
+                        // Text-only background (gradient)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color(0xFF1E1E1E),
+                                            Color(0xFF2D2D2D)
+                                        )
+                                    )
+                                )
+                        )
+                    }
+                }
+            }
         }
     }
 }
 
 
 @Composable
-fun ExoVideoPlayer(videoUrl: String, isVisible: Boolean) {
+fun ExoVideoPlayer(videoUrl: String, isVisible: Boolean, fitContent: Boolean = false) {
     val context = LocalContext.current
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build().apply {
@@ -326,7 +253,11 @@ fun ExoVideoPlayer(videoUrl: String, isVisible: Boolean) {
             StyledPlayerView(context).apply {
                 player = exoPlayer
                 useController = false
-                resizeMode = com.google.android.exoplayer2.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                resizeMode = if (fitContent) {
+                    com.google.android.exoplayer2.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
+                } else {
+                    com.google.android.exoplayer2.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                }
             }
         },
         modifier = Modifier.fillMaxSize()

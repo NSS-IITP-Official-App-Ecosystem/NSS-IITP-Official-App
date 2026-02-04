@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
@@ -48,7 +49,8 @@ fun PostViewerDialog(
                 // User asked for "background being blur". We can try Modifier.blur on the content BEHIND, 
                 // but since this is a Dialog, we can't easily blur the Activity below from here.
                 // Best approximation: Semi-transparent scrim.
-                .background(Color.Black.copy(alpha = 0.85f)) 
+                .background(Color.Black.copy(alpha = 0.95f))
+                .clickable { onDismiss() } // Handle click outside 
         ) {
             // Rounded Container with Margins
             Box(
@@ -57,6 +59,7 @@ fun PostViewerDialog(
                     .padding(vertical = 48.dp, horizontal = 24.dp) // Margin from edges
                     .clip(RoundedCornerShape(24.dp))
                     .background(Color.Black)
+                    .clickable(enabled = false) {} // Consume clicks inside dialog so they don't dismiss
             ) {
                 ReelFeed(
                     updates = updates,
@@ -64,23 +67,9 @@ fun PostViewerDialog(
                     isAdmin = isAdmin,
                     onUpdateClick = onUpdateClick,
                     onEditClick = onEditClick,
-                    onDeleteClick = onDeleteClick
-                )
-            }
-
-            // Back/Close Button (Top Left of the blurred area)
-            IconButton(
-                onClick = onDismiss,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(16.dp)
-                    .padding(top = 16.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "Close",
-                    tint = Color.White,
-                    modifier = Modifier.size(32.dp)
+                    onDeleteClick = onDeleteClick,
+                    onDismiss = onDismiss,
+                    isInFullView = true // Always full view in Dialog
                 )
             }
         }

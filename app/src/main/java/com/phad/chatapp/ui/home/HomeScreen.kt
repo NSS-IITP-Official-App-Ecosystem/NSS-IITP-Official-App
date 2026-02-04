@@ -1,44 +1,44 @@
 package com.phad.chatapp.ui.home
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Link
-import androidx.compose.material.icons.filled.QrCode
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import com.phad.chatapp.R
 import com.phad.chatapp.models.Update
 
@@ -50,6 +50,7 @@ data class HomeUiState(
     val isNssInterface: Boolean = false
 )
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(
     modifier: Modifier = Modifier,
@@ -58,63 +59,55 @@ fun HomeScreen(
     onAddUpdateClick: () -> Unit,
     onUpdateClick: (Update) -> Unit,
     onEditPost: (Update) -> Unit = {},
-    onDeletePost: (Update) -> Unit = {}
+    onDeletePost: (Update) -> Unit = {},
+    onBatchDeleteClick: () -> Unit = {}
 ) {
-    // Debug logging
-    android.util.Log.d("HomeScreen", "HomeScreen - Received state: isAdmin=${state.isAdmin}, isNssInterface=${state.isNssInterface}, userName='${state.userName}'")
-    
     val backgroundColor = Color(0xff0d0302)
-    val surfaceColor = Color.White
-    val onSurfaceColor = Color.Black
-    val onSurfaceVariantColor = onSurfaceColor.copy(alpha = 0.6f)
-
-    // Get screen height for responsive spacing
     val configuration = LocalConfiguration.current
     val screenHeight = configuration.screenHeightDp.dp
-    val screenWidth = configuration.screenWidthDp.dp
-
-    // Calculate responsive dimensions based on screen size
+    
     val isSmallScreen = screenHeight < 700.dp
     val isMediumScreen = screenHeight < 800.dp
-
-    // Responsive header bottom padding
+    
     val headerBottomPadding = when {
-        isSmallScreen -> 16.dp   // Small screens
-        isMediumScreen -> 24.dp  // Medium screens
-        else -> 32.dp            // Large screens
+        isSmallScreen -> 16.dp
+        isMediumScreen -> 24.dp
+        else -> 32.dp
     }
-
-    // Responsive content padding
+    
     val contentPadding = when {
         isSmallScreen -> 16.dp
         isMediumScreen -> 20.dp
         else -> 24.dp
     }
-
-    // Responsive font sizes
+    
     val greetingFontSize = when {
         isSmallScreen -> 26.sp
         isMediumScreen -> 29.sp
         else -> 32.sp
     }
-
+    
     val userNameFontSize = when {
         isSmallScreen -> 20.sp
         isMediumScreen -> 22.sp
         else -> 24.sp
     }
 
-    val updatesFontSize = when {
-        isSmallScreen -> 24.sp
-        isMediumScreen -> 26.sp
-        else -> 28.sp
+    var selectedTab by remember { mutableStateOf(0) }
+    var showDetailScreen by remember { mutableStateOf<Update?>(null) }
+    val pagerState = rememberPagerState(pageCount = { 2 })
+    val coroutineScope = rememberCoroutineScope()
+
+    // Sync pager state with selected tab
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.currentPage }.collect { page ->
+            selectedTab = page
+        }
     }
 
-    // Responsive spacing
-    val spacingBetweenSections = when {
-        isSmallScreen -> 12.dp
-        isMediumScreen -> 14.dp
-        else -> 16.dp
+    // Handle back button when detail screen is shown
+    BackHandler(enabled = showDetailScreen != null) {
+        showDetailScreen = null
     }
 
     Box(
@@ -122,322 +115,299 @@ fun HomeScreen(
             .fillMaxSize()
             .background(backgroundColor)
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            // Header - positioned just below status bar with minimal top padding
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(backgroundColor)
-                    .padding(
-                        start = contentPadding,
-                        top = 4.dp, // Minimal top padding - system handles status bar
-                        end = contentPadding,
-                        bottom = headerBottomPadding
-                    ),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Image(
-                    painter = painterResource(
-                        id = if (state.isNssInterface) R.drawable.nss_logo_main else R.drawable.app_logo_top_left
-                    ),
-                    contentDescription = if (state.isNssInterface) "NSS Logo" else "Teaching Wing Logo",
-                    modifier = Modifier.size(60.dp)
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Attendance icon removed from teaching wing interface
-                    // if (!state.isNssInterface) {
-                    //     IconButton(onClick = onTodoClick) {
-                    //         Icon(
-                    //             painterResource(id = R.drawable.mditickcircle),
-                    //             contentDescription = "To-Do List",
-                    //             tint = Color.White,
-                    //             modifier = Modifier.size(if (isSmallScreen) 20.dp else 24.dp)
-                    //         )
-                    //     }
-                    //     Spacer(Modifier.width(if (isSmallScreen) 4.dp else 8.dp))
-                    // }
-                    IconButton(onClick = onChatbotClick) {
-                        Icon(
-                            painterResource(id = R.drawable.ic_faq), // You'll need to add this icon
-                            contentDescription = "FAQs",
-                            tint = Color.White,
-                            modifier = Modifier.size(if (isSmallScreen) 20.dp else 24.dp)
-                        )
+        if (showDetailScreen != null) {
+            // Show detail screen
+            UpdateDetailScreen(
+                update = showDetailScreen!!,
+                onBackClick = { showDetailScreen = null }
+            )
+        } else {
+            // Show main feed
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Header
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(backgroundColor)
+                        .padding(
+                            start = contentPadding,
+                            top = 4.dp,
+                            end = contentPadding,
+                            bottom = headerBottomPadding
+                        ),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Image(
+                        painter = painterResource(
+                            id = if (state.isNssInterface) R.drawable.nss_logo_main else R.drawable.app_logo_top_left
+                        ),
+                        contentDescription = if (state.isNssInterface) "NSS Logo" else "Teaching Wing Logo",
+                        modifier = Modifier.size(60.dp)
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = onChatbotClick) {
+                            Icon(
+                                painterResource(id = R.drawable.ic_faq),
+                                contentDescription = "FAQs",
+                                tint = Color.White,
+                                modifier = Modifier.size(if (isSmallScreen) 20.dp else 24.dp)
+                            )
+                        }
                     }
                 }
-            }
 
-            // Body - with proper spacing from header
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp))
-                    .background(Color.Black) // Dark background for reels
-            ) {
-                // Greeting and Next Class - Fixed at top
+                // Body
                 Column(
                     modifier = Modifier
-                        .padding(horizontal = contentPadding, vertical = 16.dp)
-                        .background(Color.Black)
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp))
+                        .background(Color.White)
                 ) {
-                    Text(
-                        text = buildAnnotatedString {
-                            withStyle(
-                                style = SpanStyle(
-                                    fontSize = greetingFontSize,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                            ) {
-                                append("${state.greeting}\n")
-                            }
-                            withStyle(
-                                style = SpanStyle(
-                                    fontSize = userNameFontSize,
-                                    color = Color.White.copy(alpha = 0.8f)
-                                )
-                            ) {
-                                append(state.userName)
-                            }
-                        },
-                        lineHeight = when {
-                            isSmallScreen -> 30.sp
-                            isMediumScreen -> 33.sp
-                            else -> 36.sp
-                        }
-                    )
-                }
-
-                // Reel Feed Section - Fills remaining space
-                // Reel Feed Section - First Item Only + Swipe Detector
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
-                ) {
-                    var showPostDialog by remember { mutableStateOf(false) }
-
-                    if (state.updates.isNotEmpty()) {
+                    // Greeting with Toggle Switch
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = contentPadding, vertical = 16.dp)
+                            .background(Color.White),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Bottom
+                    ) {
+                        Text(
+                            text = buildAnnotatedString {
+                                withStyle(
+                                    style = SpanStyle(
+                                        fontSize = greetingFontSize,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.Black
+                                    )
+                                ) {
+                                    append("${state.greeting}\n")
+                                }
+                                withStyle(
+                                    style = SpanStyle(
+                                        fontSize = userNameFontSize,
+                                        color = Color.Black.copy(alpha = 0.7f)
+                                    )
+                                ) {
+                                    append(state.userName)
+                                }
+                            },
+                            lineHeight = when {
+                                isSmallScreen -> 30.sp
+                                isMediumScreen -> 33.sp
+                                else -> 36.sp
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                        
+                        // Compact Toggle Switch with Icons
+                        val animatedOffset by androidx.compose.animation.core.animateFloatAsState(
+                            targetValue = if (selectedTab == 0) 0f else 1f,
+                            animationSpec = androidx.compose.animation.core.tween(
+                                durationMillis = 300,
+                                easing = androidx.compose.animation.core.FastOutSlowInEasing
+                            ),
+                            label = "toggle_indicator"
+                        )
+                        
                         Box(
                             modifier = Modifier
-                                .fillMaxSize()
-                                .pointerInput(Unit) {
-                                    detectVerticalDragGestures { change, dragAmount ->
-                                        // Detect Swipe Up (dragAmount is negative)
-                                        if (dragAmount < -20) {
-                                            showPostDialog = true
-                                        }
-                                        change.consume()
+                                .width(90.dp)
+                                .height(36.dp)
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(Color(0xFFE6D8EF))
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) {
+                                    // Toggle between tabs
+                                    selectedTab = if (selectedTab == 0) 1 else 0
+                                    coroutineScope.launch {
+                                        pagerState.animateScrollToPage(selectedTab)
                                     }
                                 }
                         ) {
-                            // Show ONLY the first item in the main view
-                            ReelItem(
-                                update = state.updates[0],
-                                isVisible = true,
+                            // Animated indicator
+                            Box(
+                                modifier = Modifier
+                                    .offset(x = 45.dp * animatedOffset)
+                                    .width(45.dp)
+                                    .height(36.dp)
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .background(Color(0xFFB8A0C8))
+                            )
+                            
+                            // Toggle buttons with icons
+                            Row(
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                // Updates icon
+                                Box(
+                                    modifier = Modifier
+                                        .width(45.dp)
+                                        .fillMaxHeight(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.ic_article),
+                                        contentDescription = "Updates",
+                                        tint = if (selectedTab == 0) Color.Black else Color(0xFF424242),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                
+                                // Reels icon
+                                Box(
+                                    modifier = Modifier
+                                        .width(45.dp)
+                                        .fillMaxHeight(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.ic_play_circle),
+                                        contentDescription = "Reels",
+                                        tint = if (selectedTab == 1) Color.Black else Color(0xFF424242),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Content with HorizontalPager for swipe navigation
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color(0xFFF5F5F5))
+                    ) { page ->
+                        when (page) {
+                            0 -> UpdatesTab(
+                                updates = state.updates.filter { it.postType == "text" },
                                 isAdmin = state.isAdmin,
-                                onUpdateClick = { 
-                                    // Clicking also opens the dialog
-                                    showPostDialog = true 
-                                },
+                                onEditClick = onEditPost,
+                                onDeleteClick = onDeletePost,
+                                onReadMoreClick = { showDetailScreen = it }
+                            )
+                            1 -> ReelsTab(
+                                updates = state.updates.filter { it.postType == "reel" },
+                                isAdmin = state.isAdmin,
                                 onEditClick = onEditPost,
                                 onDeleteClick = onDeletePost
                             )
                         }
-                    } else {
-                        // Empty State
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("No updates available", color = Color.White)
-                        }
-                    }
-
-                    // Immersive Dialog Viewer
-                    if (showPostDialog) {
-                         PostViewerDialog(
-                             updates = state.updates,
-                             initialPage = 0, // Always start from top when opened from here
-                             isAdmin = state.isAdmin,
-                             onDismiss = { showPostDialog = false },
-                             onUpdateClick = onUpdateClick,
-                             onEditClick = onEditPost,
-                             onDeleteClick = onDeletePost
-                         )
                     }
                 }
             }
-        }
 
-
-        // Floating Action Button positioned absolutely
-        if (state.isAdmin) {
-            // Debug logging
-            android.util.Log.d("HomeScreen", "HomeScreen - Showing FloatingActionButton because isAdmin=${state.isAdmin}")
-            
-            FloatingActionButton(
-                onClick = onAddUpdateClick,
-                containerColor = Color(0xffffcc00),
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(16.dp)
-            ) {
-                Icon(Icons.Filled.Add, contentDescription = "Add Update", tint = Color.Black)
-            }
-        } else {
-            // Debug logging
-            android.util.Log.d("HomeScreen", "HomeScreen - NOT showing FloatingActionButton because isAdmin=${state.isAdmin}")
-        }
-    }
-}
-
-@Composable
-fun UpdateCard(
-    update: Update,
-    onUpdateClick: (Update) -> Unit,
-    isSmallScreen: Boolean = false
-) {
-    val cardWidth = if (isSmallScreen) 260.dp else 280.dp
-    val padding = if (isSmallScreen) 12.dp else 16.dp
-    val spacing = if (isSmallScreen) 6.dp else 8.dp
-
-    Card(
-        modifier = Modifier
-            .width(cardWidth)
-            .clickable { onUpdateClick(update) },
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-    ) {
-        Column(modifier = Modifier.padding(padding)) {
-            // 1. Content - Add null safety check
-            if (!update.content.isNullOrBlank()) {
-                Text(
-                    text = update.content,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 3,
-                    fontSize = if (isSmallScreen) 13.sp else 14.sp
-                )
-                Spacer(Modifier.height(spacing))
-            } else {
-                // Fallback for updates without content (should not happen with our filtering, but just in case)
-                Text(
-                    text = "No content available",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    maxLines = 3,
-                    fontSize = if (isSmallScreen) 13.sp else 14.sp
-                )
-                Spacer(Modifier.height(spacing))
-            }
-
-            // 2. Title - Add null safety check
-            if (!update.title.isNullOrBlank()) {
-                Text(
-                    text = update.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
-                    fontSize = if (isSmallScreen) 15.sp else 16.sp
-                )
-                Spacer(Modifier.height(spacing))
-            } else {
-                // Fallback for updates without titles (should not happen with our filtering, but just in case)
-                Text(
-                    text = "Untitled Update",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    maxLines = 2,
-                    fontSize = if (isSmallScreen) 15.sp else 16.sp
-                )
-                Spacer(Modifier.height(spacing))
-            }
-
-            // 3. Image - Add null safety check
-            if (!update.imageUrl.isNullOrEmpty()) {
-                AsyncImage(
-                    model = update.imageUrl,
-                    contentDescription = update.title ?: "Update image", // Add null safety
-                    placeholder = painterResource(id = R.drawable.rectangle9),
-                    error = painterResource(id = R.drawable.rectangle9),
-                    contentScale = ContentScale.Crop,
+            // Floating Action Button
+            if (state.isAdmin) {
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(16f / 9f)
-                        .clip(RoundedCornerShape(12.dp))
-                )
-                Spacer(Modifier.height(spacing))
-            }
+                        .align(Alignment.BottomEnd)
+                        .padding(16.dp)
+                ) {
+                    var showMenu by remember { mutableStateOf(false) }
 
-            // 4. PDF - Add null safety check
-            if (!update.documentName.isNullOrEmpty() && !update.documentUrl.isNullOrEmpty()) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Filled.Description,
-                        contentDescription = "PDF",
-                        modifier = Modifier.size(if (isSmallScreen) 18.dp else 20.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(Modifier.width(spacing))
-                    Text(
-                        text = update.documentName,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        fontSize = if (isSmallScreen) 11.sp else 12.sp
-                    )
-                }
-                Spacer(Modifier.height(spacing))
-            }
+                    FloatingActionButton(
+                        onClick = { showMenu = !showMenu },
+                        containerColor = Color(0xFFB8A0C8)
+                    ) {
+                        Icon(
+                            if (showMenu) Icons.Filled.Close else Icons.Filled.Add,
+                            contentDescription = "Menu",
+                            tint = Color.Black
+                        )
+                    }
 
-            // 5. External Link - Add null safety check
-            if (!update.externalLink.isNullOrEmpty()) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Filled.Link,
-                        contentDescription = "Link",
-                        modifier = Modifier.size(if (isSmallScreen) 18.dp else 20.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(Modifier.width(spacing))
-                    Text(
-                        text = update.externalLink,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        maxLines = 1,
-                        fontSize = if (isSmallScreen) 11.sp else 12.sp
-                    )
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Create Update") },
+                            onClick = {
+                                showMenu = false
+                                onAddUpdateClick()
+                            },
+                            leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Batch Delete") },
+                            onClick = {
+                                showMenu = false
+                                onBatchDeleteClick()
+                            },
+                            leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) }
+                        )
+                    }
                 }
             }
         }
     }
 }
 
-@Preview(showBackground = true)
 @Composable
-fun HomeScreenPreview() {
-    HomeScreen(
-        state = HomeUiState(
-            greeting = "Good Morning",
-            userName = "John Doe",
-            updates = listOf(
-                Update(
-                    id = "1",
-                    title = "Sample Update",
-                    content = "This is a sample update content",
-                    timestamp = System.currentTimeMillis()
+fun UpdatesTab(
+    updates: List<Update>,
+    isAdmin: Boolean,
+    onEditClick: (Update) -> Unit,
+    onDeleteClick: (Update) -> Unit,
+    onReadMoreClick: (Update) -> Unit
+) {
+    if (updates.isEmpty()) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("No updates available", color = Color.Gray)
+        }
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(vertical = 8.dp)
+        ) {
+            items(updates) { update ->
+                UpdateCard(
+                    update = update,
+                    isAdmin = isAdmin,
+                    onEditClick = onEditClick,
+                    onDeleteClick = onDeleteClick,
+                    onReadMoreClick = onReadMoreClick
                 )
-            ),
-            isAdmin = true,
-            isNssInterface = false
-        ),
-        onChatbotClick = {},
-        onAddUpdateClick = {},
-        onUpdateClick = {}
-    )
+            }
+        }
+    }
+}
+
+@Composable
+fun ReelsTab(
+    updates: List<Update>,
+    isAdmin: Boolean,
+    onEditClick: (Update) -> Unit,
+    onDeleteClick: (Update) -> Unit
+) {
+    if (updates.isEmpty()) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("No reels available", color = Color.Gray)
+        }
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(vertical = 8.dp)
+        ) {
+            items(updates) { update ->
+                ReelCard(
+                    update = update,
+                    isAdmin = isAdmin,
+                    onEditClick = onEditClick,
+                    onDeleteClick = onDeleteClick
+                )
+            }
+        }
+    }
 }

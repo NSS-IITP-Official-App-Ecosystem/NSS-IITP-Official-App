@@ -131,7 +131,8 @@ class NssHomeFragment : Fragment() {
                         startActivity(intent)
                     },
                     onEditPost = { update -> showCreateUpdateDialog(update) },
-                    onDeletePost = { update -> confirmDeletePost(update) }
+                    onDeletePost = { update -> confirmDeletePost(update) },
+                    onBatchDeleteClick = { showBatchDeleteDialog() }
                 )
             }
         }
@@ -515,7 +516,7 @@ class NssHomeFragment : Fragment() {
                 updatePostTypeUI("text")
             }
 
-            postUpdateButton.text = "Update Post"
+            postUpdateButton.text = "Update"
         }
 
         // Set up cancel button

@@ -9,8 +9,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,10 +32,14 @@ fun TextPostView(
     update: Update,
     isAdmin: Boolean = false,
     onEditClick: (Update) -> Unit = {},
-    onDeleteClick: (Update) -> Unit = {}
+    onDeleteClick: (Update) -> Unit = {},
+    onDismiss: () -> Unit = {},
+    isInFullView: Boolean = false,
+    onReadMoreClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var isExpanded by remember { mutableStateOf(false) }
+    var showMenu by remember { mutableStateOf(false) } // State for Admin Menu
     val scrollState = rememberScrollState()
 
     // Determine if text is long enough to need expansion
@@ -42,98 +48,106 @@ fun TextPostView(
     // but the "Read more" button logic relies on us knowing.
     // A simpler approach: Always show truncated Text. If it overflows, show button.
     // Standard Compose way involves `onTextLayout`.
+    // Standard Compose way involves `onTextLayout`.
     var hasOverflow by remember { mutableStateOf(false) }
+    // If in Full View, always expanded. If not, local toggle?
+    // User wants: In Feed (Not Full View), it's truncated. Clicking "Read more" opens Full View.
+    // So "isExpanded" is really "isInFullView" OR "local expansion".
+    // Actually, if isInFullView is true, we force full text.
+    // If isInFullView is false, we constrain and show button.
+    
+    // We can use a local state for animation if we wanted to expand in place, but user wants to open new screen.
+    // So "Read more" click -> onReadMoreClick().
+    
+    // Overriding isExpanded based on param
+    val showFullContent = isInFullView || isExpanded
+
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF1E1E1E)) // Dark background
+            .background(Color.White) // Restored White background
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp)
-                // Only enable scroll if expanded
-                .then(if (isExpanded) Modifier.verticalScroll(scrollState) else Modifier)
+                .fillMaxSize()
+                // Only enable scroll if showing full content (Dialog Mode)
+                .then(if (showFullContent) Modifier.verticalScroll(scrollState) else Modifier)
         ) {
-            // Header: Author
+            // Header: Top Rectangle with Cross Button, Title, and Time (EXACT REPLICA of ReelItem)
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(bottom = 12.dp)
+                 modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF121212)) // Darker Header
+                    .padding(12.dp),
+                 verticalAlignment = Alignment.CenterVertically
             ) {
-                AsyncImage(
-                    model = update.authorImageUrl ?: com.phad.chatapp.R.drawable.default_profile_image,
-                    contentDescription = "Author",
-                    modifier = Modifier.size(40.dp).clickable { /* Profile Click */ },
-                    contentScale = ContentScale.Crop
-                )
+                androidx.compose.material3.IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = Color.White
+                    )
+                }
+
                 Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                    Text(
-                        text = update.authorName,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
-                    )
-                    Text(
-                        text = java.text.SimpleDateFormat("MMM dd • hh:mm a", java.util.Locale.getDefault()).format(java.util.Date(update.timestamp)),
-                        color = Color.Gray,
-                        fontSize = 12.sp
-                    )
-                }
-                Spacer(modifier = Modifier.weight(1f))
-                
-                // Admin Actions
-                if (isAdmin) {
-                   // ... (Ideally reuse admin menu logic, or simple icon here)
-                   // Since ReelItem has it, we should probably extract it or duplicate short logic.
-                   // I'll skip embedded menu for now to focus on content layout.
-                   // Or pass a lambda to show controls. 
-                }
-            }
 
-            // Title
-            if (!update.title.isNullOrEmpty()) {
-                Text(
-                    text = update.title,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-            }
-
-            // Body
-            if (!update.content.isNullOrEmpty()) {
-                Box(modifier = Modifier.animateContentSize()) {
-                    if (isExpanded) {
+                Column(modifier = Modifier.weight(1f)) {
+                    // Title
+                    if (!update.title.isNullOrEmpty()) {
                         Text(
-                            text = update.content,
-                            color = Color.White.copy(alpha = 0.9f),
-                            fontSize = 16.sp,
-                            lineHeight = 24.sp
+                            text = update.title,
+                            fontSize = 14.sp, 
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White, // Header text white
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
-                    } else {
-                        Column {
-                            Text(
-                                text = update.content,
-                                color = Color.White.copy(alpha = 0.9f),
-                                fontSize = 16.sp,
-                                lineHeight = 24.sp,
-                                maxLines = 5,
-                                overflow = TextOverflow.Ellipsis,
-                                onTextLayout = { result ->
-                                    hasOverflow = result.hasVisualOverflow
+                    }
+                    
+                    // Time Stamp
+                    Text(
+                        text = java.text.SimpleDateFormat("MMM dd, yyyy • hh:mm a", java.util.Locale.getDefault()).format(java.util.Date(update.timestamp)),
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 11.sp
+                    )
+                }
+                
+                // Admin Controls (Top Right)
+                if (isAdmin) {
+                    Box {
+                        androidx.compose.material3.IconButton(
+                            onClick = { showMenu = true }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = "Options",
+                                tint = Color.White
+                            )
+                        }
+                        
+                        androidx.compose.material3.DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false }
+                        ) {
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("Edit Post") },
+                                onClick = { 
+                                    showMenu = false
+                                    onEditClick(update)
                                 }
                             )
-                            if (hasOverflow || update.content.length > 300) { // Fallback check
-                                TextButton(
-                                    onClick = { isExpanded = true },
-                                    modifier = Modifier.padding(top = 4.dp)
-                                ) {
-                                    Text("Read more...", color = Color(0xFF42A5F5))
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("Delete Post") },
+                                onClick = { 
+                                    showMenu = false
+                                    onDeleteClick(update)
                                 }
-                            }
+                            )
                         }
                     }
                 }
@@ -141,31 +155,20 @@ fun TextPostView(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Inline Media (Image)
-            if (!update.imageUrl.isNullOrEmpty()) {
-                AsyncImage(
-                    model = update.imageUrl,
-                    contentDescription = "Post Image",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(250.dp) // Fixed height in flow, or wrap content
-                        .clickable { /* View Fullscreen */ },
-                    contentScale = ContentScale.Crop
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-            }
-
-            // Attachments (Document / Link)
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Attachments (Document / Link) - Moved ABOVE Body
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 if (!update.documentUrl.isNullOrEmpty()) {
                     SuggestionChip(
                         onClick = {
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(update.documentUrl))
                             context.startActivity(intent)
                         },
-                        label = { Text(update.documentName ?: "Document", color = Color.White) },
-                        icon = { Icon(Icons.Default.Description, null, tint = Color.Yellow) },
-                        colors = SuggestionChipDefaults.suggestionChipColors(containerColor = Color.DarkGray)
+                        label = { Text(update.documentName ?: "Document", color = Color.Black) },
+                        icon = { Icon(Icons.Default.Description, null, tint = Color.Blue) },
+                        colors = SuggestionChipDefaults.suggestionChipColors(containerColor = Color(0xFFEEEEEE))
                     )
                 }
                 
@@ -175,12 +178,73 @@ fun TextPostView(
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(update.externalLink))
                             context.startActivity(intent)
                         },
-                        label = { Text("Visit Link", color = Color.White) },
-                        icon = { Icon(Icons.Default.Link, null, tint = Color.Cyan) },
-                        colors = SuggestionChipDefaults.suggestionChipColors(containerColor = Color.DarkGray)
+                        label = { Text("Visit Link", color = Color.Black) },
+                        icon = { Icon(Icons.Default.Link, null, tint = Color.Blue) },
+                        colors = SuggestionChipDefaults.suggestionChipColors(containerColor = Color(0xFFEEEEEE))
                     )
                 }
             }
+
+            // Inline Media (Image) - Moved ABOVE Body
+            if (!update.imageUrl.isNullOrEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                AsyncImage(
+                    model = update.imageUrl,
+                    contentDescription = "Post Image",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(250.dp) // Fixed height in flow, or wrap content
+                        .clickable { /* View Fullscreen */ },
+                    contentScale = ContentScale.Crop
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Body
+            if (!update.content.isNullOrEmpty()) {
+                Box(modifier = Modifier.animateContentSize().padding(horizontal = 16.dp)) {
+                    if (showFullContent) {
+                        Text(
+                            text = update.content,
+                            color = Color.Black, // Text Black
+                            fontSize = 16.sp,
+                            lineHeight = 24.sp
+                        )
+                    } else {
+                        Column {
+                            Text(
+                                text = update.content,
+                                color = Color.Black, // Text Black
+                                fontSize = 16.sp,
+                                lineHeight = 24.sp,
+                                maxLines = 12, // Reduced to 12
+                                overflow = TextOverflow.Ellipsis,
+                                onTextLayout = { result ->
+                                    hasOverflow = result.hasVisualOverflow
+                                }
+                            )
+                            if (hasOverflow || update.content.length > 300) { // Fallback check
+                                TextButton(
+                                    onClick = { 
+                                        if (isInFullView) {
+                                            isExpanded = true // Should not happen if logic is correct
+                                        } else {
+                                            onReadMoreClick() 
+                                        }
+                                    },
+                                    modifier = Modifier.padding(top = 4.dp)
+                                ) {
+                                    Text("Read more...", color = Color(0xFF42A5F5))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Spacer at bottom
+             Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
