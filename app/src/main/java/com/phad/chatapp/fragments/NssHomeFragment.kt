@@ -473,10 +473,10 @@ class NssHomeFragment : Fragment() {
         fun updatePostTypeUI(type: String) {
             currentPostType = type
             val context = requireContext()
-            val activeColor = androidx.core.content.ContextCompat.getColor(context, R.color.purple_500)
+            val activeColor = android.graphics.Color.parseColor("#FFC107") // Golden
             val inactiveColor = android.graphics.Color.parseColor("#F5F5F5")
-            val activeText = android.graphics.Color.WHITE
-            val inactiveText = android.graphics.Color.parseColor("#333333")
+            val activeText = android.graphics.Color.BLACK
+            val inactiveText = android.graphics.Color.parseColor("#666666") // Darker gray for better visibility
 
             if (type == "reel") {
                 // Reel Active

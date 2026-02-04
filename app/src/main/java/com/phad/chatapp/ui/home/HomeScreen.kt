@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -148,13 +149,58 @@ fun HomeScreen(
                         modifier = Modifier.size(60.dp)
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = onChatbotClick) {
-                            Icon(
-                                painterResource(id = R.drawable.ic_faq),
-                                contentDescription = "FAQs",
-                                tint = Color.White,
-                                modifier = Modifier.size(if (isSmallScreen) 20.dp else 24.dp)
-                            )
+                        if (state.isAdmin) {
+                            // Admin: Plus button with menu
+                            Box {
+                                var showMenu by remember { mutableStateOf(false) }
+                                
+                                IconButton(
+                                    onClick = { showMenu = !showMenu },
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+//                                        .background(Color(0xFFFFC107))
+                                ) {
+                                    Icon(
+                                        if (showMenu) Icons.Filled.Close else Icons.Filled.Add,
+                                        contentDescription = "Menu",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(32.dp)
+                                    )
+                                }
+                                
+                                DropdownMenu(
+                                    expanded = showMenu,
+                                    onDismissRequest = { showMenu = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Create Update") },
+                                        onClick = {
+                                            showMenu = false
+                                            onAddUpdateClick()
+                                        },
+                                        leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null) }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Batch Delete") },
+                                        onClick = {
+                                            showMenu = false
+                                            onBatchDeleteClick()
+                                        },
+                                        leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) }
+                                    )
+                                }
+                            }
+                        } else {
+                            // Non-admin: FAQ button
+                            IconButton(onClick = onChatbotClick) {
+                                Icon(
+                                    painterResource(id = R.drawable.ic_faq),
+                                    contentDescription = "FAQs",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(if (isSmallScreen) 20.dp else 24.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -303,50 +349,6 @@ fun HomeScreen(
                                 onRefresh = onRefresh
                             )
                         }
-                    }
-                }
-            }
-
-            // Floating Action Button
-            if (state.isAdmin) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(16.dp)
-                ) {
-                    var showMenu by remember { mutableStateOf(false) }
-
-                    FloatingActionButton(
-                        onClick = { showMenu = !showMenu },
-                        containerColor = Color(0xFFFFC107)
-                    ) {
-                        Icon(
-                            if (showMenu) Icons.Filled.Close else Icons.Filled.Add,
-                            contentDescription = "Menu",
-                            tint = Color.Black
-                        )
-                    }
-
-                    DropdownMenu(
-                        expanded = showMenu,
-                        onDismissRequest = { showMenu = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Create Update") },
-                            onClick = {
-                                showMenu = false
-                                onAddUpdateClick()
-                            },
-                            leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Batch Delete") },
-                            onClick = {
-                                showMenu = false
-                                onBatchDeleteClick()
-                            },
-                            leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) }
-                        )
                     }
                 }
             }

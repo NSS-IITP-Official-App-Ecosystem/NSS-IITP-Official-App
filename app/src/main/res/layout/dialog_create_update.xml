@@ -53,7 +53,7 @@
             android:weightSum="2">
 
             <!-- Reel Post Button -->
-            <!-- Active State: Purple #5E35B1 (using purple_500), White Text -->
+            <!-- Active State: Golden #FFC107, Black Text -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/reelPostButton"
                 android:layout_width="0dp"
@@ -61,13 +61,13 @@
                 android:layout_weight="1"
                 android:text="Reel Post"
                 android:textAllCaps="false"
-                android:textColor="@android:color/white"
+                android:textColor="@android:color/black"
                 android:textSize="14sp"
                 app:icon="@android:drawable/ic_menu_camera"
-                app:iconTint="@android:color/white"
+                app:iconTint="@android:color/black"
                 app:iconGravity="textStart"
                 app:cornerRadius="12dp"
-                android:backgroundTint="@color/purple_500"
+                android:backgroundTint="#FFC107"
                 app:elevation="0dp"
                 android:layout_marginEnd="8dp"
                 android:insetTop="0dp"
@@ -112,7 +112,7 @@
             app:boxCornerRadiusTopEnd="12dp"
             app:boxCornerRadiusBottomStart="12dp"
             app:boxCornerRadiusBottomEnd="12dp"
-            app:boxStrokeColor="@color/purple_500"
+            app:boxStrokeColor="#FFC107"
             app:hintEnabled="false"
             android:layout_marginBottom="16dp"
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
@@ -153,7 +153,7 @@
                 app:boxCornerRadiusTopEnd="12dp"
                 app:boxCornerRadiusBottomStart="12dp"
                 app:boxCornerRadiusBottomEnd="12dp"
-                app:boxStrokeColor="@color/purple_500"
+                app:boxStrokeColor="#FFC107"
                 app:hintEnabled="false"
                 android:layout_marginBottom="16dp"
                 style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
@@ -194,7 +194,7 @@
                 app:boxCornerRadiusTopEnd="12dp"
                 app:boxCornerRadiusBottomStart="12dp"
                 app:boxCornerRadiusBottomEnd="12dp"
-                app:boxStrokeColor="@color/purple_500"
+                app:boxStrokeColor="#FFC107"
                 app:hintEnabled="false"
                 android:layout_marginBottom="16dp"
                 style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
@@ -230,7 +230,7 @@
                 app:boxCornerRadiusTopEnd="12dp"
                 app:boxCornerRadiusBottomStart="12dp"
                 app:boxCornerRadiusBottomEnd="12dp"
-                app:boxStrokeColor="@color/purple_500"
+                app:boxStrokeColor="#FFC107"
                 app:hintEnabled="false"
                 android:layout_marginBottom="16dp"
                 style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
@@ -384,11 +384,11 @@
                 android:text="Post"
                 android:textAllCaps="false"
                 style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
-                android:backgroundTint="@color/purple_500"
-                android:textColor="@android:color/white"
+                android:backgroundTint="#FFC107"
+                android:textColor="@android:color/black"
                 app:cornerRadius="12dp"
                 app:icon="@android:drawable/ic_menu_send"
-                app:iconTint="@android:color/white"
+                app:iconTint="@android:color/black"
                 app:iconGravity="textStart"
                 android:layout_marginStart="8dp"/>
         </LinearLayout>
