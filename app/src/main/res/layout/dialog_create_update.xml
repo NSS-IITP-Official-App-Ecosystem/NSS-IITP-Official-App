@@ -5,129 +5,157 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     app:cardCornerRadius="16dp"
-    app:cardElevation="8dp"
+    app:cardElevation="6dp"
     app:cardBackgroundColor="@android:color/white">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="24dp">
+        android:padding="20dp">
 
         <!-- Header -->
-        <TextView
+        <RelativeLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Create Post"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            android:textColor="@android:color/black"
-            android:paddingBottom="24dp" />
+            android:layout_marginBottom="16dp">
+            
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentStart="true"
+                android:layout_centerVertical="true"
+                android:text="Create Post"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="#1A1A1A" />
+            
+            <ImageButton
+                android:id="@+id/closeButton"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@android:drawable/ic_menu_close_clear_cancel"
+                android:tint="#888888"
+                android:scaleType="fitCenter"
+                android:contentDescription="Close" />
+        </RelativeLayout>
 
-    <androidx.core.widget.NestedScrollView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content">
-    
-        <LinearLayout
+        <androidx.core.widget.NestedScrollView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical">
+            android:fillViewport="true">
+        
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
 
-        <!-- Post Type Label -->
-        <TextView
-            android:id="@+id/postTypeLabel"
+        <!-- Post Type Toggle Group -->
+        <com.google.android.material.button.MaterialButtonToggleGroup
+            android:id="@+id/postTypeToggleGroup"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Post Type"
-            android:textSize="14sp"
-            android:textColor="#505050"
-            android:paddingBottom="12dp" />
+            android:layout_height="50dp"
+            android:layout_marginBottom="20dp"
+            app:checkedButton="@+id/textPostButton"
+            app:selectionRequired="true"
+            app:singleSelection="true"
+            app:strokeColor="#000000"
+            app:strokeWidth="1dp">
 
-        <!-- Toggle Buttons Row -->
-        <LinearLayout
-            android:id="@+id/postTypeContainer"
-            android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:layout_marginBottom="24dp"
-            android:orientation="horizontal"
-            android:weightSum="2">
-
-            <!-- Reel Post Button -->
-            <!-- Active State: Golden #FFC107, Black Text -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/reelPostButton"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:text="Reel Post"
-                android:textAllCaps="false"
-                android:textColor="@android:color/black"
-                android:textSize="14sp"
-                app:icon="@android:drawable/ic_menu_camera"
-                app:iconTint="@android:color/black"
-                app:iconGravity="textStart"
-                app:cornerRadius="12dp"
-                android:backgroundTint="#FFC107"
-                app:elevation="0dp"
-                android:layout_marginEnd="8dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"/>
-
-            <!-- Text Post Button -->
-            <!-- Inactive State: Light Gray #F5F5F5, Dark Text -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/textPostButton"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
+                android:backgroundTint="@color/selector_toggle_bg_golden"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
                 android:text="Text Post"
                 android:textAllCaps="false"
-                android:textSize="14sp"
-                android:textColor="#333333"
-                app:icon="@android:drawable/ic_menu_agenda"
-                app:iconTint="#333333"
-                app:iconGravity="textStart"
-                app:cornerRadius="12dp"
-                android:backgroundTint="#F5F5F5"
-                app:elevation="0dp"
-                android:layout_marginStart="8dp"
+                android:textColor="@color/selector_toggle_text"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                app:cornerRadius="24dp"
+                app:strokeColor="@android:color/transparent"
+                app:strokeWidth="0dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/reelPostButton"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:backgroundTint="@color/selector_toggle_bg_golden"
                 android:insetTop="0dp"
-                android:insetBottom="0dp"/>
-        </LinearLayout>
+                android:insetBottom="0dp"
+                android:text="Reel"
+                android:textAllCaps="false"
+                android:textColor="@color/selector_toggle_text"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                app:cornerRadius="24dp"
+                app:strokeColor="@android:color/transparent"
+                app:strokeWidth="0dp" />
 
-        <!-- Title Section -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Title"
-            android:textSize="14sp"
-            android:textColor="#505050"
-            android:layout_marginBottom="8dp" />
+        </com.google.android.material.button.MaterialButtonToggleGroup>
 
+        <!-- Title Field -->
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             app:boxBackgroundMode="outline"
-            app:boxCornerRadiusTopStart="12dp"
-            app:boxCornerRadiusTopEnd="12dp"
-            app:boxCornerRadiusBottomStart="12dp"
-            app:boxCornerRadiusBottomEnd="12dp"
-            app:boxStrokeColor="#FFC107"
+            app:boxCornerRadiusTopStart="8dp"
+            app:boxCornerRadiusTopEnd="8dp"
+            app:boxCornerRadiusBottomStart="8dp"
+            app:boxCornerRadiusBottomEnd="8dp"
+            app:boxStrokeColor="#DDDDDD"
+            app:boxStrokeWidth="1dp"
             app:hintEnabled="false"
-            android:layout_marginBottom="16dp"
-            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+            android:layout_marginBottom="6dp">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/updateTitleInput"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="Enter post title"
+                android:hint="Post Title"
                 android:inputType="textCapSentences"
-                android:maxLines="1"
-                android:padding="16dp"
-                android:textColor="@android:color/black"
-                android:textColorHint="#9E9E9E"/>
+                android:maxLines="2"
+                android:maxLength="80"
+                android:padding="14dp"
+                android:textColor="#1A1A1A"
+                android:textColorHint="#AAAAAA"
+                android:textSize="15sp"/>
         </com.google.android.material.textfield.TextInputLayout>
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp">
+            
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentStart="true"
+                android:text="Keep it concise and informative"
+                android:textSize="11sp"
+                android:textColor="#999999" />
+            
+            <TextView
+                android:id="@+id/titleCharCounter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentEnd="true"
+                android:text="0/80"
+                android:textSize="11sp"
+                android:textColor="#666666"
+                android:textStyle="bold"/>
+        </RelativeLayout>
 
         <!-- REEL POST FIELDS -->
         <LinearLayout
@@ -137,37 +165,32 @@
             android:orientation="vertical"
             android:visibility="gone">
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Instagram Reel Link"
-                android:textSize="14sp"
-                android:textColor="#505050"
-                android:layout_marginBottom="8dp" />
-
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 app:boxBackgroundMode="outline"
-                app:boxCornerRadiusTopStart="12dp"
-                app:boxCornerRadiusTopEnd="12dp"
-                app:boxCornerRadiusBottomStart="12dp"
-                app:boxCornerRadiusBottomEnd="12dp"
-                app:boxStrokeColor="#FFC107"
+                app:boxCornerRadiusTopStart="8dp"
+                app:boxCornerRadiusTopEnd="8dp"
+                app:boxCornerRadiusBottomStart="8dp"
+                app:boxCornerRadiusBottomEnd="8dp"
+                app:boxStrokeColor="#DDDDDD"
+                app:boxStrokeWidth="1dp"
                 app:hintEnabled="false"
-                android:layout_marginBottom="16dp"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+                app:startIconDrawable="@android:drawable/ic_menu_camera"
+                app:startIconTint="#888888"
+                android:layout_marginBottom="16dp">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/instagramLinkInput"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="https://instagram.com/reel/..."
+                    android:hint="Instagram Reel URL"
                     android:inputType="textUri"
-                    android:maxLines="1"
-                    android:padding="16dp"
-                    android:textColor="@android:color/black"
-                    android:textColorHint="#9E9E9E"/>
+                    android:maxLines="2"
+                    android:padding="14dp"
+                    android:textColor="#1A1A1A"
+                    android:textColorHint="#AAAAAA"
+                    android:textSize="14sp"/>
             </com.google.android.material.textfield.TextInputLayout>
         </LinearLayout>
 
@@ -178,223 +201,185 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Content"
-                android:textSize="14sp"
-                android:textColor="#505050"
-                android:layout_marginBottom="8dp" />
-
+            <!-- Content Text Area -->
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 app:boxBackgroundMode="outline"
-                app:boxCornerRadiusTopStart="12dp"
-                app:boxCornerRadiusTopEnd="12dp"
-                app:boxCornerRadiusBottomStart="12dp"
-                app:boxCornerRadiusBottomEnd="12dp"
-                app:boxStrokeColor="#FFC107"
+                app:boxCornerRadiusTopStart="8dp"
+                app:boxCornerRadiusTopEnd="8dp"
+                app:boxCornerRadiusBottomStart="8dp"
+                app:boxCornerRadiusBottomEnd="8dp"
+                app:boxStrokeColor="#DDDDDD"
+                app:boxStrokeWidth="1dp"
                 app:hintEnabled="false"
-                android:layout_marginBottom="16dp"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+                android:layout_marginBottom="12dp">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/updateContentInput"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="Enter your text here..."
+                    android:hint="Write your announcement or update here..."
                     android:inputType="textMultiLine|textCapSentences"
-                    android:minLines="4"
-                    android:maxLines="8"
+                    android:minHeight="120dp"
+                    android:maxLines="10"
                     android:gravity="top|start"
-                    android:padding="16dp"
-                    android:textColor="@android:color/black"
-                    android:textColorHint="#9E9E9E"/>
+                    android:padding="14dp"
+                    android:textColor="#1A1A1A"
+                    android:textColorHint="#BBBBBB"
+                    android:textSize="14sp"/>
             </com.google.android.material.textfield.TextInputLayout>
             
-            <!-- External Link -->
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="External Link (Optional)"
-                android:textSize="14sp"
-                android:textColor="#505050"
-                android:layout_marginBottom="8dp" />
-
+            <!-- Link Field with Paper Pin Icon -->
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 app:boxBackgroundMode="outline"
-                app:boxCornerRadiusTopStart="12dp"
-                app:boxCornerRadiusTopEnd="12dp"
-                app:boxCornerRadiusBottomStart="12dp"
-                app:boxCornerRadiusBottomEnd="12dp"
-                app:boxStrokeColor="#FFC107"
+                app:boxCornerRadiusTopStart="8dp"
+                app:boxCornerRadiusTopEnd="8dp"
+                app:boxCornerRadiusBottomStart="8dp"
+                app:boxCornerRadiusBottomEnd="8dp"
+                app:boxStrokeColor="#DDDDDD"
+                app:boxStrokeWidth="1dp"
                 app:hintEnabled="false"
-                android:layout_marginBottom="16dp"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+                app:startIconDrawable="@drawable/ic_attachment"
+                app:startIconTint="#888888"
+                android:layout_marginBottom="6dp">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/updateLinkInput"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="https://example.com"
-                    android:inputType="textUri"
-                    android:maxLines="1"
-                    android:padding="16dp"
-                    android:textColor="@android:color/black"
-                    android:textColorHint="#9E9E9E"/>
+                    android:hint="Links (comma or newline separated)"
+                    android:inputType="textMultiLine"
+                    android:maxLines="4"
+                    android:padding="14dp"
+                    android:textColor="#1A1A1A"
+                    android:textColorHint="#BBBBBB"
+                    android:textSize="13sp"/>
             </com.google.android.material.textfield.TextInputLayout>
 
-            <!-- Attachments -->
-             <LinearLayout
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Add multiple links separated by comma or new line"
+                android:textSize="11sp"
+                android:textColor="#999999"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp"
+                android:layout_marginBottom="16dp"/>
+
+            <!-- Attachment Buttons (Full Width) -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
-                android:layout_marginBottom="16dp"
-                android:gravity="start">
+                android:layout_marginBottom="12dp"
+                android:weightSum="2">
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/attachImageButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Photo"
-                    android:textAllCaps="false"
-                    android:layout_marginEnd="8dp"
-                    app:icon="@android:drawable/ic_menu_camera"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton" 
-                    app:strokeColor="#DDDDDD"
-                    android:textColor="#505050"
-                    app:iconTint="#505050"/>
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/attachDocumentButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Doc"
-                    android:textAllCaps="false"
-                    app:icon="@android:drawable/ic_menu_agenda"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                    app:strokeColor="#DDDDDD"
-                    android:textColor="#505050"
-                    app:iconTint="#505050"/>
-            </LinearLayout>
-
-            <!-- Media/Document Preview Containers (Same as before) -->
-            <FrameLayout
-                android:id="@+id/mediaPreviewContainer"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                android:visibility="gone">
-                <ImageView
-                    android:id="@+id/mediaPreview"
-                    android:layout_width="match_parent"
-                    android:layout_height="200dp"
-                    android:scaleType="centerCrop"
-                    android:background="@android:color/darker_gray" />
-                <ImageButton
-                    android:id="@+id/removeMediaButton"
-                    android:layout_width="32dp"
-                    android:layout_height="32dp"
-                    android:layout_gravity="top|end"
-                    android:layout_margin="8dp"
-                    android:padding="4dp"
-                    android:src="@android:drawable/ic_menu_close_clear_cancel"
-                    android:background="?attr/selectableItemBackgroundBorderless" />
-            </FrameLayout>
-
-            <LinearLayout
-                android:id="@+id/documentPreviewContainer"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:padding="12dp"
-                android:background="#F5F5F5"
-                android:visibility="gone"
-                android:layout_marginBottom="12dp">
-                 <ImageView
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:src="@android:drawable/ic_menu_agenda" />
-                <TextView
-                    android:id="@+id/documentNamePreview"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:layout_gravity="center_vertical"
-                    android:layout_marginStart="12dp"
-                    android:text="document.pdf"
+                    android:text="Photo"
+                    android:textAllCaps="false"
                     android:textSize="14sp"
-                    android:ellipsize="middle"
-                    android:maxLines="1" />
-                <ImageButton
-                    android:id="@+id/removeDocumentButton"
-                    android:layout_width="32dp"
-                    android:layout_height="32dp"
-                    android:src="@android:drawable/ic_menu_close_clear_cancel"
-                    android:background="?attr/selectableItemBackgroundBorderless" />
+                    android:layout_marginEnd="6dp"
+                    app:icon="@android:drawable/ic_menu_gallery"
+                    app:iconGravity="textStart"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton" 
+                    app:strokeColor="#DDDDDD"
+                    app:strokeWidth="1dp"
+                    android:textColor="#505050"
+                    app:iconTint="#505050"
+                    app:cornerRadius="8dp"/>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/attachDocumentButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Document"
+                    android:textAllCaps="false"
+                    android:textSize="14sp"
+                    android:layout_marginStart="6dp"
+                    app:icon="@android:drawable/ic_menu_save"
+                    app:iconGravity="textStart"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    app:strokeColor="#DDDDDD"
+                    app:strokeWidth="1dp"
+                    android:textColor="#505050"
+                    app:iconTint="#505050"
+                    app:cornerRadius="8dp"/>
             </LinearLayout>
+
+            <!-- Attachments Lists -->
+            <!-- Documents First -->
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/documentsRecyclerView"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+                android:layout_marginBottom="8dp"
+                android:visibility="gone"/>
+
+            <!-- Photos Second -->
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/imagesRecyclerView"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+                android:layout_marginBottom="12dp"
+                android:visibility="gone"/>
         </LinearLayout>
 
         <!-- Cross-Post Checkbox -->
-        <LinearLayout
-            android:layout_width="match_parent"
+        <CheckBox
+            android:id="@+id/crossPostCheckbox"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="#F8F9FA" 
-            android:padding="12dp"
-            android:layout_marginBottom="24dp"
-            android:orientation="horizontal">
-            <!-- Note: Using simple checkbox for now, styled with container -->
-            <CheckBox
-                android:id="@+id/crossPostCheckbox"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Also Post to Teaching Wing Interface"
-                android:textColor="#333333"
-                android:textSize="14sp" />
-        </LinearLayout>
+            android:text="Also post to NSS Interface"
+            android:textColor="#1A1A1A"
+            android:textSize="14sp"
+            android:layout_marginBottom="20dp"
+            android:visibility="gone"
+            android:buttonTint="#888888"/>
 
-        <!-- Action Buttons -->
-        <LinearLayout
+        <!-- Publish Button -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/postUpdateButton"
             android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:text="Publish Post"
+            android:textAllCaps="false"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
+            android:backgroundTint="#FFC107"
+            android:textColor="@android:color/black"
+            app:cornerRadius="8dp"
+            app:icon="@android:drawable/ic_menu_upload"
+            app:iconTint="@android:color/black"
+            app:iconGravity="textStart"
+            android:layout_marginBottom="10dp"/>
+
+        <!-- Cancel Button -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/cancelButton"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:weightSum="2">
+            android:layout_gravity="center_horizontal"
+            android:text="Cancel"
+            android:textAllCaps="false"
+            android:textSize="14sp"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:textColor="#888888"/>
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/cancelButton"
-                android:layout_width="0dp"
-                android:layout_height="56dp"
-                android:layout_weight="1"
-                android:text="Cancel"
-                android:textAllCaps="false"
-                style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
-                android:backgroundTint="#F5F5F5"
-                android:textColor="#333333"
-                app:cornerRadius="12dp"
-                android:layout_marginEnd="8dp"/>
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/postUpdateButton"
-                android:layout_width="0dp"
-                android:layout_height="56dp"
-                android:layout_weight="1"
-                android:text="Post"
-                android:textAllCaps="false"
-                style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
-                android:backgroundTint="#FFC107"
-                android:textColor="@android:color/black"
-                app:cornerRadius="12dp"
-                app:icon="@android:drawable/ic_menu_send"
-                app:iconTint="@android:color/black"
-                app:iconGravity="textStart"
-                android:layout_marginStart="8dp"/>
-        </LinearLayout>
-
-        </LinearLayout>
-    </androidx.core.widget.NestedScrollView>
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
 
     </LinearLayout>
     

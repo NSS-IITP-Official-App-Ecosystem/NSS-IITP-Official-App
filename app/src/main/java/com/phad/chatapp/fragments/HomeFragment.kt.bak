@@ -452,30 +452,13 @@ class NssHomeFragment : Fragment() {
         val attachDocumentButton = dialog.findViewById<com.google.android.material.button.MaterialButton>(R.id.attachDocumentButton)
         val cancelButton = dialog.findViewById<Button>(R.id.cancelButton)
         val postUpdateButton = dialog.findViewById<Button>(R.id.postUpdateButton)
-        val titleCharCounter = dialog.findViewById<TextView>(R.id.titleCharCounter)
-        val closeButton = dialog.findViewById<ImageButton>(R.id.closeButton)
-        
-        // Character counter for title
-        updateTitleInput?.addTextChangedListener(object : android.text.TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                titleCharCounter?.text = "${s?.length ?: 0}/80"
-            }
-            override fun afterTextChanged(s: android.text.Editable?) {}
-        })
-        
-        // Close button
-        closeButton?.setOnClickListener {
-            dialog.dismiss()
-        }
 
         // Add checkbox for cross-posting to Teaching Wing
         val crossPostCheckbox = dialog.findViewById<android.widget.CheckBox>(R.id.crossPostCheckbox)
         crossPostCheckbox?.visibility = View.VISIBLE
         crossPostCheckbox?.text = "Also post to Teaching Wing interface"
 
-        // Post Type Toggle Group
-        val postTypeToggleGroup = dialog.findViewById<com.google.android.material.button.MaterialButtonToggleGroup>(R.id.postTypeToggleGroup)
+        // Post Type Selector Buttons
         val reelPostButton = dialog.findViewById<com.google.android.material.button.MaterialButton>(R.id.reelPostButton)
         val textPostButton = dialog.findViewById<com.google.android.material.button.MaterialButton>(R.id.textPostButton)
         
@@ -486,18 +469,39 @@ class NssHomeFragment : Fragment() {
         // Variable to track current post type
         var currentPostType = "text" // Default to text post
         
-        // Helper to update UI based on type (Visibility only, styling is automatic via XML selectors)
+        // Helper to update UI based on type
         fun updatePostTypeUI(type: String) {
             currentPostType = type
-            
+            val context = requireContext()
+            val activeColor = android.graphics.Color.parseColor("#FFC107") // Golden
+            val inactiveColor = android.graphics.Color.parseColor("#F5F5F5")
+            val activeText = android.graphics.Color.BLACK
+            val inactiveText = android.graphics.Color.parseColor("#666666") // Darker gray for better visibility
+
             if (type == "reel") {
                 // Reel Active
+                reelPostButton.backgroundTintList = android.content.res.ColorStateList.valueOf(activeColor)
+                reelPostButton.setTextColor(activeText)
+                reelPostButton.iconTint = android.content.res.ColorStateList.valueOf(activeText)
+                
+                textPostButton.backgroundTintList = android.content.res.ColorStateList.valueOf(inactiveColor)
+                textPostButton.setTextColor(inactiveText)
+                textPostButton.iconTint = android.content.res.ColorStateList.valueOf(inactiveText)
+                
                 reelPostFields?.visibility = View.VISIBLE
                 textPostFields?.visibility = View.GONE
                 updateContentInput?.isEnabled = false
                 updateLinkInput?.isEnabled = false
             } else {
                 // Text Active
+                textPostButton.backgroundTintList = android.content.res.ColorStateList.valueOf(activeColor)
+                textPostButton.setTextColor(activeText)
+                textPostButton.iconTint = android.content.res.ColorStateList.valueOf(activeText)
+                
+                reelPostButton.backgroundTintList = android.content.res.ColorStateList.valueOf(inactiveColor)
+                reelPostButton.setTextColor(inactiveText)
+                reelPostButton.iconTint = android.content.res.ColorStateList.valueOf(inactiveText)
+                
                 reelPostFields?.visibility = View.GONE
                 textPostFields?.visibility = View.VISIBLE
                 updateContentInput?.isEnabled = true
@@ -505,56 +509,18 @@ class NssHomeFragment : Fragment() {
             }
         }
 
-        // Set listener on the toggle group
-        postTypeToggleGroup?.addOnButtonCheckedListener { _, checkedId, isChecked ->
-            if (isChecked) {
-                when (checkedId) {
-                    R.id.reelPostButton -> updatePostTypeUI("reel")
-                    R.id.textPostButton -> updatePostTypeUI("text")
-                }
-            }
-        }
+        // Set listeners
+        reelPostButton.setOnClickListener { updatePostTypeUI("reel") }
+        textPostButton.setOnClickListener { updatePostTypeUI("text") }
         
         // Set initial state
         updatePostTypeUI("text")
 
-        // Initialize RecyclerViews for attachments
-        val imagesRecyclerView = dialog.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.imagesRecyclerView)
-        val documentsRecyclerView = dialog.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.documentsRecyclerView)
-
-        // Setup Images Adapter
-        val imagesAdapter = com.phad.chatapp.adapters.AttachmentAdapter(
-            items = selectedImageUris,
-            isDocument = false,
-            onRemoveClick = { position ->
-                selectedImageUris.removeAt(position)
-                dialog.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.imagesRecyclerView)?.adapter?.notifyItemRemoved(position)
-                
-                if (selectedImageUris.isEmpty()) {
-                     dialog.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.imagesRecyclerView)?.visibility = View.GONE
-                }
-            },
-            context = requireContext()
-        )
-        imagesRecyclerView?.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(requireContext(), androidx.recyclerview.widget.LinearLayoutManager.HORIZONTAL, false)
-        imagesRecyclerView?.adapter = imagesAdapter
-        
-        // Setup Documents Adapter
-        val documentsAdapter = com.phad.chatapp.adapters.AttachmentAdapter(
-            items = selectedDocumentUris,
-            isDocument = true,
-            onRemoveClick = { position ->
-                selectedDocumentUris.removeAt(position)
-                dialog.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.documentsRecyclerView)?.adapter?.notifyItemRemoved(position)
-                
-                if (selectedDocumentUris.isEmpty()) {
-                     dialog.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.documentsRecyclerView)?.visibility = View.GONE
-                }
-            },
-            context = requireContext()
-        )
-        documentsRecyclerView?.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(requireContext(), androidx.recyclerview.widget.LinearLayoutManager.HORIZONTAL, false)
-        documentsRecyclerView?.adapter = documentsAdapter
+        // Hide preview containers initially
+        val mediaPreviewContainer = dialog.findViewById<FrameLayout>(R.id.mediaPreviewContainer)
+        val documentPreviewContainer = dialog.findViewById<LinearLayout>(R.id.documentPreviewContainer)
+        mediaPreviewContainer.visibility = View.GONE
+        documentPreviewContainer.visibility = View.GONE
 
         // Set up attach image button - allow multiple selection
         attachImageButton.setOnClickListener {
@@ -573,6 +539,19 @@ class NssHomeFragment : Fragment() {
             documentPicker.launch(intent)
         }
 
+        // Set up remove media button
+        val removeMediaButton = dialog.findViewById<ImageButton>(R.id.removeMediaButton)
+        removeMediaButton.setOnClickListener {
+            selectedImageUris.clear()
+            mediaPreviewContainer.visibility = View.GONE
+        }
+
+        // Set up remove document button
+        val removeDocumentButton = dialog.findViewById<ImageButton>(R.id.removeDocumentButton)
+        removeDocumentButton.setOnClickListener {
+            selectedDocumentUris.clear()
+            documentPreviewContainer.visibility = View.GONE
+        }
 
         // Pre-fill if editing
         if (existingUpdate != null) {
@@ -582,11 +561,11 @@ class NssHomeFragment : Fragment() {
             instagramLinkInput?.setText(existingUpdate.instagramUrl)
             crossPostCheckbox?.isChecked = (existingUpdate.updateType == 3)
 
-            // Set Post Type using ToggleGroup to trigger listener
+            // Set Post Type
             if (existingUpdate.postType == "reel" || !existingUpdate.instagramUrl.isNullOrEmpty()) {
-                postTypeToggleGroup?.check(R.id.reelPostButton)
+                updatePostTypeUI("reel")
             } else {
-                postTypeToggleGroup?.check(R.id.textPostButton)
+                updatePostTypeUI("text")
             }
 
             postUpdateButton.text = "Update"
@@ -736,24 +715,57 @@ class NssHomeFragment : Fragment() {
             .show()
     }
 
-    // Helper functions to update list visibility after picking
     private fun showSelectedImages() {
-        if (selectedImageUris.isNotEmpty()) {
-            val recyclerView = createUpdateDialog?.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.imagesRecyclerView)
-            recyclerView?.visibility = View.VISIBLE
-            recyclerView?.adapter?.notifyDataSetChanged()
+        val mediaPreviewContainer = createUpdateDialog?.findViewById<FrameLayout>(R.id.mediaPreviewContainer)
+        val mediaPreview = createUpdateDialog?.findViewById<ImageView>(R.id.mediaPreview)
+
+        if (selectedImageUris.isEmpty()) {
+            mediaPreviewContainer?.visibility = View.GONE
+            return
+        }
+
+        mediaPreviewContainer?.visibility = View.VISIBLE
+
+        mediaPreview?.let {
+            try {
+                // Show first image with count
+                Glide.with(requireContext())
+                    .load(selectedImageUris.first())
+                    .centerCrop()
+                    .into(it)
+                
+                // Update remove button text to show count
+                val removeButton = createUpdateDialog?.findViewById<ImageButton>(R.id.removeMediaButton)
+                if (selectedImageUris.size > 1) {
+                    removeButton?.contentDescription = "Remove ${selectedImageUris.size} images"
+                }
+            } catch (e: FileNotFoundException) {
+                Toast.makeText(requireContext(), "Failed to load image", Toast.LENGTH_SHORT).show()
+                mediaPreviewContainer?.visibility = View.GONE
+            }
         }
     }
 
     private fun showSelectedDocuments() {
-        if (selectedDocumentUris.isNotEmpty()) {
-            val recyclerView = createUpdateDialog?.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.documentsRecyclerView)
-            recyclerView?.visibility = View.VISIBLE
-            recyclerView?.adapter?.notifyDataSetChanged()
-        }
-    }
-    // (Cleared stray code)
+        val documentPreviewContainer = createUpdateDialog?.findViewById<LinearLayout>(R.id.documentPreviewContainer)
+        val documentNameText = createUpdateDialog?.findViewById<TextView>(R.id.documentNameText)
 
+        if (selectedDocumentUris.isEmpty()) {
+            documentPreviewContainer?.visibility = View.GONE
+            return
+        }
+
+        // Show first document with count
+        val documentName = getDocumentName(selectedDocumentUris.first())
+        val displayText = if (selectedDocumentUris.size > 1) {
+            "$documentName (+${selectedDocumentUris.size - 1} more)"
+        } else {
+            documentName
+        }
+        documentNameText?.text = displayText
+
+        documentPreviewContainer?.visibility = View.VISIBLE
+    }
 
     private fun getDocumentName(uri: Uri): String {
         var fileName = "document"
