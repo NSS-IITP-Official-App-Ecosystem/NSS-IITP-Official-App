@@ -710,7 +710,7 @@ class NssHomeFragment : Fragment() {
                     // Delete removed attachments
                     if (deletedAttachmentUrls.isNotEmpty()) {
                         withContext(Dispatchers.Main) {
-                            progressText?.text = "Removing old attachments..."
+                            progressText?.text = "Uploading... 0%"
                         }
                         deletedAttachmentUrls.forEach { url ->
                              // Try deleting as image first, then document if needed or based on extension
@@ -734,7 +734,7 @@ class NssHomeFragment : Fragment() {
                         if (!scope.isActive) throw kotlinx.coroutines.CancellationException()
                         
                         withContext(Dispatchers.Main) {
-                            progressText?.text = "Uploading Image ${index + 1} of ${localImages.size}..."
+                            // progressText?.text = "Uploading Image ${index + 1} of ${localImages.size}..."
                         }
                         
                         // New return type: CloudinaryUploadResult(url, publicId)
@@ -747,7 +747,7 @@ class NssHomeFragment : Fragment() {
                             
                             lifecycleScope.launch(Dispatchers.Main) {
                                 progressBar?.progress = totalProgress
-                                progressText?.text = "Uploading... $totalProgress%"
+                                progressText?.text = "Updating... $totalProgress%"
                             }
                         }
                         uploadedImageIds.add(result.publicId) // Track exact ID for cleanup
@@ -769,7 +769,7 @@ class NssHomeFragment : Fragment() {
                          if (!scope.isActive) throw kotlinx.coroutines.CancellationException()
                          
                         withContext(Dispatchers.Main) {
-                            progressText?.text = "Uploading Document ${index + 1} of ${localDocs.size}..."
+                            // progressText?.text = "Uploading Document ${index + 1} of ${localDocs.size}..."
                         }
 
                         // Upload document and get result
@@ -781,7 +781,7 @@ class NssHomeFragment : Fragment() {
                             
                             lifecycleScope.launch(Dispatchers.Main) {
                                 progressBar?.progress = totalProgress
-                                progressText?.text = "Uploading... $totalProgress%"
+                                progressText?.text = "Updating... $totalProgress%"
                             }
                         }
                         uploadedDocumentIds.add(result.publicId) // Track exact ID for cleanup
@@ -791,7 +791,7 @@ class NssHomeFragment : Fragment() {
                     }
 
                      withContext(Dispatchers.Main) {
-                        progressText?.text = "Finalizing..."
+                        progressText?.text = "Updating... 100%"
                          progressBar?.progress = 100
                     }
 

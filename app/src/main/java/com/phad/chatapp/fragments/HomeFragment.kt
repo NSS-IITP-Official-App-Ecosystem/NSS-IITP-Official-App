@@ -716,16 +716,17 @@ class HomeFragment : Fragment() {
                         externalLinksList.add(link)
                     }
 
-                    // Calculate total items to upload (only Local items need uploading)
+                    // Calculate total items to operate on (Local uploads + Remote deletions)
                     val localImagesCount = selectedImageUris.count { it is com.phad.chatapp.adapters.AttachmentItem.Local }
                     val localDocsCount = selectedDocumentUris.count { it is com.phad.chatapp.adapters.AttachmentItem.Local }
-                    val totalItems = localImagesCount + localDocsCount
+                    val deletionsCount = deletedAttachmentUrls.size
+                    val totalItems = localImagesCount + localDocsCount + deletionsCount
                     var itemsCompleted = 0
                     
                     // Delete removed attachments
                     if (deletedAttachmentUrls.isNotEmpty()) {
                         withContext(Dispatchers.Main) {
-                            progressText?.text = "Removing old attachments..."
+                            progressText?.text = "Updating... 0%"
                         }
                         deletedAttachmentUrls.forEach { url ->
                              // Try deleting as image first, then document if needed or based on extension
@@ -739,6 +740,13 @@ class HomeFragment : Fragment() {
                                  cloudinaryHelper.deleteImage(url)
                              } else {
                                  cloudinaryHelper.deleteDocument(url)
+                             }
+                             
+                             itemsCompleted++
+                             val progress = ((itemsCompleted.toFloat() / totalItems.toFloat()) * 100).toInt()
+                             withContext(Dispatchers.Main) {
+                                 progressBar?.progress = progress
+                                 progressText?.text = "Updating... $progress%"
                              }
                         }
                     }
@@ -754,7 +762,7 @@ class HomeFragment : Fragment() {
                         if (!scope.isActive) throw kotlinx.coroutines.CancellationException()
                         
                         withContext(Dispatchers.Main) {
-                            progressText?.text = "Uploading Image ${index + 1} of ${localImages.size}..."
+                            // progressText?.text = "Uploading Image ${index + 1} of ${localImages.size}..."
                         }
                         
                         val result = uploadMedia(item.uri) { progress ->
@@ -788,7 +796,7 @@ class HomeFragment : Fragment() {
                          if (!scope.isActive) throw kotlinx.coroutines.CancellationException()
                          
                         withContext(Dispatchers.Main) {
-                            progressText?.text = "Uploading Document ${index + 1} of ${localDocs.size}..."
+                            // progressText?.text = "Uploading Document ${index + 1} of ${localDocs.size}..."
                         }
 
                         // Upload document and get result
@@ -810,7 +818,7 @@ class HomeFragment : Fragment() {
                     }
 
                      withContext(Dispatchers.Main) {
-                        progressText?.text = "Finalizing..."
+                        progressText?.text = "Updating... 100%"
                          progressBar?.progress = 100
                     }
 

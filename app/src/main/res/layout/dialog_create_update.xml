@@ -400,38 +400,55 @@
             android:elevation="10dp"
             android:padding="16dp">
 
-            <LinearLayout
+            <!-- Improved Card Layout matching QR Attendance Style -->
+            <androidx.cardview.widget.CardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:background="@drawable/rounded_background"
-                android:backgroundTint="#FFFFFF"
-                android:padding="24dp">
+                android:layout_margin="32dp"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="8dp"
+                app:cardBackgroundColor="#FFFFFFFF">
 
-                <ProgressBar
-                    android:id="@+id/uploadProgressBar"
-                    android:layout_width="60dp"
-                    android:layout_height="60dp"
-                    android:indeterminate="false"
-                    android:max="100"
-                    style="?android:attr/progressBarStyleHorizontal"
-                    android:progressDrawable="@drawable/circular_progress" />
-
-                <TextView
-                    android:id="@+id/uploadProgressText"
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Uploading... 0%"
-                    android:textColor="#333333"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:layout_marginTop="16dp"/>
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:padding="32dp">
 
+                    <ProgressBar
+                        android:id="@+id/uploadProgressBar"
+                        android:layout_width="56dp"
+                        android:layout_height="56dp"
+                        android:indeterminate="false"
+                        android:max="100"
+                        style="?android:attr/progressBarStyleHorizontal"
+                        android:progressDrawable="@drawable/circular_progress"
+                        android:progressTint="#2196F3"
+                        android:layout_marginBottom="24dp"/>
 
+                    <TextView
+                        android:id="@+id/uploadProgressText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Updating... 0%"
+                        android:textColor="#212121"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        android:gravity="center"/>
 
-            </LinearLayout>
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Please wait while we update your post"
+                        android:textColor="#757575"
+                        android:textSize="14sp"
+                        android:layout_marginTop="8dp"
+                        android:gravity="center"/>
+
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
         </FrameLayout>
 
     </FrameLayout>
