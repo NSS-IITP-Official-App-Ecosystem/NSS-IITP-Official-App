@@ -281,6 +281,27 @@ class LoginFormActivity : AppCompatActivity() {
                     return@launch
                 }
 
+                // VALIDATE ROLE MATCH
+                val firestoreUserTypeRaw = userData["userType"] as? String ?: "Student"
+                val isFirestoreAdmin = firestoreUserTypeRaw.equals("Admin", ignoreCase = true)
+                val isLoginAsAdmin = loginType == "ADMIN"
+
+                if (isLoginAsAdmin && !isFirestoreAdmin) {
+                    withContext(Dispatchers.Main) {
+                        binding.progressBar.visibility = View.GONE
+                        showToast("Access Denied: You are not an Admin.")
+                    }
+                    return@launch
+                }
+
+                if (!isLoginAsAdmin && isFirestoreAdmin) {
+                     withContext(Dispatchers.Main) {
+                        binding.progressBar.visibility = View.GONE
+                        showToast("Access Denied: Please login using 'Login as Admin'.")
+                    }
+                    return@launch
+                }
+
                 // Use instituteOutlookId for both admin and student
                 val firestoreEmail = userData["instituteOutlookId"] as? String
                 if (firestoreEmail.isNullOrEmpty()) {

@@ -423,6 +423,13 @@ class HomeFragment : Fragment() {
     }
 
     private fun showCreateUpdateDialog(existingUpdate: Update? = null) {
+        // Defensive admin check - prevent non-admins from accessing this function
+        if (!sessionManager.fetchUserType().equals("Admin", ignoreCase = true)) {
+            Log.w(TAG, "Non-admin user attempted to access showCreateUpdateDialog")
+            Toast.makeText(requireContext(), "Admin access required", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
         // Initialize the dialog
         createUpdateDialog = Dialog(requireContext()).apply {
             requestWindowFeature(Window.FEATURE_NO_TITLE)
@@ -837,7 +844,9 @@ class HomeFragment : Fragment() {
                                 instagramUrl = if (currentPostType == "reel") instagramLink else null,
                                 postType = currentPostType,
                                 hasExternalLink = externalLinksList.isNotEmpty(),
-                                crossPost = crossPostCheckbox?.isChecked == true
+                                crossPost = crossPostCheckbox?.isChecked == true,
+                                uploadedImageIds = uploadedImageIds,
+                                uploadedDocumentIds = uploadedDocumentIds
                             )
                         } else {
                             updatePost(
@@ -852,7 +861,9 @@ class HomeFragment : Fragment() {
                                 instagramUrl = if (currentPostType == "reel") instagramLink else null,
                                 postType = currentPostType,
                                 hasExternalLink = externalLinksList.isNotEmpty(),
-                                crossPost = crossPostCheckbox?.isChecked == true
+                                crossPost = crossPostCheckbox?.isChecked == true,
+                                uploadedImageIds = uploadedImageIds,
+                                uploadedDocumentIds = uploadedDocumentIds
                             )
                         }
                         overlay?.visibility = View.GONE 
@@ -868,8 +879,8 @@ class HomeFragment : Fragment() {
                         Toast.makeText(requireContext(), "Upload cancelled", Toast.LENGTH_SHORT).show()
                         overlay?.visibility = View.GONE
                         dialog.setCancelable(true)
-                        dialog.findViewById<Button>(R.id.postUpdateButton).isEnabled = true
-                        dialog.findViewById<Button>(R.id.cancelButton).isEnabled = true
+                        dialog.findViewById<Button>(R.id.postUpdateButton)?.isEnabled = true
+                        dialog.findViewById<Button>(R.id.cancelButton)?.isEnabled = true
                     }
                 } catch (e: Exception) {
                     if (scope.isActive) {
@@ -878,7 +889,7 @@ class HomeFragment : Fragment() {
                             Toast.makeText(requireContext(), "Upload failed: ${e.message}", Toast.LENGTH_SHORT).show()
                             overlay?.visibility = View.GONE
                             dialog.setCancelable(true)
-                             dialog.findViewById<Button>(R.id.postUpdateButton).isEnabled = true
+                             dialog.findViewById<Button>(R.id.postUpdateButton)?.isEnabled = true
                              dialog.findViewById<Button>(R.id.cancelButton)?.isEnabled = true
                         }
                     }
@@ -979,7 +990,9 @@ class HomeFragment : Fragment() {
         instagramUrl: String? = null,
         postType: String = "text",
         hasExternalLink: Boolean = false,
-        crossPost: Boolean = false
+        crossPost: Boolean = false,
+        uploadedImageIds: List<String> = emptyList(),
+        uploadedDocumentIds: List<String> = emptyList()
     ) {
         val userId = auth.currentUser?.uid ?: return
         val authorName = sessionManager.fetchUserName() ?: "Admin"
@@ -1066,6 +1079,25 @@ class HomeFragment : Fragment() {
                 }
             }
             .addOnFailureListener { e ->
+                // Clean up uploaded files from Cloudinary since Firestore write failed
+                lifecycleScope.launch(Dispatchers.IO) {
+                    uploadedImageIds.forEach { publicId ->
+                        Log.d(TAG, "Cleaning up uploaded image (Firestore failed): $publicId")
+                        try {
+                            cloudinaryHelper.deleteImageById(publicId)
+                        } catch (deleteErr: Exception) {
+                            Log.e(TAG, "Failed to cleanup image $publicId", deleteErr)
+                        }
+                    }
+                    uploadedDocumentIds.forEach { publicId ->
+                        Log.d(TAG, "Cleaning up uploaded document (Firestore failed): $publicId")
+                        try {
+                            cloudinaryHelper.deleteDocumentById(publicId)
+                        } catch (deleteErr: Exception) {
+                            Log.e(TAG, "Failed to cleanup document $publicId", deleteErr)
+                        }
+                    }
+                }
                 Toast.makeText(requireContext(), "Failed to post update: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
                 createUpdateDialog?.findViewById<Button>(R.id.postUpdateButton)?.isEnabled = true
                 createUpdateDialog?.findViewById<Button>(R.id.cancelButton)?.isEnabled = true
@@ -1084,7 +1116,9 @@ class HomeFragment : Fragment() {
         instagramUrl: String?,
         postType: String,
         hasExternalLink: Boolean,
-        crossPost: Boolean
+        crossPost: Boolean,
+        uploadedImageIds: List<String> = emptyList(),
+        uploadedDocumentIds: List<String> = emptyList()
     ) {
         // Determine updateType based on cross-post setting
         val updateType = if (crossPost) 3 else 2 // 3=Both, 2=NSS only
@@ -1145,6 +1179,25 @@ class HomeFragment : Fragment() {
                 loadUpdates()
             }
             .addOnFailureListener { e ->
+                // Clean up newly uploaded files from Cloudinary since Firestore write failed
+                lifecycleScope.launch(Dispatchers.IO) {
+                    uploadedImageIds.forEach { publicId ->
+                        Log.d(TAG, "Cleaning up uploaded image (update failed): $publicId")
+                        try {
+                            cloudinaryHelper.deleteImageById(publicId)
+                        } catch (deleteErr: Exception) {
+                            Log.e(TAG, "Failed to cleanup image $publicId", deleteErr)
+                        }
+                    }
+                    uploadedDocumentIds.forEach { publicId ->
+                        Log.d(TAG, "Cleaning up uploaded document (update failed): $publicId")
+                        try {
+                            cloudinaryHelper.deleteDocumentById(publicId)
+                        } catch (deleteErr: Exception) {
+                            Log.e(TAG, "Failed to cleanup document $publicId", deleteErr)
+                        }
+                    }
+                }
                 Toast.makeText(requireContext(), "Failed to update: ${e.message}", Toast.LENGTH_SHORT).show()
                 createUpdateDialog?.findViewById<Button>(R.id.postUpdateButton)?.isEnabled = true
                 createUpdateDialog?.findViewById<Button>(R.id.cancelButton)?.isEnabled = true

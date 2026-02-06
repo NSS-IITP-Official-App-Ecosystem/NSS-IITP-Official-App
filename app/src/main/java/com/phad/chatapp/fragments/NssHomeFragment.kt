@@ -228,6 +228,13 @@ class NssHomeFragment : Fragment() {
                         isNssInterface = true
                     )
                 }
+
+                // Check for Teaching Wing status if admin
+                if (userType.equals("Admin", ignoreCase = true)) {
+                    val isTeachingWing = userDoc.getBoolean("Teaching_wing") ?: false
+                    sessionManager.setTeachingWing(isTeachingWing)
+                    Log.d(TAG, "Admin Teaching Wing Status: $isTeachingWing")
+                }
                 
             } catch (e: Exception) {
                 Log.e(TAG, "Error loading user data from Firestore", e)
@@ -424,6 +431,13 @@ class NssHomeFragment : Fragment() {
     }
 
     private fun showCreateUpdateDialog(existingUpdate: Update? = null) {
+        // Defensive admin check - prevent non-admins from accessing this function
+        if (!sessionManager.fetchUserType().equals("Admin", ignoreCase = true)) {
+            Log.w(TAG, "Non-admin user attempted to access showCreateUpdateDialog")
+            Toast.makeText(requireContext(), "Admin access required", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
         // Initialize the dialog
         createUpdateDialog = Dialog(requireContext()).apply {
             requestWindowFeature(Window.FEATURE_NO_TITLE)
@@ -478,7 +492,14 @@ class NssHomeFragment : Fragment() {
 
         // Add checkbox for cross-posting to Teaching Wing
         val crossPostCheckbox = dialog.findViewById<android.widget.CheckBox>(R.id.crossPostCheckbox)
-        crossPostCheckbox?.visibility = View.VISIBLE
+        
+        // Only show for Teaching Wing admins
+        if (sessionManager.getTeachingWing()) {
+            crossPostCheckbox?.visibility = View.VISIBLE
+        } else {
+            crossPostCheckbox?.visibility = View.GONE
+        }
+        
         crossPostCheckbox?.text = "Also post to Teaching Wing interface"
 
         // Post Type Toggle Group
@@ -809,7 +830,9 @@ class NssHomeFragment : Fragment() {
                                 instagramUrl = if (currentPostType == "reel") instagramLink else null,
                                 postType = currentPostType,
                                 hasExternalLink = externalLinksList.isNotEmpty(),
-                                crossPost = crossPostCheckbox?.isChecked == true
+                                crossPost = crossPostCheckbox?.isChecked == true,
+                                uploadedImageIds = uploadedImageIds,
+                                uploadedDocumentIds = uploadedDocumentIds
                             )
                         } else {
                             updatePost(
@@ -824,7 +847,9 @@ class NssHomeFragment : Fragment() {
                                 instagramUrl = if (currentPostType == "reel") instagramLink else null,
                                 postType = currentPostType,
                                 hasExternalLink = externalLinksList.isNotEmpty(),
-                                crossPost = crossPostCheckbox?.isChecked == true
+                                crossPost = crossPostCheckbox?.isChecked == true,
+                                uploadedImageIds = uploadedImageIds,
+                                uploadedDocumentIds = uploadedDocumentIds
                             )
                         }
                         overlay?.visibility = View.GONE 
@@ -840,8 +865,8 @@ class NssHomeFragment : Fragment() {
                         Toast.makeText(requireContext(), "Upload cancelled", Toast.LENGTH_SHORT).show()
                         overlay?.visibility = View.GONE
                         dialog.setCancelable(true)
-                        dialog.findViewById<Button>(R.id.postUpdateButton).isEnabled = true
-                        dialog.findViewById<Button>(R.id.cancelButton).isEnabled = true
+                        dialog.findViewById<Button>(R.id.postUpdateButton)?.isEnabled = true
+                        dialog.findViewById<Button>(R.id.cancelButton)?.isEnabled = true
                     }
                 } catch (e: Exception) {
                     if (scope.isActive) {
@@ -850,7 +875,7 @@ class NssHomeFragment : Fragment() {
                             Toast.makeText(requireContext(), "Upload failed: ${e.message}", Toast.LENGTH_SHORT).show()
                             overlay?.visibility = View.GONE
                             dialog.setCancelable(true)
-                             dialog.findViewById<Button>(R.id.postUpdateButton).isEnabled = true
+                             dialog.findViewById<Button>(R.id.postUpdateButton)?.isEnabled = true
                              dialog.findViewById<Button>(R.id.cancelButton)?.isEnabled = true
                         }
                     }
@@ -949,7 +974,9 @@ class NssHomeFragment : Fragment() {
         instagramUrl: String? = null,
         postType: String = "text",
         hasExternalLink: Boolean = false,
-        crossPost: Boolean = false
+        crossPost: Boolean = false,
+        uploadedImageIds: List<String> = emptyList(),
+        uploadedDocumentIds: List<String> = emptyList()
     ) {
         val userId = auth.currentUser?.uid ?: return
         val authorName = sessionManager.fetchUserName() ?: "Admin"
@@ -1003,7 +1030,7 @@ class NssHomeFragment : Fragment() {
             .addOnSuccessListener {
                 // If cross-post is enabled, also save to the regular updates collection
                 if (crossPost) {
-                    db.collection("updates").document(customDocId)
+                    db.collection("ttw_updates").document(customDocId)
                         .set(update)
                         .addOnSuccessListener {
                             Toast.makeText(requireContext(), "Update posted to both NSS and Teaching Wing!", Toast.LENGTH_SHORT).show()
@@ -1036,6 +1063,25 @@ class NssHomeFragment : Fragment() {
                 }
             }
             .addOnFailureListener { e ->
+                // Clean up uploaded files from Cloudinary since Firestore write failed
+                lifecycleScope.launch(Dispatchers.IO) {
+                    uploadedImageIds.forEach { publicId ->
+                        Log.d(TAG, "Cleaning up uploaded image (Firestore failed): $publicId")
+                        try {
+                            cloudinaryHelper.deleteImageById(publicId)
+                        } catch (deleteErr: Exception) {
+                            Log.e(TAG, "Failed to cleanup image $publicId", deleteErr)
+                        }
+                    }
+                    uploadedDocumentIds.forEach { publicId ->
+                        Log.d(TAG, "Cleaning up uploaded document (Firestore failed): $publicId")
+                        try {
+                            cloudinaryHelper.deleteDocumentById(publicId)
+                        } catch (deleteErr: Exception) {
+                            Log.e(TAG, "Failed to cleanup document $publicId", deleteErr)
+                        }
+                    }
+                }
                 Toast.makeText(requireContext(), "Failed to post update: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
                 createUpdateDialog?.findViewById<Button>(R.id.postUpdateButton)?.isEnabled = true
                 createUpdateDialog?.findViewById<Button>(R.id.cancelButton)?.isEnabled = true
@@ -1054,7 +1100,9 @@ class NssHomeFragment : Fragment() {
         instagramUrl: String?,
         postType: String,
         hasExternalLink: Boolean,
-        crossPost: Boolean
+        crossPost: Boolean,
+        uploadedImageIds: List<String> = emptyList(),
+        uploadedDocumentIds: List<String> = emptyList()
     ) {
         // Determine updateType based on cross-post setting
         val updateType = if (crossPost) 3 else 2 // 3=Both, 2=NSS only
@@ -1106,7 +1154,7 @@ class NssHomeFragment : Fragment() {
             .set(updatedUpdate)
             .addOnSuccessListener {
                 if (crossPost) {
-                    db.collection("updates").document(originalUpdate.id)
+                    db.collection("ttw_updates").document(originalUpdate.id)
                         .set(updatedUpdate)
                 }
                 Toast.makeText(requireContext(), "Post updated successfully", Toast.LENGTH_SHORT).show()
@@ -1115,6 +1163,25 @@ class NssHomeFragment : Fragment() {
                 loadUpdates()
             }
             .addOnFailureListener { e ->
+                // Clean up newly uploaded files from Cloudinary since Firestore write failed
+                lifecycleScope.launch(Dispatchers.IO) {
+                    uploadedImageIds.forEach { publicId ->
+                        Log.d(TAG, "Cleaning up uploaded image (update failed): $publicId")
+                        try {
+                            cloudinaryHelper.deleteImageById(publicId)
+                        } catch (deleteErr: Exception) {
+                            Log.e(TAG, "Failed to cleanup image $publicId", deleteErr)
+                        }
+                    }
+                    uploadedDocumentIds.forEach { publicId ->
+                        Log.d(TAG, "Cleaning up uploaded document (update failed): $publicId")
+                        try {
+                            cloudinaryHelper.deleteDocumentById(publicId)
+                        } catch (deleteErr: Exception) {
+                            Log.e(TAG, "Failed to cleanup document $publicId", deleteErr)
+                        }
+                    }
+                }
                 Toast.makeText(requireContext(), "Failed to update: ${e.message}", Toast.LENGTH_SHORT).show()
                 createUpdateDialog?.findViewById<Button>(R.id.postUpdateButton)?.isEnabled = true
                 createUpdateDialog?.findViewById<Button>(R.id.cancelButton)?.isEnabled = true

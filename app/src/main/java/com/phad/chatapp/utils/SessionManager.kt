@@ -168,6 +168,14 @@ class SessionManager(context: Context) {
     }
 
     /**
+     * Set Teaching Wing eligibility flag
+     */
+    fun setTeachingWing(isTeachingWing: Boolean) {
+        editor.putBoolean(KEY_TEACHING_WING, isTeachingWing)
+        editor.apply()
+    }
+
+    /**
      * Fetch user roll number
      */
     fun fetchRollNumber(): String? {
