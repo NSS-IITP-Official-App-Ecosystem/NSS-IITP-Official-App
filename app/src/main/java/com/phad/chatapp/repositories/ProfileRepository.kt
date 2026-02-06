@@ -8,6 +8,9 @@ import com.phad.chatapp.utils.SessionManager
 import kotlinx.coroutines.tasks.await
 import android.content.Context.MODE_PRIVATE
 import android.content.SharedPreferences
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 
 /**
  * Repository to load profile-related data with cache-first strategy and TTL.
@@ -88,6 +91,31 @@ class ProfileRepository(private val context: Context) {
                 prefs.edit().putLong(PREF_PROFILE_LAST_FETCHED_AT, System.currentTimeMillis()).apply()
             }
         } catch (_: Exception) {
+        }
+    }
+
+    fun listenToUserUpdates(rollNumber: String): Flow<Map<String, Any>?> = callbackFlow {
+        Log.d(TAG, "Starting real-time listener for user: $rollNumber")
+        val registration = firestore.collection("users").document(rollNumber)
+            .addSnapshotListener { snapshot, e ->
+                if (e != null) {
+                    Log.w(TAG, "Listen failed.", e)
+                    close(e)
+                    return@addSnapshotListener
+                }
+
+                if (snapshot != null && snapshot.exists()) {
+                    Log.d(TAG, "Real-time update received for user: $rollNumber")
+                    trySend(snapshot.data)
+                } else {
+                    Log.d(TAG, "Current data: null")
+                    trySend(null)
+                }
+            }
+        
+        awaitClose { 
+            Log.d(TAG, "Removing real-time listener for user: $rollNumber")
+            registration.remove() 
         }
     }
 }

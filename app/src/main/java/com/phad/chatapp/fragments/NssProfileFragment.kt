@@ -152,31 +152,15 @@ class NssProfileFragment : Fragment() {
                     // Set refreshing state to true
                     _uiState.update { it.copy(isRefreshing = true) }
                     
-                    // Read statistics directly from users collection
-                    val (sem1Stats, sem2Stats, eventsStats) = AttendanceStatsCalculator.readStudentStatsFromUsers(rollNumber)
-                    
-                    _uiState.update { 
-                        it.copy(
-                            sem1Hours = sem1Stats,
-                            sem2Hours = sem2Stats,
-                            eventsAttended = eventsStats,
-                            isRefreshing = false // Reset refreshing state
-                        ) 
-                    }
-                    
-                    // Update student document with new stats
+                    // Trigger background recalculation
+                    // The UI will be updated automatically by the real-time listener in loadStatistics
                     AttendanceStatsCalculator.updateStudentStats(rollNumber)
                     
-                    Log.d(TAG, "Refreshed student attendance stats: SEM1=$sem1Stats, SEM2=$sem2Stats, Events=$eventsStats")
+                    _uiState.update { it.copy(isRefreshing = false) }
+                    
+                    Log.d(TAG, "Triggered student attendance stats recalculation")
                 } catch (e: Exception) {
-                    _uiState.update { 
-                        it.copy(
-                            sem1Hours = "0/0",
-                            sem2Hours = "0/0",
-                            eventsAttended = "0/0",
-                            isRefreshing = false // Reset refreshing state on error
-                        ) 
-                    }
+                    _uiState.update { it.copy(isRefreshing = false) }
                     Log.e(TAG, "Error refreshing student attendance statistics", e)
                 }
             }
@@ -245,6 +229,9 @@ class NssProfileFragment : Fragment() {
         Log.d(TAG, "NSS Calling loadStatistics with rollNumber: $rollNumber")
         loadStatistics(rollNumber)
         
+        // Auto-refresh stats on profile open
+        refreshAttendanceStats()
+        
         Log.d(TAG, "=== NSS PROFILE FROM SESSION LOADING COMPLETE ===")
     }
 
@@ -310,36 +297,64 @@ class NssProfileFragment : Fragment() {
         
         Log.d(TAG, "NSS Starting coroutine to load statistics...")
         // Load new semester-based statistics
+        Log.d(TAG, "NSS Starting coroutine to load statistics...")
+        // Load new semester-based statistics with Real-time Listener
         lifecycleScope.launch {
             try {
-                Log.d(TAG, "NSS Inside coroutine, calling readStudentStatsFromUsers...")
-                val (sem1Stats, sem2Stats, eventsStats) = AttendanceStatsCalculator.readStudentStatsFromUsers(rollNumber)
-                Log.d(TAG, "NSS Received stats from readStudentStatsFromUsers: SEM1=$sem1Stats, SEM2=$sem2Stats, Events=$eventsStats")
+                Log.d(TAG, "NSS Setting up real-time listener for stats...")
                 
-                Log.d(TAG, "NSS Updating UI state with new statistics...")
-                Log.d(TAG, "NSS Current UI state before update: ${_uiState.value}")
-                _uiState.update { currentState ->
-                    val newState = currentState.copy(
-                        sem1Hours = sem1Stats,
-                        sem2Hours = sem2Stats,
-                        eventsAttended = eventsStats
-                    ) 
-                    Log.d(TAG, "NSS New UI state after update: $newState")
-                    newState
+                profileRepository.listenToUserUpdates(rollNumber).collect { data ->
+                    if (data != null) {
+                        // Extract stats from real-time update
+                        val sem1 = (data["sem1Hours"] as? Number)?.toDouble() ?: 0.0
+                        val sem2 = (data["sem2Hours"] as? Number)?.toDouble() ?: 0.0
+                        val hours = (data["hours"] as? Number)?.toDouble() ?: (sem1 + sem2)
+                        val events = (data["eventsAttended"] as? Number)?.toLong() ?: 0L
+                        
+                        // We still need the denominators (totals)
+                        // Ideally these should also be real-time or cached, but for now we fetch valid totals
+                        // To avoid async complexity inside collect, we'll use a helper or simple defaults
+                        // Note: AttendanceEventUtils.formatHours handles formatting
+                        
+                        // For totals, we re-fetch briefly or use cached values if we had them?
+                        // For simplicity and performance, effectively we just want to update the nominators
+                        // The denominators usually don't change often.
+                        
+                        // Let's get totals. Since we are inside a coroutine, we can fetch.
+                        // However, fetching on every user update might be overkill? 
+                        // The user update happens when hours change.
+                        val db = FirebaseFirestore.getInstance()
+                        val metaSnap = db.collection("meta").document("statistics").get().await()
+                        val totalSem1 = (metaSnap.getLong("totalSem1Hours") ?: 0L).toInt()
+                        val totalSem2 = (metaSnap.getLong("totalSem2Hours") ?: 0L).toInt()
+                        val totalEvents = (metaSnap.getLong("totalEvents") ?: 0L).toInt()
+                        
+                        // Consolidate total logic - reusing calculator logic implicitly or explicitly?
+                        // We'll trust the meta for denominators as per original code pattern
+                        
+                         // But calculateStudentStats logic for DENOMINATOR was:
+                        // val totalSem1Hours = calculateTotalSemesterHours(eventsSnapshot.documents, 1, rollNumber)
+                        // This seems dynamic per student based on visibleOnlyToPresent!
+                        // The AttendanceStatsCalculator.readStudentStatsFromUsers used:
+                        // val totalSem1Hours = (metaSnap.getLong("totalSem1Hours") ?: 0L).toInt()
+                        // So it was using global meta.
+                        
+                        val sem1Formatted = com.phad.chatapp.utils.AttendanceEventUtils.formatHours(sem1)
+                        val sem2Formatted = com.phad.chatapp.utils.AttendanceEventUtils.formatHours(sem2)
+                        
+                        _uiState.update { 
+                            it.copy(
+                                sem1Hours = "$sem1Formatted/$totalSem1",
+                                sem2Hours = "$sem2Formatted/$totalSem2",
+                                eventsAttended = "$events/$totalEvents"
+                            ) 
+                        }
+                        
+                        Log.d(TAG, "Real-time stats update: SEM1=$sem1Formatted, SEM2=$sem2Formatted, Events=$events")
+                    }
                 }
-                Log.d(TAG, "NSS UI state updated successfully")
-                Log.d(TAG, "NSS Final UI state: ${_uiState.value}")
-                Log.d(TAG, "NSS Loaded new statistics: SEM1=$sem1Stats, SEM2=$sem2Stats, Events=$eventsStats")
             } catch (e: Exception) {
-                Log.e(TAG, "NSS Exception in loadStatistics coroutine", e)
-                _uiState.update { 
-                    it.copy(
-                        sem1Hours = "0/0",
-                        sem2Hours = "0/0",
-                        eventsAttended = "0/0"
-                    ) 
-                }
-                Log.e(TAG, "NSS Error loading new statistics", e)
+                Log.e(TAG, "NSS Exception in loadStatistics flow", e)
             }
         }
         Log.d(TAG, "=== NSS LOADING STATISTICS COMPLETE ===")
