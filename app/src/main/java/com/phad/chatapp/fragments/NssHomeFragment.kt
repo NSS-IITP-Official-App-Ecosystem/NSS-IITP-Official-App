@@ -48,6 +48,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.NonCancellable
+import com.phad.chatapp.models.CloudinaryUploadResult
 import androidx.navigation.fragment.findNavController
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -85,9 +88,11 @@ class NssHomeFragment : Fragment() {
     
     // Create update dialog
     private var createUpdateDialog: Dialog? = null
-    private var selectedImageUris: MutableList<Uri> = mutableListOf()
-    private var selectedDocumentUris: MutableList<Uri> = mutableListOf()
+    private var selectedImageUris: MutableList<com.phad.chatapp.adapters.AttachmentItem> = mutableListOf()
+    private var selectedDocumentUris: MutableList<com.phad.chatapp.adapters.AttachmentItem> = mutableListOf()
+    private var deletedAttachmentUrls: MutableList<String> = mutableListOf()
     private var externalLinks: MutableList<String> = mutableListOf()
+    private var uploadJob: kotlinx.coroutines.Job? = null
     
     // Image picker launcher - supports multiple selection
     private val imagePicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -97,12 +102,12 @@ class NssHomeFragment : Fragment() {
                 data.clipData?.let { clipData ->
                     for (i in 0 until clipData.itemCount) {
                         clipData.getItemAt(i).uri?.let { uri ->
-                            selectedImageUris.add(uri)
+                            selectedImageUris.add(com.phad.chatapp.adapters.AttachmentItem.Local(uri))
                         }
                     }
                 } ?: data.data?.let { uri ->
                     // Single image selected
-                    selectedImageUris.add(uri)
+                    selectedImageUris.add(com.phad.chatapp.adapters.AttachmentItem.Local(uri))
                 }
                 showSelectedImages()
             }
@@ -117,12 +122,12 @@ class NssHomeFragment : Fragment() {
                 data.clipData?.let { clipData ->
                     for (i in 0 until clipData.itemCount) {
                         clipData.getItemAt(i).uri?.let { uri ->
-                            selectedDocumentUris.add(uri)
+                            selectedDocumentUris.add(com.phad.chatapp.adapters.AttachmentItem.Local(uri))
                         }
                     }
                 } ?: data.data?.let { uri ->
                     // Single document selected
-                    selectedDocumentUris.add(uri)
+                    selectedDocumentUris.add(com.phad.chatapp.adapters.AttachmentItem.Local(uri))
                 }
                 showSelectedDocuments()
             }
@@ -440,10 +445,12 @@ class NssHomeFragment : Fragment() {
         // Reset selected media
         selectedImageUris.clear()
         selectedDocumentUris.clear()
+        deletedAttachmentUrls.clear()
         externalLinks.clear()
 
         // Find views in the dialog
         val dialog = createUpdateDialog ?: return
+        val dialogTitle = dialog.findViewById<TextView>(R.id.dialogTitle)
         val updateContentInput = dialog.findViewById<EditText>(R.id.updateContentInput)
         val updateTitleInput = dialog.findViewById<EditText>(R.id.updateTitleInput)
         val updateLinkInput = dialog.findViewById<EditText>(R.id.updateLinkInput)
@@ -527,6 +534,10 @@ class NssHomeFragment : Fragment() {
             items = selectedImageUris,
             isDocument = false,
             onRemoveClick = { position ->
+                val item = selectedImageUris[position]
+                if (item is com.phad.chatapp.adapters.AttachmentItem.Remote) {
+                    deletedAttachmentUrls.add(item.url)
+                }
                 selectedImageUris.removeAt(position)
                 dialog.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.imagesRecyclerView)?.adapter?.notifyItemRemoved(position)
                 
@@ -544,6 +555,10 @@ class NssHomeFragment : Fragment() {
             items = selectedDocumentUris,
             isDocument = true,
             onRemoveClick = { position ->
+                val item = selectedDocumentUris[position]
+                if (item is com.phad.chatapp.adapters.AttachmentItem.Remote) {
+                    deletedAttachmentUrls.add(item.url)
+                }
                 selectedDocumentUris.removeAt(position)
                 dialog.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.documentsRecyclerView)?.adapter?.notifyItemRemoved(position)
                 
@@ -576,11 +591,30 @@ class NssHomeFragment : Fragment() {
 
         // Pre-fill if editing
         if (existingUpdate != null) {
+            dialogTitle?.text = "Update Post"
             updateTitleInput?.setText(existingUpdate.title)
             updateContentInput?.setText(existingUpdate.content)
             updateLinkInput?.setText(existingUpdate.externalLink)
             instagramLinkInput?.setText(existingUpdate.instagramUrl)
             crossPostCheckbox?.isChecked = (existingUpdate.updateType == 3)
+
+            // Pre-fill images
+            existingUpdate.getAllImages().forEach { url ->
+                selectedImageUris.add(com.phad.chatapp.adapters.AttachmentItem.Remote(url))
+            }
+             if (selectedImageUris.isNotEmpty()) {
+                imagesRecyclerView?.visibility = View.VISIBLE
+                imagesAdapter.notifyDataSetChanged()
+            }
+
+            // Pre-fill documents
+            existingUpdate.getAllDocuments().forEach { (url, name) ->
+                selectedDocumentUris.add(com.phad.chatapp.adapters.AttachmentItem.Remote(url, name))
+            }
+             if (selectedDocumentUris.isNotEmpty()) {
+                documentsRecyclerView?.visibility = View.VISIBLE
+                documentsAdapter.notifyDataSetChanged()
+            }
 
             // Set Post Type using ToggleGroup to trigger listener
             if (existingUpdate.postType == "reel" || !existingUpdate.instagramUrl.isNullOrEmpty()) {
@@ -590,6 +624,9 @@ class NssHomeFragment : Fragment() {
             }
 
             postUpdateButton.text = "Update"
+        } else {
+            dialogTitle?.text = "Create Post"
+            postUpdateButton.text = "Publish Post"
         }
 
         // Set up cancel button
@@ -629,96 +666,197 @@ class NssHomeFragment : Fragment() {
                 }
             }
             
-            // Show loading indicator
+            // Disable buttons
             dialog.findViewById<Button>(R.id.postUpdateButton).isEnabled = false
             dialog.findViewById<Button>(R.id.cancelButton).isEnabled = false
+            dialog.setCancelable(false)
+
+            // Setup Progress UI
+            val overlay = dialog.findViewById<View>(R.id.uploadProgressOverlay)
+            val progressBar = dialog.findViewById<android.widget.ProgressBar>(R.id.uploadProgressBar)
+            val progressText = dialog.findViewById<TextView>(R.id.uploadProgressText)
+            
+            overlay?.visibility = View.VISIBLE
+            progressBar?.progress = 0
+            progressText?.text = "Preparing... 0%"
             
             // Prepare post data
             val content = if (currentPostType == "text") updateContentInput.text.toString().trim() else ""
             val link = if (currentPostType == "text") updateLinkInput.text.toString().trim() else ""
             val instagramLink = if (currentPostType == "reel") instagramLinkInput.text.toString().trim() else ""
-            val crossPost = crossPostCheckbox?.isChecked ?: false
             
-            // Detect if content or link contains URLs
-            val hasExternalLink = when (currentPostType) {
-                "reel" -> false // Reel posts don't have external links (Instagram is the content)
-                "text" -> com.phad.chatapp.utils.PostUtils.containsUrl(content) || link.isNotEmpty()
-                else -> false
-            }
-            
-            // Set Instagram URL for reel posts
-            val instagramUrl = if (currentPostType == "reel" && validateInstagramUrl(instagramLink)) {
-                instagramLink
-            } else {
-                null
-            }
-
-            val isVideo = !instagramUrl.isNullOrEmpty()
-
-            // Upload all media concurrently and then save
-            lifecycleScope.launch {
+            // Launch Upload Job
+            uploadJob = lifecycleScope.launch(Dispatchers.IO) {
+                val scope = this
+                // Track uploaded IDs for reliable cleanup
+                val uploadedImageIds = mutableListOf<String>()
+                val uploadedDocumentIds = mutableListOf<String>()
+                
                 try {
-                    // Upload all images concurrently
-                    val imageUrls = if (selectedImageUris.isNotEmpty()) {
-                        selectedImageUris.map { uri ->
-                            withContext(Dispatchers.IO) {
-                                cloudinaryHelper.uploadImage(uri, "nss_updates/images")
+                    val imageUrls = mutableListOf<String>()
+                    val documentUrls = mutableListOf<String>()
+                    val documentNames = mutableListOf<String>()
+                    val externalLinksList = mutableListOf<String>()
+
+                    // Add manual link if present
+                    if (link.isNotEmpty()) {
+                        externalLinksList.add(link)
+                    }
+
+                    // Total items to upload
+                    val totalItems = selectedImageUris.size + selectedDocumentUris.size
+                    var itemsCompleted = 0
+                    
+                    // Delete removed attachments
+                    if (deletedAttachmentUrls.isNotEmpty()) {
+                        withContext(Dispatchers.Main) {
+                            progressText?.text = "Removing old attachments..."
+                        }
+                        deletedAttachmentUrls.forEach { url ->
+                             // Try deleting as image first, then document if needed or based on extension
+                             val isImage = url.contains("/images/") || url.endsWith(".jpg") || url.endsWith(".png")
+                             if (isImage) {
+                                 cloudinaryHelper.deleteImage(url)
+                             } else {
+                                 cloudinaryHelper.deleteDocument(url)
+                             }
+                        }
+                    }
+
+                    // Upload Images
+                    val localImages = selectedImageUris.filterIsInstance<com.phad.chatapp.adapters.AttachmentItem.Local>()
+                    val remoteImages = selectedImageUris.filterIsInstance<com.phad.chatapp.adapters.AttachmentItem.Remote>()
+                    
+                    // Add existing remote images to final list
+                    remoteImages.forEach { imageUrls.add(it.url) }
+
+                    localImages.forEachIndexed { index, item ->
+                        if (!scope.isActive) throw kotlinx.coroutines.CancellationException()
+                        
+                        withContext(Dispatchers.Main) {
+                            progressText?.text = "Uploading Image ${index + 1} of ${localImages.size}..."
+                        }
+                        
+                        // New return type: CloudinaryUploadResult(url, publicId)
+                        val result = uploadMedia(item.uri) { progress ->
+                            // Calculate global progress
+                            val itemWeight = 100f / (if (totalItems > 0) totalItems else 1).toFloat()
+                            val baseProgress = itemsCompleted * itemWeight
+                            val currentItemContribution = (progress.toFloat() / 100f) * itemWeight
+                            val totalProgress = (baseProgress + currentItemContribution).toInt()
+                            
+                            lifecycleScope.launch(Dispatchers.Main) {
+                                progressBar?.progress = totalProgress
+                                progressText?.text = "Uploading... $totalProgress%"
                             }
                         }
-                    } else {
-                        emptyList()
+                        uploadedImageIds.add(result.publicId) // Track exact ID for cleanup
+                        imageUrls.add(result.url)
+                        itemsCompleted++
                     }
                     
-                    // Upload all documents concurrently
-                    val documentData = if (selectedDocumentUris.isNotEmpty()) {
-                        selectedDocumentUris.map { uri ->
-                            withContext(Dispatchers.IO) {
-                                val url = cloudinaryHelper.uploadDocument(uri, "nss_updates/documents")
-                                val name = getDocumentName(uri)
-                                Pair(url, name)
+                    // Upload Documents
+                    val localDocs = selectedDocumentUris.filterIsInstance<com.phad.chatapp.adapters.AttachmentItem.Local>()
+                    val remoteDocs = selectedDocumentUris.filterIsInstance<com.phad.chatapp.adapters.AttachmentItem.Remote>()
+
+                    // Add existing remote docs
+                     remoteDocs.forEach { 
+                         documentUrls.add(it.url)
+                         documentNames.add(it.name ?: "Document")
+                     }
+
+                    localDocs.forEachIndexed { index, item ->
+                         if (!scope.isActive) throw kotlinx.coroutines.CancellationException()
+                         
+                        withContext(Dispatchers.Main) {
+                            progressText?.text = "Uploading Document ${index + 1} of ${localDocs.size}..."
+                        }
+
+                        // Upload document and get result
+                        val (result, name) = uploadDocument(item.uri) { progress ->
+                            val itemWeight = 100f / (if (totalItems > 0) totalItems else 1).toFloat()
+                            val baseProgress = itemsCompleted * itemWeight
+                            val currentItemContribution = (progress.toFloat() / 100f) * itemWeight
+                            val totalProgress = (baseProgress + currentItemContribution).toInt()
+                            
+                            lifecycleScope.launch(Dispatchers.Main) {
+                                progressBar?.progress = totalProgress
+                                progressText?.text = "Uploading... $totalProgress%"
                             }
                         }
-                    } else {
-                        emptyList()
+                        uploadedDocumentIds.add(result.publicId) // Track exact ID for cleanup
+                        documentUrls.add(result.url)
+                        documentNames.add(name)
+                        itemsCompleted++
                     }
-                    
-                    val documentUrls = documentData.map { it.first }
-                    val documentNames = documentData.map { it.second }
-                    
-                    // Parse multiple links from input (comma or newline separated)
-                    val links = if (link.isNotEmpty()) {
-                        link.split("[,\n]".toRegex())
-                            .map { it.trim() }
-                            .filter { it.isNotEmpty() }
-                    } else {
-                        emptyList()
+
+                     withContext(Dispatchers.Main) {
+                        progressText?.text = "Finalizing..."
+                         progressBar?.progress = 100
                     }
-                    
-                    // Create or update post
-                    if (existingUpdate != null) {
-                        updatePost(
-                            existingUpdate, content, title,
-                            imageUrls, documentUrls, documentNames, links,
-                            isVideo, instagramUrl, currentPostType, hasExternalLink, crossPost
-                        )
-                    } else {
-                        createUpdate(
-                            content, title,
-                            imageUrls, documentUrls, documentNames, links,
-                            isVideo, instagramUrl, currentPostType, hasExternalLink, crossPost
-                        )
-                    }
-                } catch (e: Exception) {
-                    val errorMsg = "Failed to upload: ${e.localizedMessage}"
-                    Log.e(TAG, errorMsg, e)
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(requireContext(), errorMsg, Toast.LENGTH_SHORT).show()
+
+                    // Proceed to Create/Update
+                     withContext(Dispatchers.Main) {
+                         if (existingUpdate == null) {
+                            createUpdate(
+                                content = content,
+                                title = title,
+                                imageUrls = imageUrls,
+                                documentUrls = documentUrls,
+                                documentNames = documentNames,
+                                externalLinks = externalLinksList,
+                                isVideo = false, 
+                                instagramUrl = if (currentPostType == "reel") instagramLink else null,
+                                postType = currentPostType,
+                                hasExternalLink = externalLinksList.isNotEmpty(),
+                                crossPost = crossPostCheckbox?.isChecked == true
+                            )
+                        } else {
+                            updatePost(
+                                originalUpdate = existingUpdate,
+                                content = content,
+                                title = title,
+                                imageUrls = imageUrls,
+                                documentUrls = documentUrls,
+                                documentNames = documentNames,
+                                externalLinks = externalLinksList,
+                                isVideo = existingUpdate.isVideo,
+                                instagramUrl = if (currentPostType == "reel") instagramLink else null,
+                                postType = currentPostType,
+                                hasExternalLink = externalLinksList.isNotEmpty(),
+                                crossPost = crossPostCheckbox?.isChecked == true
+                            )
+                        }
+                        overlay?.visibility = View.GONE 
+                        dialog.setCancelable(true)
                         dialog.findViewById<Button>(R.id.postUpdateButton)?.isEnabled = true
                         dialog.findViewById<Button>(R.id.cancelButton)?.isEnabled = true
                     }
+
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    Log.d(TAG, "Upload cancelled")
+                    withContext(Dispatchers.Main) {
+                        progressText?.text = "Upload cancelled"
+                        Toast.makeText(requireContext(), "Upload cancelled", Toast.LENGTH_SHORT).show()
+                        overlay?.visibility = View.GONE
+                        dialog.setCancelable(true)
+                        dialog.findViewById<Button>(R.id.postUpdateButton).isEnabled = true
+                        dialog.findViewById<Button>(R.id.cancelButton).isEnabled = true
+                    }
+                } catch (e: Exception) {
+                    if (scope.isActive) {
+                        Log.e(TAG, "Upload failed", e)
+                         withContext(Dispatchers.Main) {
+                            Toast.makeText(requireContext(), "Upload failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                            overlay?.visibility = View.GONE
+                            dialog.setCancelable(true)
+                             dialog.findViewById<Button>(R.id.postUpdateButton).isEnabled = true
+                             dialog.findViewById<Button>(R.id.cancelButton)?.isEnabled = true
+                        }
+                    }
                 }
             }
-        }
+        } // Close setOnClickListener
 
         dialog.show()
     }
@@ -770,88 +908,24 @@ class NssHomeFragment : Fragment() {
         return fileName
     }
 
-    private fun uploadMedia(uri: Uri, onComplete: (String) -> Unit) {
-        try {
-            // Validate the URI is accessible
-            val inputStream = requireContext().contentResolver.openInputStream(uri)
-            inputStream?.close()
-            
-            // Show a loading indication
-            Toast.makeText(requireContext(), "Uploading image...", Toast.LENGTH_SHORT).show()
-            
-            // Log the upload attempt for debugging
-            Log.d(TAG, "Uploading image to Cloudinary")
-            
-            // Upload to Cloudinary using coroutines
-            lifecycleScope.launch(Dispatchers.IO) {
-                try {
-                    val downloadUrl = cloudinaryHelper.uploadImage(uri, "nss_updates/images")
-                    
-                    // Call the callback on main thread
-                    withContext(Dispatchers.Main) {
-                        Log.d(TAG, "Image uploaded successfully: $downloadUrl")
-                        onComplete(downloadUrl)
-                    }
-                } catch (e: Exception) {
-                    val errorMsg = "Failed to upload image: ${e.localizedMessage}"
-                    Log.e(TAG, errorMsg, e)
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(requireContext(), errorMsg, Toast.LENGTH_SHORT).show()
-                        createUpdateDialog?.findViewById<Button>(R.id.postUpdateButton)?.isEnabled = true
-                        createUpdateDialog?.findViewById<Button>(R.id.cancelButton)?.isEnabled = true
-                    }
-                }
-            }
+    private suspend fun uploadMedia(uri: Uri, onProgress: (Int) -> Unit): com.phad.chatapp.models.CloudinaryUploadResult {
+        return try {
+            cloudinaryHelper.uploadImage(uri, "nss_updates/images", onProgress)
         } catch (e: Exception) {
-            val errorMsg = e.localizedMessage ?: "Unknown error"
-            Log.e(TAG, "Failed to access file: $errorMsg", e)
-            Toast.makeText(requireContext(), "Error accessing the file: $errorMsg", Toast.LENGTH_SHORT).show()
-            createUpdateDialog?.findViewById<Button>(R.id.postUpdateButton)?.isEnabled = true
-            createUpdateDialog?.findViewById<Button>(R.id.cancelButton)?.isEnabled = true
+            Log.e(TAG, "Failed to upload image: ${e.localizedMessage}", e)
+            throw e
         }
     }
 
-    private fun uploadDocument(uri: Uri, onComplete: (String, String) -> Unit) {
-        try {
-            // Validate the URI is accessible
-            val inputStream = requireContext().contentResolver.openInputStream(uri)
-            inputStream?.close()
-            
-            // Show a loading indication
-            Toast.makeText(requireContext(), "Uploading document...", Toast.LENGTH_SHORT).show()
-            
-            // Get document name from URI
+    private suspend fun uploadDocument(uri: Uri, onProgress: (Int) -> Unit): Pair<com.phad.chatapp.models.CloudinaryUploadResult, String> {
+        return try {
+            // Get document name
             val documentName = getDocumentName(uri)
-            
-            // Log the upload attempt for debugging
-            Log.d(TAG, "Uploading document to Cloudinary: $documentName")
-            
-            // Upload to Cloudinary using coroutines
-            lifecycleScope.launch(Dispatchers.IO) {
-                try {
-                    val downloadUrl = cloudinaryHelper.uploadDocument(uri, "nss_updates/documents")
-                    
-                    // Call the callback on main thread
-                    withContext(Dispatchers.Main) {
-                        Log.d(TAG, "Document uploaded successfully: $downloadUrl")
-                        onComplete(downloadUrl, documentName)
-                    }
-                } catch (e: Exception) {
-                    val errorMsg = "Failed to upload document: ${e.localizedMessage}"
-                    Log.e(TAG, errorMsg, e)
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(requireContext(), errorMsg, Toast.LENGTH_SHORT).show()
-                        createUpdateDialog?.findViewById<Button>(R.id.postUpdateButton)?.isEnabled = true
-                        createUpdateDialog?.findViewById<Button>(R.id.cancelButton)?.isEnabled = true
-                    }
-                }
-            }
+            val result = cloudinaryHelper.uploadDocument(uri, "nss_updates/documents", onProgress)
+            Pair(result, documentName)
         } catch (e: Exception) {
-            val errorMsg = e.localizedMessage ?: "Unknown error"
-            Log.e(TAG, "Failed to access file: $errorMsg", e)
-            Toast.makeText(requireContext(), "Error accessing the file: $errorMsg", Toast.LENGTH_SHORT).show()
-            createUpdateDialog?.findViewById<Button>(R.id.postUpdateButton)?.isEnabled = true
-            createUpdateDialog?.findViewById<Button>(R.id.cancelButton)?.isEnabled = true
+            Log.e(TAG, "Failed to upload document: ${e.localizedMessage}", e)
+            throw e
         }
     }
 
@@ -1004,6 +1078,28 @@ class NssHomeFragment : Fragment() {
             documentNames = if (documentNames.isNotEmpty()) documentNames else null,
             externalLinks = if (externalLinks.isNotEmpty()) externalLinks else null
         )
+
+        // Detect and delete removed attachments
+        lifecycleScope.launch(Dispatchers.IO) {
+            // Check for removed images
+            val originalImages = originalUpdate.imageUrls ?: emptyList()
+            // Identify images that were in original but not in the new list
+            val removedImages = originalImages.filter { !imageUrls.contains(it) }
+            
+            removedImages.forEach { url ->
+                Log.d(TAG, "Deleting removed image: $url")
+                cloudinaryHelper.deleteImage(url)
+            }
+
+            // Check for removed documents
+            val originalDocuments = originalUpdate.documentUrls ?: emptyList()
+            val removedDocuments = originalDocuments.filter { !documentUrls.contains(it) }
+            
+            removedDocuments.forEach { url ->
+                Log.d(TAG, "Deleting removed document: $url")
+                cloudinaryHelper.deleteDocument(url)
+            }
+        }
 
         // Update in NSS collection
         db.collection("nss_updates").document(originalUpdate.id)

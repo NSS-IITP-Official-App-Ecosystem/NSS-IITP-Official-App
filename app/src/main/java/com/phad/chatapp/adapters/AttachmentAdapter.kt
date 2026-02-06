@@ -15,8 +15,13 @@ import com.bumptech.glide.Glide
 import com.phad.chatapp.R
 import java.io.File
 
+sealed class AttachmentItem {
+    data class Local(val uri: Uri) : AttachmentItem()
+    data class Remote(val url: String, val name: String? = null) : AttachmentItem()
+}
+
 class AttachmentAdapter(
-    private val items: MutableList<Uri>,
+    private val items: MutableList<AttachmentItem>,
     private val isDocument: Boolean,
     private val onRemoveClick: (Int) -> Unit,
     private val context: Context
@@ -36,19 +41,27 @@ class AttachmentAdapter(
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        val uri = items[position]
+        val item = items[position]
 
         if (isDocument) {
             holder.imageView.visibility = View.GONE
             holder.documentLayout.visibility = View.VISIBLE
             
-            holder.documentName.text = getFileName(uri)
+            holder.documentName.text = when (item) {
+                is AttachmentItem.Local -> getFileName(item.uri)
+                is AttachmentItem.Remote -> item.name ?: getFileNameFromUrl(item.url)
+            }
         } else {
             holder.imageView.visibility = View.VISIBLE
             holder.documentLayout.visibility = View.GONE
 
+            val loadModel: Any = when (item) {
+                is AttachmentItem.Local -> item.uri
+                is AttachmentItem.Remote -> item.url
+            }
+
             Glide.with(context)
-                .load(uri)
+                .load(loadModel)
                 .centerCrop()
                 .into(holder.imageView)
         }
@@ -83,5 +96,20 @@ class AttachmentAdapter(
             }
         }
         return result ?: "Document"
+    }
+
+    private fun getFileNameFromUrl(url: String): String {
+         val cut = url.lastIndexOf('/')
+         var fileName = if (cut != -1) {
+             url.substring(cut + 1)
+         } else {
+             "Document"
+         }
+         // Remove query params if any
+         val queryIndex = fileName.indexOf('?')
+         if (queryIndex != -1) {
+             fileName = fileName.substring(0, queryIndex)
+         }
+         return fileName
     }
 }

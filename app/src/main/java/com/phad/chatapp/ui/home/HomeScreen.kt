@@ -326,6 +326,7 @@ fun HomeScreen(
                     // Content with HorizontalPager for swipe navigation
                     HorizontalPager(
                         state = pagerState,
+                        userScrollEnabled = false,
                         modifier = Modifier
                             .fillMaxSize()
                             .background(Color(0xFFF5F5F5))

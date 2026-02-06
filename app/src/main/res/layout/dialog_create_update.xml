@@ -8,6 +8,10 @@
     app:cardElevation="6dp"
     app:cardBackgroundColor="@android:color/white">
 
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -21,6 +25,7 @@
             android:layout_marginBottom="16dp">
             
             <TextView
+                android:id="@+id/dialogTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_alignParentStart="true"
@@ -382,5 +387,52 @@
         </androidx.core.widget.NestedScrollView>
 
     </LinearLayout>
-    
+
+        <!-- Upload Progress Overlay -->
+        <FrameLayout
+            android:id="@+id/uploadProgressOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#D9000000"
+            android:clickable="true"
+            android:focusable="true"
+            android:visibility="gone"
+            android:elevation="10dp"
+            android:padding="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:background="@drawable/rounded_background"
+                android:backgroundTint="#FFFFFF"
+                android:padding="24dp">
+
+                <ProgressBar
+                    android:id="@+id/uploadProgressBar"
+                    android:layout_width="60dp"
+                    android:layout_height="60dp"
+                    android:indeterminate="false"
+                    android:max="100"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:progressDrawable="@drawable/circular_progress" />
+
+                <TextView
+                    android:id="@+id/uploadProgressText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Uploading... 0%"
+                    android:textColor="#333333"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="16dp"/>
+
+
+
+            </LinearLayout>
+        </FrameLayout>
+
+    </FrameLayout>
 </androidx.cardview.widget.CardView>

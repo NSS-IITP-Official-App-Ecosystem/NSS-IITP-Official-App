@@ -144,14 +144,15 @@ fun UpdateCard(
                     ) {
                         // Links first
                         items(allLinks) { link ->
-                            SuggestionChip(
+                            // Using AttachmentBox for consistent link styling
+                            AttachmentBox(
+                                text = link,
+                                icon = Icons.Default.Link,
+                                isLink = true,
                                 onClick = {
                                     try {
                                         val url = link.trim()
-                                        if (url.isEmpty()) {
-                                            android.widget.Toast.makeText(context, "Link is empty", android.widget.Toast.LENGTH_SHORT).show()
-                                            return@SuggestionChip
-                                        }
+                                        if (url.isEmpty()) return@AttachmentBox
                                         
                                         val finalUrl = if (!url.startsWith("http://") && !url.startsWith("https://")) {
                                             "https://$url"
@@ -163,15 +164,9 @@ fun UpdateCard(
                                         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                         context.startActivity(intent)
                                     } catch (e: Exception) {
-                                        android.util.Log.e("UpdateCard", "Failed to open link", e)
-                                        android.widget.Toast.makeText(context, "Cannot open link: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                                        android.widget.Toast.makeText(context, "Cannot open link", android.widget.Toast.LENGTH_SHORT).show()
                                     }
-                                },
-                                label = { Text("Link", fontSize = 12.sp) },
-                                icon = { Icon(Icons.Default.Link, null, modifier = Modifier.size(16.dp)) },
-                                colors = SuggestionChipDefaults.suggestionChipColors(
-                                    containerColor = Color(0xFFE0E0E0)
-                                )
+                                }
                             )
                         }
                         

@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -11,6 +12,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
@@ -155,38 +157,68 @@ fun TextPostView(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+
             // Attachments (Document / Link) - Moved ABOVE Body
             Column(
                 modifier = Modifier.padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                if (!update.documentUrl.isNullOrEmpty()) {
-                    SuggestionChip(
+                // Show Documents from list (if available) or legacy single field (fallback)
+                val docs = update.documentUrls ?: if (!update.documentUrl.isNullOrEmpty()) listOf(update.documentUrl) else emptyList()
+                val docNames = update.documentNames // Should be list, fallback loop if legacy single
+                
+                docs.forEachIndexed { index, url ->
+                    val name = docNames?.getOrNull(index) ?: update.documentName ?: "Document"
+                    AttachmentBox(
+                        text = name,
+                        icon = Icons.Default.Description,
+                        isLink = false,
                         onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(update.documentUrl))
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                             context.startActivity(intent)
-                        },
-                        label = { Text(update.documentName ?: "Document", color = Color.Black) },
-                        icon = { Icon(Icons.Default.Description, null, tint = Color.Blue) },
-                        colors = SuggestionChipDefaults.suggestionChipColors(containerColor = Color(0xFFEEEEEE))
+                        }
                     )
                 }
+
+                // Show Links from list or legacy
+                val links = update.externalLinks ?: if (!update.externalLink.isNullOrEmpty()) listOf(update.externalLink) else emptyList()
                 
-                if (!update.externalLink.isNullOrEmpty()) {
-                    SuggestionChip(
-                        onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(update.externalLink))
-                            context.startActivity(intent)
-                        },
-                        label = { Text("Visit Link", color = Color.Black) },
-                        icon = { Icon(Icons.Default.Link, null, tint = Color.Blue) },
-                        colors = SuggestionChipDefaults.suggestionChipColors(containerColor = Color(0xFFEEEEEE))
-                    )
+                links.forEach { linkUrl ->
+                    if (!linkUrl.isNullOrEmpty()) {
+                        AttachmentBox(
+                            text = linkUrl,
+                            icon = Icons.Default.Link,
+                            isLink = true,
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(linkUrl))
+                                context.startActivity(intent)
+                            }
+                        )
+                    }
                 }
             }
 
             // Inline Media (Image) - Moved ABOVE Body
-            if (!update.imageUrl.isNullOrEmpty()) {
+            if (update.imageUrls != null && update.imageUrls.isNotEmpty()) {
+                 Spacer(modifier = Modifier.height(12.dp))
+                 // Show only first image for feed view, or pager? 
+                 // For simplified feed list, showing first image or pager is common. 
+                 // Let's simple show first image for now as per `TextPostView` legacy behavior, 
+                 // or column of images? User didn't specify multiple image view in feed, just "upload progress".
+                 // BUT `TextPostView` is likely used in Feed. 
+                 // If I just show first, it matches legacy.
+                 // Ideally a Horizontal Pager.
+                 // Sticking to legacy single image view logic for now to avoid scope creep, using first image.
+                 AsyncImage(
+                    model = update.imageUrls.first(),
+                    contentDescription = "Post Image",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(250.dp)
+                        .clickable { /* View Fullscreen */ },
+                    contentScale = ContentScale.Crop
+                )
+            } else if (!update.imageUrl.isNullOrEmpty()) {
                 Spacer(modifier = Modifier.height(12.dp))
                 AsyncImage(
                     model = update.imageUrl,
@@ -245,6 +277,56 @@ fun TextPostView(
             
             // Spacer at bottom
              Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+fun AttachmentBox(
+    text: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    isLink: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .then(if (isLink) Modifier.width(188.dp) else Modifier.wrapContentWidth()) // Fixed width for links (0.75x of 250dp), wrap for docs
+            .height(40.dp) // 3. Same Height
+            .border(1.dp, Color(0xFFE0E0E0), androidx.compose.foundation.shape.RoundedCornerShape(8.dp)) // 3. Style Border
+            .background(Color.White, androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Icon at left
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = Color(0xFF1E88E5), // Blue tint
+            modifier = Modifier.size(20.dp)
+        )
+        
+        Spacer(modifier = Modifier.width(8.dp))
+        
+        // Text
+        Text(
+            text = text,
+            color = Color.Black, // 3. Font Size same
+            fontSize = 14.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = isLink) // Fill if link to allow truncation at end of fixed width
+        )
+        
+        // Download Icon for Docs (right side)
+        if (!isLink) {
+             Spacer(modifier = Modifier.width(8.dp))
+             Icon(
+                imageVector = Icons.Default.Download,
+                contentDescription = "Download",
+                 tint = Color.Gray,
+                 modifier = Modifier.size(16.dp)
+             )
         }
     }
 }
