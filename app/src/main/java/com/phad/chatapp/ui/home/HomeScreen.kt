@@ -169,29 +169,71 @@ fun HomeScreen(
                                     )
                                 }
                                 
-                                DropdownMenu(
-                                    expanded = showMenu,
-                                    onDismissRequest = { showMenu = false }
+                                MaterialTheme(
+                                    shapes = MaterialTheme.shapes.copy(extraSmall = RoundedCornerShape(16.dp))
                                 ) {
-                                    DropdownMenuItem(
-                                        text = { Text("Create Update") },
+                                    DropdownMenu(
+                                        expanded = showMenu,
+                                        onDismissRequest = { showMenu = false },
+                                        modifier = Modifier
+                                            .width(200.dp), // Check width
+                                        offset = androidx.compose.ui.unit.DpOffset(x = (-16).dp, y = 8.dp)
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = { 
+                                                Text(
+                                                    "Create Update",
+                                                    fontWeight = FontWeight.Medium,
+                                                    color = Color.Black
+                                                ) 
+                                            },
                                         onClick = {
                                             showMenu = false
                                             onAddUpdateClick()
                                         },
-                                        leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null) }
+                                        leadingIcon = { 
+                                            Icon(
+                                                Icons.Filled.Add, 
+                                                contentDescription = null,
+                                                tint = Color(0xFF2196F3) // Blue tint
+                                            ) 
+                                        },
+                                        colors = MenuDefaults.itemColors(
+                                            textColor = Color.Black,
+                                            leadingIconColor = Color(0xFF2196F3)
+                                        )
                                     )
+                                    
+                                    HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp), color = Color.LightGray.copy(alpha = 0.5f))
+
                                     DropdownMenuItem(
-                                        text = { Text("Batch Delete") },
+                                        text = { 
+                                            Text(
+                                                "Batch Delete",
+                                                fontWeight = FontWeight.Medium,
+                                                color = Color.Black
+                                            ) 
+                                        },
                                         onClick = {
                                             showMenu = false
                                             onBatchDeleteClick()
                                         },
-                                        leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) }
+                                        leadingIcon = { 
+                                            Icon(
+                                                Icons.Filled.Delete, 
+                                                contentDescription = null,
+                                                tint = Color(0xFFF44336) // Red tint
+                                            ) 
+                                        },
+                                        colors = MenuDefaults.itemColors(
+                                            textColor = Color.Black,
+                                            leadingIconColor = Color(0xFFF44336)
+                                        )
                                     )
                                 }
                             }
-                        } else {
+                        }
+                    } else {
                             // Non-admin: FAQ button
                             IconButton(onClick = onChatbotClick) {
                                 Icon(

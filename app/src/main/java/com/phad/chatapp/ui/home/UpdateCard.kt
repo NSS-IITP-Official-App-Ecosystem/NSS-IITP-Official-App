@@ -16,9 +16,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -108,25 +110,68 @@ fun UpdateCard(
                                 )
                             }
 
-                            DropdownMenu(
-                                expanded = showMenu,
-                                onDismissRequest = { showMenu = false }
+                            MaterialTheme(
+                                shapes = MaterialTheme.shapes.copy(extraSmall = RoundedCornerShape(16.dp))
                             ) {
-                                DropdownMenuItem(
-                                    text = { Text("Edit") },
+                                DropdownMenu(
+                                    modifier = Modifier
+                                        .width(160.dp),
+                                    expanded = showMenu,
+                                    onDismissRequest = { showMenu = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { 
+                                            Text(
+                                                "Edit",
+                                                fontWeight = FontWeight.Medium,
+                                                color = Color.Black
+                                            ) 
+                                        },
                                     onClick = {
                                         showMenu = false
                                         onEditClick(update)
-                                    }
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Filled.Edit,
+                                            contentDescription = null,
+                                            tint = Color(0xFF2196F3)
+                                        )
+                                    },
+                                    colors = MenuDefaults.itemColors(
+                                        textColor = Color.Black,
+                                        leadingIconColor = Color(0xFF2196F3)
+                                    )
                                 )
+                                
+                                HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp), color = Color.LightGray.copy(alpha = 0.5f))
+
                                 DropdownMenuItem(
-                                    text = { Text("Delete") },
+                                    text = { 
+                                        Text(
+                                            "Delete",
+                                            fontWeight = FontWeight.Medium,
+                                            color = Color.Black
+                                        ) 
+                                    },
                                     onClick = {
                                         showMenu = false
                                         onDeleteClick(update)
-                                    }
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = null,
+                                            tint = Color(0xFFF44336)
+                                        )
+                                    },
+                                    colors = MenuDefaults.itemColors(
+                                        textColor = Color.Black,
+                                        leadingIconColor = Color(0xFFF44336)
+                                    )
                                 )
                             }
+                        }
                         }
                     }
                 }

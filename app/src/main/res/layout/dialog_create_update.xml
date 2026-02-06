@@ -6,6 +6,7 @@
     android:layout_height="wrap_content"
     app:cardCornerRadius="16dp"
     app:cardElevation="6dp"
+    android:layout_margin="24dp"
     app:cardBackgroundColor="@android:color/white">
 
     <FrameLayout
@@ -43,7 +44,7 @@
                 android:layout_centerVertical="true"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:src="@android:drawable/ic_menu_close_clear_cancel"
-                android:tint="#888888"
+                android:tint="#000000"
                 android:scaleType="fitCenter"
                 android:contentDescription="Close" />
         </RelativeLayout>

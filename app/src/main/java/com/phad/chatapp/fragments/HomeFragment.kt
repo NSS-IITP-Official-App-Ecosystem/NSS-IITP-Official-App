@@ -431,6 +431,7 @@ class HomeFragment : Fragment() {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             )
+            window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
         }
 
         // Log auth status and user information for debugging
@@ -1198,68 +1199,89 @@ class HomeFragment : Fragment() {
             return
         }
 
-        val titles: Array<CharSequence> = updates.map { 
-            val time = java.text.SimpleDateFormat("dd MMM", java.util.Locale.getDefault()).format(java.util.Date(it.timestamp))
-            "${it.title ?: "Untitled"} ($time)"
-        }.toTypedArray()
-        
-        val checkedItems = BooleanArray(updates.size)
-        val selectedItems = java.util.ArrayList<Int>()
+        // Initialize custom dialog
+        val dialog = Dialog(requireContext())
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        dialog.setContentView(R.layout.dialog_batch_delete)
+        dialog.window?.setLayout(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        dialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
 
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Select Posts to Delete")
-            .setMultiChoiceItems(titles, checkedItems) { dialog, which, isChecked ->
-                if (isChecked) {
-                    selectedItems.add(which)
-                } else {
-                    selectedItems.remove(Integer.valueOf(which))
-                }
-            }
-            .setPositiveButton("Delete Selected") { _, _ ->
-                if (selectedItems.isEmpty()) {
-                    Toast.makeText(requireContext(), "No posts selected", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
-                }
+        val recyclerView = dialog.findViewById<RecyclerView>(R.id.batchDeleteRecyclerView)
+        val deleteButton = dialog.findViewById<Button>(R.id.deleteButton)
+        val cancelButton = dialog.findViewById<Button>(R.id.cancelButton)
 
-                MaterialAlertDialogBuilder(requireContext())
-                    .setTitle("Confirm Batch Delete")
-                    .setMessage("Are you sure you want to delete ${selectedItems.size} posts?")
-                    .setPositiveButton("Delete") { _, _ ->
-                        // Loop and delete with cleanup
-                        val total = selectedItems.size
-                        Toast.makeText(requireContext(), "Deleting $total posts...", Toast.LENGTH_SHORT).show()
+        // Disable delete button initially
+        deleteButton.isEnabled = false
+        deleteButton.alpha = 0.5f
+
+        // Setup Adapter
+        val adapter = com.phad.chatapp.adapters.BatchDeleteAdapter(updates) { count ->
+            deleteButton.isEnabled = count > 0
+            deleteButton.alpha = if (count > 0) 1.0f else 0.5f
+            deleteButton.text = if (count > 0) "Delete ($count)" else "Delete Selected"
+        }
+
+        recyclerView.layoutManager = LinearLayoutManager(requireContext())
+        recyclerView.adapter = adapter
+
+        // Button Listeners
+        cancelButton.setOnClickListener { dialog.dismiss() }
+
+        deleteButton.setOnClickListener {
+            val selectedIndices = adapter.getSelectedItems()
+            if (selectedIndices.isEmpty()) return@setOnClickListener
+
+            // Confirmation Dialog
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle("Confirm Deletion")
+                .setMessage("Are you sure you want to delete ${selectedIndices.size} selected posts? This cannot be undone.")
+                .setPositiveButton("Delete Forever") { _, _ ->
+                    dialog.dismiss() // Close the selection dialog
+                    
+                    // Proceed with deletion
+                    val total = selectedIndices.size
+                    Toast.makeText(requireContext(), "Deleting $total posts...", Toast.LENGTH_SHORT).show()
+
+                    lifecycleScope.launch {
+                        // Show loading indicator in UI if possible, or just toast
                         
-                        lifecycleScope.launch {
-                            selectedItems.forEach { index ->
-                                if (index < updates.size) {
-                                    val update = updates[index]
-                                    
-                                    // Cleanup attachments
-                                    try {
-                                        update.getAllImages().forEach { url -> cloudinaryHelper.deleteImage(url) }
-                                        update.getAllDocuments().forEach { (url, _) -> cloudinaryHelper.deleteDocument(url) }
-                                    } catch (e: Exception) {
-                                        Log.e(TAG, "Error cleaning up attachments for ${update.id}", e)
-                                    }
-                                    
-                                    // Delete from Firestore
+                        selectedIndices.forEach { index ->
+                            if (index < updates.size) {
+                                val update = updates[index]
+                                
+                                // Cleanup attachments
+                                try {
+                                    update.getAllImages().forEach { url -> cloudinaryHelper.deleteImage(url) }
+                                    update.getAllDocuments().forEach { (url, _) -> cloudinaryHelper.deleteDocument(url) }
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Error cleaning up attachments for ${update.id}", e)
+                                }
+                                
+                                // Delete from Firestore
+                                try {
                                     db.collection("ttw_updates").document(update.id).delete()
                                     db.collection("nss_updates").document(update.id).delete()
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Error deleting document ${update.id}", e)
                                 }
                             }
-                            
-                            withContext(Dispatchers.Main) {
-                                Toast.makeText(requireContext(), "Batch delete complete", Toast.LENGTH_SHORT).show()
-                                updateCache = null
-                                loadUpdates()
-                            }
+                        }
+                        
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(requireContext(), "Batch delete complete", Toast.LENGTH_SHORT).show()
+                            updateCache = null
+                            loadUpdates()
                         }
                     }
-                    .setNegativeButton("Cancel", null)
-                    .show()
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+
+        dialog.show()
     }
 
 
