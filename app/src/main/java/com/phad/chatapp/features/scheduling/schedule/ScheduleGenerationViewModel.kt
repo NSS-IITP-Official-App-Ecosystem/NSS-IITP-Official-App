@@ -1827,14 +1827,14 @@ class ScheduleGenerationViewModel : ViewModel() {
                 null
             }
 
-<<<<<<< HEAD
+
             if (name.isNotEmpty()) {
                 Log.d(TAG, "📋 Assignment: ${name} (${rollNo}) -> ${slot.schoolName} ${slot.timeLabel}")
             }
-=======
-            Log.d(TAG, "📋 Volunteer ${volunteer.name} (${volunteer.rollNo}): " +
+
+            Log.d(TAG, "📋 Volunteer ${name} (${rollNo}): " +
                     "Interview Score: ${volunteerDetails?.interviewScore ?: 0}")
->>>>>>> Attendance
+
 
             OptimizedVolunteerAssignment(
                 volunteerName = name,

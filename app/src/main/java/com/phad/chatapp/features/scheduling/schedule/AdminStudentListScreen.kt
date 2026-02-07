@@ -245,7 +245,10 @@ fun AdminStudentListScreen(
                                     .size(40.dp)
                                     .clip(CircleShape)
                                     .background(YellowAccent)
-                                    .clickable { isSearchActive = true },
+                                    .clickable(
+                                        indication = null,
+                                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                                    ) { isSearchActive = true },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
@@ -377,7 +380,11 @@ fun StudentCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .clickable(
+                indication = null,
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                onClick = onClick
+            ),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = NeutralCardSurface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)

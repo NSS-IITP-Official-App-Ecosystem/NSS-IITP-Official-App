@@ -205,7 +205,7 @@ fun ProfileScreen(
                     .fillMaxSize()
                     .nestedScroll(pullRefreshState.nestedScrollConnection)
             ) {
-<<<<<<< HEAD
+
                 Image(
                     painter = painterResource(id = R.drawable.vector271),
                     contentDescription = null,
@@ -302,14 +302,14 @@ fun ProfileScreen(
                 }
 
                 // Profile Image (centered between header and content) - For both Admin and Student users
-=======
+
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(scrollState)
             ) {
                 // Top Section with background images and stats
->>>>>>> Attendance
+
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -382,8 +382,9 @@ fun ProfileScreen(
                                     onRefresh = onRefreshClick,
                                     onExportAttendance = onExportAttendanceClick,
                                     onEventHistory = onEventHistoryClick,
+                                    onManageStudents = onManageStudentsClick,
                                     onChangeSubjects = onChangeSubjectsClick,
-                                onFaqs = onFaqsClick,
+                                    onFaqs = onFaqsClick,
                                     onLogout = { showLogoutDialog = true },
                                     isTeachingWing = teachingWing,
                                     isAdmin = isAdmin,
