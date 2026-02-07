@@ -114,6 +114,8 @@ fun ScheduleMakerScreen(navController: NavController) {
                         onClick = { navController.navigate("scheduleGeneration") }
                     )
 
+
+
                     // View Assignments button
                     OutlinedButton(
                         onClick = { navController.navigate("viewAssignments") },

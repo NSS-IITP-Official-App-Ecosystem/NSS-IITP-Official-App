@@ -44,10 +44,10 @@ class UpdateDetailActivity : AppCompatActivity() {
         
         // Get update from intent
         val update = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            intent.getParcelableExtra(EXTRA_UPDATE, Update::class.java)
+            intent.getSerializableExtra(EXTRA_UPDATE, Update::class.java)
         } else {
             @Suppress("DEPRECATION")
-            intent.getParcelableExtra(EXTRA_UPDATE)
+            intent.getSerializableExtra(EXTRA_UPDATE) as? Update
         }
         
         // Check if we have an update ID instead (this happens when coming from notifications)
@@ -120,30 +120,72 @@ class UpdateDetailActivity : AppCompatActivity() {
             }
             
             // Content
-            contentTextView.text = update.content
+            contentTextView.text = update.content ?: ""
             
-            // Media image - check mediaUrl only
+            // Media handling
             val mediaUrl = update.mediaUrl
-            if (!mediaUrl.isNullOrEmpty()) {
+            val instagramUrl = update.instagramUrl
+            
+            if (!instagramUrl.isNullOrEmpty()) {
+                // Handle Instagram Reel/Post
                 imageView.visibility = View.VISIBLE
                 
-                // Process Google Drive URL for display
-                val displayUrl = processGoogleDriveUrl(mediaUrl)
-                
                 Glide.with(this@UpdateDetailActivity)
-                    .load(displayUrl)
+                    .load(android.R.color.darker_gray)
                     .apply(RequestOptions()
                         .diskCacheStrategy(DiskCacheStrategy.ALL)
                         .placeholder(R.drawable.img_placeholder)
                         .error(R.drawable.img_error))
                     .into(imageView)
-                
-                // Set click listener
+                    
                 imageView.setOnClickListener {
-                    val intent = Intent(this@UpdateDetailActivity, ImageViewActivity::class.java).apply {
-                        putExtra(ImageViewActivity.EXTRA_IMAGE_URL, mediaUrl)
+                    try {
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(instagramUrl))
+                        startActivity(intent)
+                    } catch (e: Exception) {
+                        Toast.makeText(this@UpdateDetailActivity, "Cannot open Instagram: ${e.message}", Toast.LENGTH_SHORT).show()
                     }
-                    startActivity(intent)
+                }
+            } else if (!mediaUrl.isNullOrEmpty()) {
+                imageView.visibility = View.VISIBLE
+                
+                if (update.isVideo) {
+                    // Handle Direct Video - Load thumbnail with Glide (it supports video frames)
+                    Glide.with(this@UpdateDetailActivity)
+                        .load(mediaUrl)
+                        .apply(RequestOptions()
+                            .diskCacheStrategy(DiskCacheStrategy.ALL)
+                            .placeholder(R.drawable.img_placeholder)
+                            .error(R.drawable.img_error))
+                        .into(imageView)
+                        
+                    imageView.setOnClickListener {
+                        try {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(mediaUrl))
+                            intent.setDataAndType(Uri.parse(mediaUrl), "video/*")
+                            startActivity(intent)
+                        } catch (e: Exception) {
+                            Toast.makeText(this@UpdateDetailActivity, "Cannot play video: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                } else {
+                    // Handle Image
+                    val displayUrl = processGoogleDriveUrl(mediaUrl)
+                    
+                    Glide.with(this@UpdateDetailActivity)
+                        .load(displayUrl)
+                        .apply(RequestOptions()
+                            .diskCacheStrategy(DiskCacheStrategy.ALL)
+                            .placeholder(R.drawable.img_placeholder)
+                            .error(R.drawable.img_error))
+                        .into(imageView)
+                    
+                    imageView.setOnClickListener {
+                        val intent = Intent(this@UpdateDetailActivity, ImageViewActivity::class.java).apply {
+                            putExtra(ImageViewActivity.EXTRA_IMAGE_URL, mediaUrl)
+                        }
+                        startActivity(intent)
+                    }
                 }
             } else {
                 imageView.visibility = View.GONE

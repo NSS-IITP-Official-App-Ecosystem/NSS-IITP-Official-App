@@ -25,9 +25,6 @@ data class OptimizedVolunteerAssignment(
     val dayIndex: Int = 0,        // Index into DAY_NAMES array (0-6)
     val slotIndex: Int = 0,       // Index into time slot array (0-n)
     val interviewScore: Int = 0,  // Interview score from students collection
-    val subjectPreference1: String = "", // First subject preference
-    val subjectPreference2: String = "", // Second subject preference
-    val subjectPreference3: String = "", // Third subject preference
     val assignedSubject: String? = null      // Assigned subject code
 )
 

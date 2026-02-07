@@ -1217,9 +1217,7 @@ class ScheduleGenerationViewModel : ViewModel() {
                 dayIndex = slot.dayIndex,
                 slotIndex = slot.slotIndex,
                 interviewScore = 0, // Default for test data
-                subjectPreference1 = "",
-                subjectPreference2 = "",
-                subjectPreference3 = ""
+                assignedSubject = null
             )
         }
 
@@ -1829,9 +1827,14 @@ class ScheduleGenerationViewModel : ViewModel() {
                 null
             }
 
+<<<<<<< HEAD
             if (name.isNotEmpty()) {
                 Log.d(TAG, "📋 Assignment: ${name} (${rollNo}) -> ${slot.schoolName} ${slot.timeLabel}")
             }
+=======
+            Log.d(TAG, "📋 Volunteer ${volunteer.name} (${volunteer.rollNo}): " +
+                    "Interview Score: ${volunteerDetails?.interviewScore ?: 0}")
+>>>>>>> Attendance
 
             OptimizedVolunteerAssignment(
                 volunteerName = name,
@@ -1840,38 +1843,14 @@ class ScheduleGenerationViewModel : ViewModel() {
                 dayIndex = slot.dayIndex,
                 slotIndex = slot.slotIndex,
                 interviewScore = volunteerDetails?.interviewScore ?: 0,
-                subjectPreference1 = volunteerDetails?.subjectPreference1 ?: "",
-                subjectPreference2 = volunteerDetails?.subjectPreference2 ?: "",
-                subjectPreference3 = volunteerDetails?.subjectPreference3 ?: "",
                 assignedSubject = slot.assignedSubject
             )
         }
 
+
+
         // Create group availability data
         val groupAvailabilityData = extractGroupAvailabilityData(slots)
-
-        // Group optimized assignments by slot for organized structure
-        val optimizedSlotAssignments = optimizedAssignments.groupBy { assignment ->
-            mapOf(
-                "dayIndex" to assignment.dayIndex,
-                "slotIndex" to assignment.slotIndex
-            )
-        }.map { (slotInfo, slotAssignments) ->
-            mapOf(
-                "dayIndex" to slotInfo["dayIndex"],
-                "slotIndex" to slotInfo["slotIndex"],
-                "volunteerCount" to slotAssignments.size,
-                "assignments" to slotAssignments.map { assignment ->
-                    mapOf(
-                        "volunteerName" to assignment.volunteerName,
-                        "volunteerRollNo" to assignment.volunteerRollNo,
-                        "volunteerGroup" to assignment.volunteerGroup,
-                        "interviewScore" to assignment.interviewScore,
-                        "assignedSubject" to assignment.assignedSubject
-                    )
-                }
-            )
-        }
 
         return mapOf(
             "name" to presetName,
