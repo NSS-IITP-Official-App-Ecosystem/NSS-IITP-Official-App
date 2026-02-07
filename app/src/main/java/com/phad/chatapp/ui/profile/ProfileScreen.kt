@@ -147,6 +147,11 @@ fun ProfileScreen(
     Log.d("ProfileScreen", "sem2Hours: ${state.sem2Hours}")
     Log.d("ProfileScreen", "eventsAttended: ${state.eventsAttended}")
     Log.d("ProfileScreen", "isStudent: ${state.isStudent}")
+    Log.d("ProfileScreen", "🔍 SWITCH BUTTON DEBUG:")
+    Log.d("ProfileScreen", "teachingWing parameter: $teachingWing")
+    Log.d("ProfileScreen", "currentInterface: $currentInterface")
+    Log.d("ProfileScreen", "isAdmin: $isAdmin")
+    Log.d("ProfileScreen", "Switch button should show: ${teachingWing}")
     Log.d("ProfileScreen", "=== PROFILE SCREEN DEBUG COMPLETE ===")
     val isDarkTheme = isSystemInDarkTheme()
     val backgroundColor = Color(0xff0d0302)
@@ -222,84 +227,6 @@ fun ProfileScreen(
                         .clip(RoundedCornerShape(150.dp))
                 )
 
-                // Header with logo and icons
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 24.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Image(
-                        painter = painterResource(
-                            id = if (currentInterface == "NSS") R.drawable.nss_logo_main else R.drawable.logo
-                        ),
-                        contentDescription = if (currentInterface == "NSS") "NSS Logo" else "Teaching Wing Logo",
-                        colorFilter = if (currentInterface == "NSS") null else null,
-                        modifier = Modifier
-                            .size(48.dp)
-                            .combinedClickable(
-                                onClick = {},
-                                onLongClick = {
-                                    try {
-                                        val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-                                        val version = pInfo.versionName
-                                        val verCode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-                                            pInfo.longVersionCode
-                                        } else {
-                                            @Suppress("DEPRECATION")
-                                            pInfo.versionCode.toLong()
-                                        }
-                                        Toast.makeText(context, "Version: $version ($verCode)", Toast.LENGTH_SHORT).show()
-                                    } catch (e: Exception) {
-                                        Log.e("ProfileScreen", "Error getting version info", e)
-                                    }
-                                }
-                            ),
-                        contentScale = ContentScale.Fit
-                    )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        // Standalone Switch User icon (to the left of menu)
-                        if (teachingWing) {
-                            IconButton(
-                                onClick = onSwitchInterfaceClick,
-                                modifier = Modifier.size(40.dp)
-                            ) {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_group),
-                                    contentDescription = "Switch User",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.size(8.dp))
-                        }
-                        // Hamburger menu button (single button for all options)
-                        Box {
-                            ProfileMenuButton(
-                                onMenuClick = { showMenu = true },
-                                modifier = Modifier.size(40.dp)
-                            )
-                            
-                            // Profile menu dropdown
-                            ProfileMenu(
-                                expanded = showMenu,
-                                onDismiss = { showMenu = false },
-                                onSwitchUser = onSwitchInterfaceClick,
-                                onRefresh = onRefreshClick,
-                                onExportAttendance = onExportAttendanceClick,
-                                onEventHistory = onEventHistoryClick,
-                                onManageStudents = onManageStudentsClick,
-                                onChangeSubjects = onChangeSubjectsClick,
-                                onFaqs = onFaqsClick,
-                                onLogout = { showLogoutDialog = true },
-                                isTeachingWing = teachingWing,
-                                isAdmin = isAdmin,
-                                currentInterface = currentInterface
-                            )
-                        }
-                    }
-                }
 
                 // Profile Image (centered between header and content) - For both Admin and Student users
 
@@ -348,7 +275,26 @@ fun ProfileScreen(
                             ),
                             contentDescription = if (currentInterface == "NSS") "NSS Logo" else "Teaching Wing Logo",
                             colorFilter = if (currentInterface == "NSS") null else null,
-                            modifier = Modifier.size(48.dp),
+                            modifier = Modifier
+                                .size(48.dp)
+                                .combinedClickable(
+                                    onClick = {},
+                                    onLongClick = {
+                                        try {
+                                            val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+                                            val version = pInfo.versionName
+                                            val verCode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                                                pInfo.longVersionCode
+                                            } else {
+                                                @Suppress("DEPRECATION")
+                                                pInfo.versionCode.toLong()
+                                            }
+                                            Toast.makeText(context, "Version: $version ($verCode)", Toast.LENGTH_SHORT).show()
+                                        } catch (e: Exception) {
+                                            Log.e("ProfileScreen", "Error getting version info", e)
+                                        }
+                                    }
+                                ),
                             contentScale = ContentScale.Fit
                         )
                         Row(verticalAlignment = Alignment.CenterVertically) {

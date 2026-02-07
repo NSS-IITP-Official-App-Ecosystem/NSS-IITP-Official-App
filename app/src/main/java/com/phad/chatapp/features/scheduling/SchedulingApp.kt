@@ -97,6 +97,12 @@ fun AppNavigation(
                 onBackClick = onBackClick
             )
         }
+        composable("subjectPreference") {
+            com.phad.chatapp.features.scheduling.schedule.SubjectPreferenceScreen(
+                navController = navController,
+                onBackClick = onBackClick
+            )
+        }
         composable("setAvailability") {
             SetAvailabilityScreen(navController = navController)
         }

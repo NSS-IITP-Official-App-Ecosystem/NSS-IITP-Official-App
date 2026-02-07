@@ -98,10 +98,9 @@ object AttendanceStatsCalculator {
                 }
                 val totalEvents = totalRelevantEvents
 
-                // Keep meta totals for denominators if present, but not required by UI
-                val metaSnap = db.collection("meta").document("statistics").get().await()
-                val totalSem1Hours = (metaSnap.getLong("totalSem1Hours") ?: 0L).toInt()
-                val totalSem2Hours = (metaSnap.getLong("totalSem2Hours") ?: 0L).toInt()
+                // Calculate total available hours for each semester using the same logic as legacy method
+                val totalSem1Hours = calculateTotalSemesterHours(totalEventsSnapshot.documents, 1, rollNumber)
+                val totalSem2Hours = calculateTotalSemesterHours(totalEventsSnapshot.documents, 2, rollNumber)
 
                 // If any of the values look missing (zero), compute fallbacks by scanning events
                 var computedSem1 = finalSem1Hours
@@ -141,13 +140,16 @@ object AttendanceStatsCalculator {
                     if (computedEvents == 0L) computedEvents = evCount
                 }
 
-                Log.d(TAG, "Totals - events=$totalEvents, SEM1 total (meta)=$totalSem1Hours, SEM2 total (meta)=$totalSem2Hours")
+                Log.d(TAG, "Totals - events=$totalEvents, SEM1 total=$totalSem1Hours, SEM2 total=$totalSem2Hours")
 
                 val sem1Formatted = AttendanceEventUtils.formatHours(computedSem1)
                 val sem2Formatted = AttendanceEventUtils.formatHours(computedSem2)
-                val sem1Stats = "${sem1Formatted}/$totalSem1Hours"
-                val sem2Stats = "${sem2Formatted}/$totalSem2Hours"
+                val totalSem1Formatted = AttendanceEventUtils.formatHours(totalSem1Hours)
+                val totalSem2Formatted = AttendanceEventUtils.formatHours(totalSem2Hours)
+                val sem1Stats = "${sem1Formatted}/$totalSem1Formatted"
+                val sem2Stats = "${sem2Formatted}/$totalSem2Formatted"
                 val eventsStats = "$computedEvents/$totalEvents"
+
                 
                 Log.d(TAG, "Final stats - SEM1=$sem1Stats, SEM2=$sem2Stats, Events=$eventsStats")
                 Log.d(TAG, "=== ATTENDANCE STATS CALCULATOR DEBUG COMPLETE ===")

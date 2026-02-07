@@ -261,10 +261,13 @@ fun EventHistoryScreen(
                             Spacer(modifier = Modifier.width(12.dp))
                             
                             // Filter Toggle Button
-                            Surface(
+                            Card(
                                 shape = RoundedCornerShape(12.dp),
-                                color = if (showFilterDialog) MaterialTheme.colorScheme.primary else Color(0xFFE3F2FD), // Match QR active color logic
-                                modifier = Modifier.size(56.dp).clickable { // Match height of text field approx (56dp usually)
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (showFilterDialog) MaterialTheme.colorScheme.primary else Color(0xFFE3F2FD)
+                                ),
+                                modifier = Modifier.size(56.dp),
+                                onClick = {
                                     showFilterDialog = !showFilterDialog 
                                     if (!showFilterDialog) {
                                         fromDate = null
@@ -274,7 +277,7 @@ fun EventHistoryScreen(
                                     }
                                 }
                             ) {
-                                Box(contentAlignment = Alignment.Center) {
+                                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                                     Icon(
                                         imageVector = Icons.Default.FilterList,
                                         contentDescription = "Filters",

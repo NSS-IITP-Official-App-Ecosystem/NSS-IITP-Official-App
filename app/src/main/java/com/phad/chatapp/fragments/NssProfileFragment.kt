@@ -59,7 +59,8 @@ class NssProfileFragment : Fragment() {
         return ComposeView(requireContext()).apply {
             setContent {
                 val state by uiState.collectAsState()
-                val teachingWing = sessionManager.getTeachingWing()
+                // Show switch button if user has Teaching Wing in their wings list  
+                val teachingWing = state.wings.any { it.contains("Teaching", ignoreCase = true) }
                 ProfileScreen(
                     state = state,
                     onLogoutClick = { logout() },
@@ -71,14 +72,11 @@ class NssProfileFragment : Fragment() {
                     onExportAttendanceClick = { exportAttendanceMatrix() },
                     onEventHistoryClick = { openEventHistory() },
                     onSwitchInterfaceClick = {
-                        // Use session flag to determine eligibility
-                        if (sessionManager.getTeachingWing()) {
-                            // Directly switch to Teaching Wing interface (symmetric to Teaching Wing -> NSS switch)
-                            sessionManager.setLastInterfaceChoice("TEACHING_WING")
-                            val intent = Intent(requireContext(), com.phad.chatapp.MainActivity::class.java)
-                            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                            startActivity(intent)
-                        }
+                        // Switch to Teaching Wing interface (user has Teaching Wing in their wings list)
+                        sessionManager.setLastInterfaceChoice("TEACHING_WING")
+                        val intent = Intent(requireContext(), com.phad.chatapp.MainActivity::class.java)
+                        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                        startActivity(intent)
                     },
                     onSem1HoursClick = {
                         val rollNumber = sessionManager.fetchUserId()
@@ -320,37 +318,18 @@ class NssProfileFragment : Fragment() {
                         // For simplicity and performance, effectively we just want to update the nominators
                         // The denominators usually don't change often.
                         
-                        // Let's get totals. Since we are inside a coroutine, we can fetch.
-                        // However, fetching on every user update might be overkill? 
-                        // The user update happens when hours change.
-                        val db = FirebaseFirestore.getInstance()
-                        val metaSnap = db.collection("meta").document("statistics").get().await()
-                        val totalSem1 = (metaSnap.getLong("totalSem1Hours") ?: 0L).toInt()
-                        val totalSem2 = (metaSnap.getLong("totalSem2Hours") ?: 0L).toInt()
-                        val totalEvents = (metaSnap.getLong("totalEvents") ?: 0L).toInt()
-                        
-                        // Consolidate total logic - reusing calculator logic implicitly or explicitly?
-                        // We'll trust the meta for denominators as per original code pattern
-                        
-                         // But calculateStudentStats logic for DENOMINATOR was:
-                        // val totalSem1Hours = calculateTotalSemesterHours(eventsSnapshot.documents, 1, rollNumber)
-                        // This seems dynamic per student based on visibleOnlyToPresent!
-                        // The AttendanceStatsCalculator.readStudentStatsFromUsers used:
-                        // val totalSem1Hours = (metaSnap.getLong("totalSem1Hours") ?: 0L).toInt()
-                        // So it was using global meta.
-                        
-                        val sem1Formatted = com.phad.chatapp.utils.AttendanceEventUtils.formatHours(sem1)
-                        val sem2Formatted = com.phad.chatapp.utils.AttendanceEventUtils.formatHours(sem2)
+                        // Get properly formatted stats with correct denominators from the calculator
+                        val (sem1Stats, sem2Stats, eventsStats) = AttendanceStatsCalculator.readStudentStatsFromUsers(rollNumber)
                         
                         _uiState.update { 
                             it.copy(
-                                sem1Hours = "$sem1Formatted/$totalSem1",
-                                sem2Hours = "$sem2Formatted/$totalSem2",
-                                eventsAttended = "$events/$totalEvents"
+                                sem1Hours = sem1Stats,
+                                sem2Hours = sem2Stats,
+                                eventsAttended = eventsStats
                             ) 
                         }
                         
-                        Log.d(TAG, "Real-time stats update: SEM1=$sem1Formatted, SEM2=$sem2Formatted, Events=$events")
+                        Log.d(TAG, "Real-time stats update: SEM1=$sem1Stats, SEM2=$sem2Stats, Events=$eventsStats")
                     }
                 }
             } catch (e: Exception) {

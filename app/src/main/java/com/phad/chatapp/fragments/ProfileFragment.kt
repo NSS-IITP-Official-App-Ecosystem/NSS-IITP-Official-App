@@ -60,7 +60,8 @@ class ProfileFragment : Fragment() {
         return ComposeView(requireContext()).apply {
             setContent {
                 val state by uiState.collectAsState()
-                val teachingWing = sessionManager.getTeachingWing()
+                // Show switch button if user has Teaching Wing in their wings list
+                val teachingWing = state.wings.any { it.contains("Teaching", ignoreCase = true) }
                 ProfileScreen(
                     state = state,
                     onLogoutClick = { logout() },
@@ -72,20 +73,11 @@ class ProfileFragment : Fragment() {
                     onExportAttendanceClick = { exportAttendanceMatrix() },
                     onEventHistoryClick = { openEventHistory() },
                     onSwitchInterfaceClick = {
-                        val currentInterface = "Teaching Wing"
-                        if (teachingWing) {
-                            if (currentInterface == "Teaching Wing") {
-                                sessionManager.setLastInterfaceChoice("NSS")
-                                val intent = Intent(requireContext(), com.phad.chatapp.NssMainActivity::class.java)
-                                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                                startActivity(intent)
-                            } else {
-                                sessionManager.setLastInterfaceChoice("TEACHING_WING")
-                                val intent = Intent(requireContext(), com.phad.chatapp.MainActivity::class.java)
-                                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                                startActivity(intent)
-                            }
-                        }
+                        // Switch to NSS interface (user is currently in Teaching Wing)
+                        sessionManager.setLastInterfaceChoice("NSS")
+                        val intent = Intent(requireContext(), com.phad.chatapp.NssMainActivity::class.java)
+                        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                        startActivity(intent)
                     },
                     onSem1HoursClick = {
                         val rollNumber = sessionManager.fetchUserId()
