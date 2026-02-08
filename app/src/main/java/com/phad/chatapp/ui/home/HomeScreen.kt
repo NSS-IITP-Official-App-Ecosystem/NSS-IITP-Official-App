@@ -425,7 +425,7 @@ fun UpdatesTab(
     } else {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(vertical = 8.dp)
+            contentPadding = PaddingValues(top = 8.dp, bottom = 88.dp)
         ) {
             items(updates) { update ->
                 UpdateCard(
@@ -459,7 +459,7 @@ fun ReelsTab(
     } else {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(vertical = 8.dp)
+            contentPadding = PaddingValues(top = 8.dp, bottom = 88.dp)
         ) {
             items(updates) { update ->
                 ReelCard(
