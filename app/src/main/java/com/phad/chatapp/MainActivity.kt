@@ -124,6 +124,7 @@ class MainActivity : AppCompatActivity() {
         if (currentUserId.isNotEmpty()) {
             notificationHelper.startListeningForNotifications(currentUserId)
         }
+        
         Log.d("MainActivity", "onResume end")
     }
     

@@ -63,7 +63,8 @@ fun HomeScreen(
     onEditPost: (Update) -> Unit = {},
     onDeletePost: (Update) -> Unit = {},
     onBatchDeleteClick: () -> Unit = {},
-    onRefresh: () -> Unit = {}
+    onRefresh: () -> Unit = {},
+    onBottomNavVisibilityChanged: (Boolean) -> Unit = {}
 ) {
     val backgroundColor = Color(0xff0d0302)
     val configuration = LocalConfiguration.current
@@ -106,6 +107,11 @@ fun HomeScreen(
         snapshotFlow { pagerState.currentPage }.collect { page ->
             selectedTab = page
         }
+    }
+    
+    // Hide/show bottom navigation based on detail screen visibility
+    LaunchedEffect(showDetailScreen) {
+        onBottomNavVisibilityChanged(showDetailScreen == null)
     }
 
     // Handle back button when detail screen is shown

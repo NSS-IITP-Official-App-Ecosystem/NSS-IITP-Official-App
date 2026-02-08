@@ -161,6 +161,11 @@ class HomeFragment : Fragment() {
                     onBatchDeleteClick = { showBatchDeleteDialog() },
                     onRefresh = { 
                         refreshUpdates()
+                    },
+                    onBottomNavVisibilityChanged = { shouldShow ->
+                        // Control the bottom navigation visibility from the parent activity
+                        (activity as? com.phad.chatapp.MainActivity)?.findViewById<View>(com.phad.chatapp.R.id.bottom_nav_container)?.visibility =
+                            if (shouldShow) View.VISIBLE else View.GONE
                     }
                 )
             }
