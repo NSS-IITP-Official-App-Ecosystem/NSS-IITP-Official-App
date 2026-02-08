@@ -38,6 +38,7 @@ import com.phad.chatapp.R
 import com.phad.chatapp.utils.CloudinaryHelper
 import com.phad.chatapp.utils.SessionManager
 import com.phad.chatapp.adapters.UpdateCardAdapter
+import com.phad.chatapp.adapters.BatchDeleteAdapter
 import com.phad.chatapp.models.Update
 import java.io.FileNotFoundException
 import java.util.Calendar
@@ -444,11 +445,11 @@ class NssHomeFragment : Fragment() {
         }
         
         // Initialize the dialog
-        createUpdateDialog = Dialog(requireContext()).apply {
+        createUpdateDialog = Dialog(requireContext(), R.style.TransparentDialog).apply {
             requestWindowFeature(Window.FEATURE_NO_TITLE)
             setContentView(R.layout.dialog_create_update)
             window?.setLayout(
-                ViewGroup.LayoutParams.MATCH_PARENT,
+                (resources.displayMetrics.widthPixels * 0.90).toInt(),
                 ViewGroup.LayoutParams.WRAP_CONTENT
             )
         }
@@ -1194,14 +1195,37 @@ class NssHomeFragment : Fragment() {
     }
 
     private fun confirmDeletePost(update: Update) {
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Delete Post?")
-            .setMessage("Are you sure you want to delete '${update.title}'? This action cannot be undone.")
-            .setPositiveButton("Delete") { _, _ ->
-                deletePost(update)
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
+        // Create custom dialog for better UX
+        val dialog = Dialog(requireContext(), R.style.TransparentDialog)
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        dialog.setContentView(R.layout.dialog_delete_confirmation)
+        dialog.window?.setLayout(
+            (resources.displayMetrics.widthPixels * 0.85).toInt(),
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        // Theme handles transparency, but safe to keep or remove. Theme is better.
+        
+        // Set up dialog views
+        val titleTextView = dialog.findViewById<TextView>(R.id.deleteDialogTitle)
+        val messageTextView = dialog.findViewById<TextView>(R.id.deleteDialogMessage)
+        val deleteButton = dialog.findViewById<Button>(R.id.deleteConfirmButton)
+        val cancelButton = dialog.findViewById<Button>(R.id.deleteCancelButton)
+        
+        // Set post title in message
+        val postTitle = if (update.title.isNullOrEmpty()) "this post" else "'${update.title}'"
+        messageTextView.text = "Are you sure you want to delete $postTitle? This action cannot be undone."
+        
+        // Button listeners
+        deleteButton.setOnClickListener {
+            dialog.dismiss()
+            deletePost(update)
+        }
+        
+        cancelButton.setOnClickListener {
+            dialog.dismiss()
+        }
+        
+        dialog.show()
     }
 
     private fun deletePost(update: Update) {
@@ -1227,58 +1251,98 @@ class NssHomeFragment : Fragment() {
             return
         }
 
-        val titles: Array<CharSequence> = updates.map { 
-            val time = java.text.SimpleDateFormat("dd MMM", java.util.Locale.getDefault()).format(java.util.Date(it.timestamp))
-            "${it.title ?: "Untitled"} ($time)"
-        }.toTypedArray()
-        
-        val checkedItems = BooleanArray(updates.size)
-        val selectedItems = java.util.ArrayList<Int>()
+        // Initialize custom delete selection dialog
+        val dialog = Dialog(requireContext(), R.style.TransparentDialog)
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        dialog.setContentView(R.layout.dialog_batch_delete)
+        dialog.window?.setLayout(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
 
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Select Posts to Delete")
-            .setMultiChoiceItems(titles, checkedItems) { dialog, which, isChecked ->
-                if (isChecked) {
-                    selectedItems.add(which)
-                } else {
-                    selectedItems.remove(Integer.valueOf(which))
-                }
-            }
-            .setPositiveButton("Delete Selected") { _, _ ->
-                if (selectedItems.isEmpty()) {
-                    Toast.makeText(requireContext(), "No posts selected", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
-                }
+        val recyclerView = dialog.findViewById<RecyclerView>(R.id.batchDeleteRecyclerView)
+        val deleteButton = dialog.findViewById<Button>(R.id.deleteButton)
+        val cancelButton = dialog.findViewById<Button>(R.id.cancelButton)
 
-                MaterialAlertDialogBuilder(requireContext())
-                    .setTitle("Confirm Batch Delete")
-                    .setMessage("Are you sure you want to delete ${selectedItems.size} posts?")
-                    .setPositiveButton("Delete") { _, _ ->
-                        // Loop and delete
-                        var deletedCount = 0
-                        val total = selectedItems.size
-                        
-                        selectedItems.forEach { index ->
-                            if (index < updates.size) {
-                                // Simplified delete for batch to avoid spam
-                                val update = updates[index]
-                                db.collection("nss_updates").document(update.id).delete()
-                                db.collection("updates").document(update.id).delete()
-                            }
+        // Disable delete button initially
+        deleteButton.isEnabled = false
+        deleteButton.alpha = 0.5f
+
+        // Setup Adapter
+        val adapter = com.phad.chatapp.adapters.BatchDeleteAdapter(updates) { count ->
+            deleteButton.isEnabled = count > 0
+            deleteButton.alpha = if (count > 0) 1.0f else 0.5f
+            deleteButton.text = if (count > 0) "Delete ($count)" else "Delete Selected"
+        }
+
+        recyclerView.layoutManager = LinearLayoutManager(requireContext())
+        recyclerView.adapter = adapter
+
+        // Button Listeners
+        cancelButton.setOnClickListener { dialog.dismiss() }
+
+        deleteButton.setOnClickListener {
+            val selectedIndices = adapter.getSelectedItems()
+            if (selectedIndices.isEmpty()) return@setOnClickListener
+
+            // Confirmation Dialog with Custom UI
+            val confirmDialog = Dialog(requireContext(), R.style.TransparentDialog)
+            confirmDialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+            confirmDialog.setContentView(R.layout.dialog_delete_confirmation)
+            confirmDialog.window?.setLayout(
+                (resources.displayMetrics.widthPixels * 0.85).toInt(),
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+
+            val titleTextView = confirmDialog.findViewById<TextView>(R.id.deleteDialogTitle)
+            val messageTextView = confirmDialog.findViewById<TextView>(R.id.deleteDialogMessage)
+            val confirmDeleteButton = confirmDialog.findViewById<Button>(R.id.deleteConfirmButton)
+            val confirmCancelButton = confirmDialog.findViewById<Button>(R.id.deleteCancelButton)
+
+            titleTextView.text = "Confirm Batch Delete"
+            messageTextView.text = "Are you sure you want to delete ${selectedIndices.size} selected posts? This cannot be undone."
+
+            confirmDeleteButton.text = "Delete All"
+            confirmDeleteButton.setOnClickListener {
+                confirmDialog.dismiss()
+                dialog.dismiss() // Close the selection dialog
+                
+                lifecycleScope.launch {
+                    // Proceed with deletion logic (adapted from original NssHomeFragment)
+                    val total = selectedIndices.size
+                    Toast.makeText(requireContext(), "Deleting $total posts...", Toast.LENGTH_SHORT).show()
+                    
+                    selectedIndices.forEach { index ->
+                        if (index < updates.size) {
+                             val update = updates[index]
+                             // Simplified delete logic as per original
+                             db.collection("nss_updates").document(update.id).delete()
+                             db.collection("updates").document(update.id).delete()
+                             
+                             // Try to clean up Cloudinary if possible (best effort)
+                             try {
+                                  update.getAllImages().forEach { url -> cloudinaryHelper.deleteImage(url) }
+                             } catch (e: Exception) {
+                                  Log.e(TAG, "Error cleaning up attachments", e)
+                             }
                         }
-                        
-                        Toast.makeText(requireContext(), "Deleting $total posts...", Toast.LENGTH_SHORT).show()
-                        // Delay reload slightly to allow deletions to propagate
-                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                            updateCache = null
-                            loadUpdates()
-                        }, 1000)
                     }
-                    .setNegativeButton("Cancel", null)
-                    .show()
+                    
+                    // Delay reload slightly to allow deletions to propagate
+                    kotlinx.coroutines.delay(1000)
+                    updateCache = null
+                    loadUpdates()
+                }
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+
+            confirmCancelButton.setOnClickListener {
+                confirmDialog.dismiss()
+            }
+
+            confirmDialog.show()
+        }
+
+        dialog.show()
     }
 
 

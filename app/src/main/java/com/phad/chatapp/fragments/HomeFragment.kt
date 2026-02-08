@@ -436,11 +436,11 @@ class HomeFragment : Fragment() {
         }
         
         // Initialize the dialog
-        createUpdateDialog = Dialog(requireContext()).apply {
+        createUpdateDialog = Dialog(requireContext(), R.style.TransparentDialog).apply {
             requestWindowFeature(Window.FEATURE_NO_TITLE)
             setContentView(R.layout.dialog_create_update)
             window?.setLayout(
-                ViewGroup.LayoutParams.MATCH_PARENT,
+                (resources.displayMetrics.widthPixels * 0.90).toInt(),
                 ViewGroup.LayoutParams.WRAP_CONTENT
             )
             window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
@@ -1210,14 +1210,37 @@ class HomeFragment : Fragment() {
     }
 
     private fun confirmDeletePost(update: Update) {
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Delete Post?")
-            .setMessage("Are you sure you want to delete '${update.title}'? This action cannot be undone.")
-            .setPositiveButton("Delete") { _, _ ->
-                deletePost(update)
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
+        // Create custom dialog for better UX
+        val dialog = Dialog(requireContext())
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        dialog.setContentView(R.layout.dialog_delete_confirmation)
+        dialog.window?.setLayout(
+            (resources.displayMetrics.widthPixels * 0.85).toInt(),
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        dialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+        
+        // Set up dialog views
+        val titleTextView = dialog.findViewById<TextView>(R.id.deleteDialogTitle)
+        val messageTextView = dialog.findViewById<TextView>(R.id.deleteDialogMessage)
+        val deleteButton = dialog.findViewById<Button>(R.id.deleteConfirmButton)
+        val cancelButton = dialog.findViewById<Button>(R.id.deleteCancelButton)
+        
+        // Set post title in message
+        val postTitle = if (update.title.isNullOrEmpty()) "this post" else "'${update.title}'"
+        messageTextView.text = "Are you sure you want to delete $postTitle? This action cannot be undone."
+        
+        // Button listeners
+        deleteButton.setOnClickListener {
+            dialog.dismiss()
+            deletePost(update)
+        }
+        
+        cancelButton.setOnClickListener {
+            dialog.dismiss()
+        }
+        
+        dialog.show()
     }
 
     private fun deletePost(update: Update) {
@@ -1292,51 +1315,70 @@ class HomeFragment : Fragment() {
             val selectedIndices = adapter.getSelectedItems()
             if (selectedIndices.isEmpty()) return@setOnClickListener
 
-            // Confirmation Dialog
-            MaterialAlertDialogBuilder(requireContext())
-                .setTitle("Confirm Deletion")
-                .setMessage("Are you sure you want to delete ${selectedIndices.size} selected posts? This cannot be undone.")
-                .setPositiveButton("Delete Forever") { _, _ ->
-                    dialog.dismiss() // Close the selection dialog
-                    
-                    // Proceed with deletion
-                    val total = selectedIndices.size
-                    Toast.makeText(requireContext(), "Deleting $total posts...", Toast.LENGTH_SHORT).show()
+            // Custom Confirmation Dialog (Replaces MaterialAlertDialogBuilder)
+            val confirmDialog = Dialog(requireContext())
+            confirmDialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+            confirmDialog.setContentView(R.layout.dialog_delete_confirmation)
+            confirmDialog.window?.setLayout(
+                (resources.displayMetrics.widthPixels * 0.85).toInt(),
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            confirmDialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
 
-                    lifecycleScope.launch {
-                        // Show loading indicator in UI if possible, or just toast
-                        
-                        selectedIndices.forEach { index ->
-                            if (index < updates.size) {
-                                val update = updates[index]
-                                
-                                // Cleanup attachments
-                                try {
-                                    update.getAllImages().forEach { url -> cloudinaryHelper.deleteImage(url) }
-                                    update.getAllDocuments().forEach { (url, _) -> cloudinaryHelper.deleteDocument(url) }
-                                } catch (e: Exception) {
-                                    Log.e(TAG, "Error cleaning up attachments for ${update.id}", e)
-                                }
-                                
-                                // Delete from Firestore
-                                try {
-                                    db.collection("ttw_updates").document(update.id).delete()
-                                    db.collection("nss_updates").document(update.id).delete()
-                                } catch (e: Exception) {
-                                    Log.e(TAG, "Error deleting document ${update.id}", e)
-                                }
+            val titleTextView = confirmDialog.findViewById<TextView>(R.id.deleteDialogTitle)
+            val messageTextView = confirmDialog.findViewById<TextView>(R.id.deleteDialogMessage)
+            val confirmDeleteButton = confirmDialog.findViewById<Button>(R.id.deleteConfirmButton)
+            val confirmCancelButton = confirmDialog.findViewById<Button>(R.id.deleteCancelButton)
+
+            titleTextView.text = "Delete ${selectedIndices.size} Posts?"
+            messageTextView.text = "Are you sure you want to delete these posts? This action cannot be undone."
+
+            confirmDeleteButton.setOnClickListener {
+                confirmDialog.dismiss()
+                dialog.dismiss() // Close the selection dialog
+                
+                // Proceed with deletion
+                val total = selectedIndices.size
+                Toast.makeText(requireContext(), "Deleting $total posts...", Toast.LENGTH_SHORT).show()
+
+                lifecycleScope.launch {
+                    // Show loading indicator in UI if possible, or just toast
+                    
+                    selectedIndices.forEach { index ->
+                        if (index < updates.size) {
+                            val update = updates[index]
+                            
+                            // Cleanup attachments
+                            try {
+                                update.getAllImages().forEach { url -> cloudinaryHelper.deleteImage(url) }
+                                update.getAllDocuments().forEach { (url, _) -> cloudinaryHelper.deleteDocument(url) }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Error cleaning up attachments for ${update.id}", e)
+                            }
+                            
+                            // Delete from Firestore
+                            try {
+                                db.collection("ttw_updates").document(update.id).delete()
+                                db.collection("nss_updates").document(update.id).delete()
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Error deleting document ${update.id}", e)
                             }
                         }
-                        
-                        withContext(Dispatchers.Main) {
-                            Toast.makeText(requireContext(), "Batch delete complete", Toast.LENGTH_SHORT).show()
-                            updateCache = null
-                            loadUpdates()
-                        }
+                    }
+                    
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(requireContext(), "Batch delete complete", Toast.LENGTH_SHORT).show()
+                        updateCache = null
+                        loadUpdates()
                     }
                 }
-                .setNegativeButton("Cancel", null)
-                .show()
+            }
+
+            confirmCancelButton.setOnClickListener {
+                confirmDialog.dismiss()
+            }
+
+            confirmDialog.show()
         }
 
         dialog.show()
