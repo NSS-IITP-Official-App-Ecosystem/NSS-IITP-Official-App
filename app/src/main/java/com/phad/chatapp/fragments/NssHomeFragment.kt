@@ -13,6 +13,8 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.Window
+import android.view.MotionEvent
+import android.webkit.WebChromeClient
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -499,11 +501,21 @@ class NssHomeFragment : Fragment() {
         // Add checkbox for cross-posting to Teaching Wing
         val crossPostCheckbox = dialog.findViewById<android.widget.CheckBox>(R.id.crossPostCheckbox)
         
-        // Only show for Teaching Wing admins
+        // Checkbox visibility
+        // Only show for Teaching Wing admins (Dual role)
         if (sessionManager.getTeachingWing()) {
             crossPostCheckbox?.visibility = View.VISIBLE
         } else {
             crossPostCheckbox?.visibility = View.GONE
+        }
+        
+        // Enable internal scrolling for content input
+        updateContentInput?.setOnTouchListener { v, event ->
+            v.parent.requestDisallowInterceptTouchEvent(true)
+            if ((event.action and MotionEvent.ACTION_MASK) == MotionEvent.ACTION_UP) {
+                v.parent.requestDisallowInterceptTouchEvent(false)
+            }
+            false
         }
         
         crossPostCheckbox?.text = "Also post to Teaching Wing interface"

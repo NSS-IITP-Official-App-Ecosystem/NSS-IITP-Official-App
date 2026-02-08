@@ -13,6 +13,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.Window
+import android.view.MotionEvent
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -473,6 +474,15 @@ class HomeFragment : Fragment() {
         val postUpdateButton = dialog.findViewById<Button>(R.id.postUpdateButton)
         val titleCharCounter = dialog.findViewById<TextView>(R.id.titleCharCounter)
         val closeButton = dialog.findViewById<ImageButton>(R.id.closeButton)
+        
+        // Enable internal scrolling for content input
+        updateContentInput?.setOnTouchListener { v, event ->
+            v.parent.requestDisallowInterceptTouchEvent(true)
+            if ((event.action and MotionEvent.ACTION_MASK) == MotionEvent.ACTION_UP) {
+                v.parent.requestDisallowInterceptTouchEvent(false)
+            }
+            false
+        }
         
         // Character counter for title
         updateTitleInput?.addTextChangedListener(object : android.text.TextWatcher {
