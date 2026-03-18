@@ -21,8 +21,10 @@ import com.phad.chatapp.features.calendar.models.EventType
 import com.phad.chatapp.features.calendar.models.LeaveApplication
 import com.phad.chatapp.features.calendar.models.UserRole
 import com.phad.chatapp.features.calendar.repository.CalendarRepository
+import com.phad.chatapp.features.calendar.utils.CalendarSessionManager
 import com.phad.chatapp.features.calendar.viewmodel.CalendarViewModel
 import com.phad.chatapp.features.calendar.viewmodel.CalendarViewModelFactory
+import com.phad.chatapp.features.scheduling.models.SubjectAssignmentDetails
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -50,7 +52,9 @@ class CalendarTabFragment : Fragment() {
     private var tabType: String = TAB_TYPE_TEACHING
     private val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
     private val monthYearFormat = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
-    private var approvedLeaves: List<LeaveApplication> = emptyList()
+    private var availableLeaves: List<LeaveApplication> = emptyList()
+    private var userRollNumber: String = ""
+    private var userName: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -71,6 +75,11 @@ class CalendarTabFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         
+        // Fetch user roll number and assignments FIRST so adapters can use them
+        val sessionManager = CalendarSessionManager(requireContext())
+        userRollNumber = sessionManager.fetchRollNumber()
+        userName = sessionManager.fetchUserName()
+        
         val repository = CalendarRepository()
         
         // Create a tab-specific ViewModel factory with the appropriate tab type
@@ -79,10 +88,14 @@ class CalendarTabFragment : Fragment() {
         // Create a tab-specific ViewModel so each tab has its own state
         viewModel = ViewModelProvider(this, factory).get(CalendarViewModel::class.java)
         
+        if (tabType == TAB_TYPE_TEACHING && userRollNumber.isNotEmpty()) {
+            viewModel.fetchUserAssignments(userRollNumber)
+        }
+        
+        setupWindowInsets()
         setupCalendarGrid()
         setupEventsRecyclerView()
-        setupMonthNavigation()
-        setupRangeSelectionToggle()
+        setupViews()
         observeViewModel()
         
         // Get user role from the parent Fragment
@@ -98,41 +111,46 @@ class CalendarTabFragment : Fragment() {
             context = requireContext(), 
             events = emptyList(), 
             leaveApplications = emptyList(),
-            isTeachingCalendar = (tabType == TAB_TYPE_TEACHING)
+            teachingAssignments = viewModel.userAssignments.value ?: emptyList(),
+            isTeachingCalendar = (tabType == TAB_TYPE_TEACHING),
+            userRollNumber = userRollNumber
         )
         calendarAdapter.onDateSelectedListener = { clickedDate ->
-            // CRITICAL: Use this exact date that was clicked
-            Log.d("CalendarTabFragment", "⭐ EXACT DATE RECEIVED FROM GRID: ${dateFormat.format(clickedDate)}")
+            Log.d("CalendarTabFragment", "Date clicked: ${dateFormat.format(clickedDate)}")
             
-            // First update this tab's viewModel
+            // Update this tab's viewModel — this triggers the LiveData observer
+            // which updates the event list and date header below the calendar
             viewModel.selectDate(clickedDate)
             
-            // Update the shared parent ViewModel and lastClickedDate
-            (parentFragment as? CalendarFragment)?.let { parent ->
-                // This is the EXACT date clicked by the user - use it directly
-                parent.updateLastClickedDate(clickedDate)
-                
-                // Show action dialog immediately without delay to ensure the exact date is used
-                parent.showDateActionDialog(clickedDate, tabType)
+            // For non-teaching tabs or admin users, also propagate to parent
+            if (!(tabType == TAB_TYPE_TEACHING && viewModel.currentUserRole.value == UserRole.USER)) {
+                (parentFragment as? CalendarFragment)?.let { parent ->
+                    parent.updateLastClickedDate(clickedDate)
+                    parent.showDateActionDialog(clickedDate, tabType)
+                }
             }
         }
         
         binding.gridCalendar.adapter = calendarAdapter
         
         // Set month display
-        binding.tvMonthYear.text = calendarAdapter.getMonthAndYear()
-        Log.d("CalendarTabFragment", "Initial month display: ${binding.tvMonthYear.text}")
+        val monthFormat = SimpleDateFormat("MMMM", Locale.getDefault())
+        val displayCal = Calendar.getInstance()
+        displayCal.set(Calendar.YEAR, calendarAdapter.getCurrentYear())
+        displayCal.set(Calendar.MONTH, calendarAdapter.getCurrentMonth())
+        binding.tvMonthName.text = monthFormat.format(displayCal.time)
+        binding.tvYearNumber.text = calendarAdapter.getCurrentYear().toString()
+        Log.d("CalendarTabFragment", "Initial month display: ${binding.tvMonthName.text} ${binding.tvYearNumber.text}")
         
-        // Force initial date selection if needed
-        if (viewModel.selectedDate.value == null) {
-            val today = Calendar.getInstance().time
-            viewModel.selectDate(today)
-            
-            // Also update the shared parent ViewModel
-            (parentFragment as? CalendarFragment)?.let { parent ->
-                parent.sharedViewModel.selectDate(today)
-                Log.d("CalendarTabFragment", "Initial date set in parent ViewModel: ${dateFormat.format(today)}")
-            }
+        // Always default to today on first load
+        val today = Calendar.getInstance().time
+        // Highlight today's cell in the grid immediately (before LiveData observer fires)
+        calendarAdapter.setSelectedDate(today)
+        // Notify viewModel — triggers the observer that updates the date header and event list
+        viewModel.selectDate(today)
+        // Also sync the shared parent ViewModel
+        (parentFragment as? CalendarFragment)?.let { parent ->
+            parent.sharedViewModel.selectDate(today)
         }
         
         // Load all leave applications
@@ -141,19 +159,33 @@ class CalendarTabFragment : Fragment() {
     
     fun updateCalendarMonth(year: Int, month: Int) {
         calendarAdapter.setMonth(year, month)
-        binding.tvMonthYear.text = calendarAdapter.getMonthAndYear()
+        val monthFormat = SimpleDateFormat("MMMM", Locale.getDefault())
+        val displayCal = Calendar.getInstance()
+        displayCal.set(Calendar.YEAR, year)
+        displayCal.set(Calendar.MONTH, month)
+        binding.tvMonthName.text = monthFormat.format(displayCal.time)
+        binding.tvYearNumber.text = year.toString()
         
         // Update events for the new month
         viewModel.events.value?.let { events ->
-            val adapter = CalendarGridAdapter(requireContext(), events)
+            val adapter = CalendarGridAdapter(
+                requireContext(), 
+                events, 
+                availableLeaves,
+                viewModel.userAssignments.value ?: emptyList(),
+                (tabType == TAB_TYPE_TEACHING),
+                userRollNumber
+            )
             adapter.setMonth(year, month)
             adapter.onDateSelectedListener = calendarAdapter.onDateSelectedListener
+            viewModel.selectedDate.value?.let { adapter.setSelectedDate(it) }
             calendarAdapter = adapter
             binding.gridCalendar.adapter = calendarAdapter
         }
     }
     
-    private fun setupMonthNavigation() {
+    private fun setupViews() {
+        // Setup Month Navigation
         // Previous month button
         binding.btnPrevMonth.setOnClickListener {
             val calendar = Calendar.getInstance()
@@ -176,18 +208,50 @@ class CalendarTabFragment : Fragment() {
             updateCalendarMonth(calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH))
         }
     }
-    
+
+    private fun setupWindowInsets() {
+        // The activity root view already has systemBars.top applied, so the banner
+        // starts below the status bar. We only need a small base padding for visual breathing room.
+        val basePaddingPx = (16 * resources.displayMetrics.density).toInt()
+        binding.topBannerLayout.setPadding(0, basePaddingPx, 0, binding.topBannerLayout.paddingBottom)
+    }
+
     private fun setupEventsRecyclerView() {
         eventsAdapter = EventAdapter { event ->
-            if (tabType == TAB_TYPE_TEACHING) {
-                showTeachingEventDetailsDialog(event)
+            if (tabType == TAB_TYPE_TEACHING && viewModel.currentUserRole.value == UserRole.USER) {
+                // Point 5: Clean click matrix for Scheduled Events
+                if (event.status == EventStatus.SCHEDULED) {
+                    showLeaveForEvent(event) // Only your own scheduled classes will appear here now due to Point 4 logic
+                } else {
+                    showTeachingEventDetailsDialog(event)
+                }
             } else {
-                showGeneralEventDetailsDialog(event)
+                showTeachingEventDetailsDialog(event)
             }
         }
         
-        leavesAdapter = LeaveApplicationAdapter { leaveApplication ->
-            showLeaveDetailsDialog(leaveApplication)
+        leavesAdapter = LeaveApplicationAdapter(userRollNumber) { leaveApplication ->
+            if (tabType == TAB_TYPE_TEACHING && viewModel.currentUserRole.value == UserRole.USER) {
+                val isMyLeave = leaveApplication.rollNumber == userRollNumber
+                
+                if (isMyLeave && (leaveApplication.status == EventStatus.PENDING || leaveApplication.status == EventStatus.APPROVED)) {
+                    // Clicked my own pending or approved leave -> Offer to cancel it (Implementation in Point 6)
+                    showCancelLeaveDialog(leaveApplication)
+                } else if (!isMyLeave && leaveApplication.status == EventStatus.APPROVED) {
+                    // Clicked someone else's approved leave -> Offer to substitute
+                    showAcceptClassDialogForLeave(leaveApplication)
+                } else if (isMyLeave && leaveApplication.status == EventStatus.ACCEPTED && leaveApplication.substitutedByRollNumber.isNotEmpty()) {
+                    // Clicked my own leave that was accepted by someone else -> Show details (or could be withdraw later)
+                    showLeaveDetailsDialog(leaveApplication)
+                } else if (!isMyLeave && leaveApplication.status == EventStatus.ACCEPTED && leaveApplication.substitutedByRollNumber == userRollNumber) {
+                     // Clicked a leave I accepted for someone else -> Show details (or could be withdraw substitution later)
+                    showLeaveDetailsDialog(leaveApplication)
+                } else {
+                    showLeaveDetailsDialog(leaveApplication)
+                }
+            } else {
+                showLeaveDetailsDialog(leaveApplication)
+            }
         }
         
         // Create a proper config for the ConcatAdapter
@@ -206,27 +270,6 @@ class CalendarTabFragment : Fragment() {
         updateNoEventsVisibility(true)
     }
     
-    private fun setupRangeSelectionToggle() {
-        // Add a toggle button for range selection mode
-        val toggleButton = view?.findViewById<MaterialButton>(R.id.btnToggleRange)
-            ?: MaterialButton(requireContext()).also { btn ->
-                btn.id = View.generateViewId()
-                btn.text = "Toggle Range"
-                btn.setBackgroundColor(ContextCompat.getColor(requireContext(), R.color.accent))
-                
-                // Add the button to the layout
-                val params = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                )
-                params.setMargins(8, 8, 8, 8)
-                binding.calendarActions.addView(btn, params)
-            }
-        
-        toggleButton.setOnClickListener {
-            viewModel.toggleRangeSelectionMode()
-        }
-    }
 
     private fun observeViewModel() {
         // Observe user role
@@ -239,8 +282,10 @@ class CalendarTabFragment : Fragment() {
             calendarAdapter.setSelectedDate(date)
             updateEventsForDate(date)
             
-            // Update the selected date display
-            binding.tvSelectedDate.text = "Events for ${dateFormat.format(date)}"
+            // The date is now elegantly handled by the top app bar structure
+            // Update the header label simply to: Events for Mar 17, 2026
+            
+            Log.d("CalendarTabFragment", "Loading data for ${date.time}")
         }
         
         // Observe all events
@@ -249,12 +294,15 @@ class CalendarTabFragment : Fragment() {
             val adapter = CalendarGridAdapter(
                 context = requireContext(), 
                 events = events,
-                leaveApplications = approvedLeaves,
-                isTeachingCalendar = (tabType == TAB_TYPE_TEACHING)
+                leaveApplications = availableLeaves,
+                teachingAssignments = viewModel.userAssignments.value ?: emptyList(),
+                isTeachingCalendar = (tabType == TAB_TYPE_TEACHING),
+                userRollNumber = userRollNumber
             )
             // Keep the current month when updating
             adapter.setMonth(calendarAdapter.getCurrentYear(), calendarAdapter.getCurrentMonth())
             adapter.onDateSelectedListener = calendarAdapter.onDateSelectedListener
+            viewModel.selectedDate.value?.let { adapter.setSelectedDate(it) }
             calendarAdapter = adapter
             binding.gridCalendar.adapter = calendarAdapter
             
@@ -265,7 +313,7 @@ class CalendarTabFragment : Fragment() {
         // Also observe leave applications for changes
         viewModel.leaveApplications.observe(viewLifecycleOwner) { leaveApplications ->
             // Store the leave applications
-            approvedLeaves = leaveApplications
+            availableLeaves = leaveApplications
             
             // Update the calendar grid with the new leave applications
             if (tabType == TAB_TYPE_TEACHING) {
@@ -273,11 +321,14 @@ class CalendarTabFragment : Fragment() {
                     context = requireContext(), 
                     events = viewModel.events.value ?: emptyList(),
                     leaveApplications = leaveApplications,
-                    isTeachingCalendar = true
+                    teachingAssignments = viewModel.userAssignments.value ?: emptyList(),
+                    isTeachingCalendar = true,
+                    userRollNumber = userRollNumber
                 )
                 // Keep the current month when updating
                 adapter.setMonth(calendarAdapter.getCurrentYear(), calendarAdapter.getCurrentMonth())
                 adapter.onDateSelectedListener = calendarAdapter.onDateSelectedListener
+                viewModel.selectedDate.value?.let { adapter.setSelectedDate(it) }
                 calendarAdapter = adapter
                 binding.gridCalendar.adapter = calendarAdapter
                 
@@ -286,22 +337,27 @@ class CalendarTabFragment : Fragment() {
             }
         }
         
-        // Observe range selection mode
-        viewModel.isRangeSelectionMode.observe(viewLifecycleOwner) { isRangeMode ->
-            calendarAdapter.setRangeSelectionMode(isRangeMode)
-            updateUIForRangeMode(isRangeMode)
-        }
-        
-        // Observe date range
-        viewModel.dateRange.observe(viewLifecycleOwner) { range ->
-            calendarAdapter.setSelectedDateRange(
-                range, 
-                viewModel.startDate.value, 
-                viewModel.endDate.value
-            )
-            
-            if (range.isNotEmpty()) {
-                updateEventsForDateRange(range)
+        // Observe user assignments
+        if (tabType == TAB_TYPE_TEACHING) {
+            viewModel.userAssignments.observe(viewLifecycleOwner) { assignments ->
+                Log.d("CalendarTabFragment", "User assignments updated: ${assignments.size}")
+                
+                // Refresh the calendar adapter with the new assignments
+                val adapter = CalendarGridAdapter(
+                    context = requireContext(),
+                    events = viewModel.events.value ?: emptyList(),
+                    leaveApplications = availableLeaves,
+                    teachingAssignments = assignments,
+                    isTeachingCalendar = true,
+                    userRollNumber = userRollNumber
+                )
+                adapter.setMonth(calendarAdapter.getCurrentYear(), calendarAdapter.getCurrentMonth())
+                adapter.onDateSelectedListener = calendarAdapter.onDateSelectedListener
+                viewModel.selectedDate.value?.let { adapter.setSelectedDate(it) }
+                calendarAdapter = adapter
+                binding.gridCalendar.adapter = calendarAdapter
+                
+                viewModel.selectedDate.value?.let { updateEventsForDate(it) }
             }
         }
     }
@@ -311,18 +367,84 @@ class CalendarTabFragment : Fragment() {
         Log.d("CalendarTabFragment", "Updating events for date: ${dateFormat.format(date)}")
         
         // Get events for this date with fresh data from repository
-        val eventsForDate = viewModel.getEventsForDay(date)
-        Log.d("CalendarTabFragment", "Found ${eventsForDate.size} events for date")
+        val eventsForDate = viewModel.getEventsForDay(date).toMutableList()
         
-        // Get leaves for this date
-        val leavesForDate = approvedLeaves.filter { isSameDay(it.date, date) }
-        
-        // Also show any pending leaves from repository
+        // Get leaves for this date FIRST so we can filter virtual events
+        val leavesForDate = availableLeaves.filter { isSameDay(it.date, date) }
         val pendingLeaves = viewModel.getLeaveApplicationsForDay(date)
         
         // Combine all leaves (approved and pending)
-        val allLeaves = leavesForDate + pendingLeaves.filter { !leavesForDate.any { approved -> approved.id == it.id } }
-        Log.d("CalendarTabFragment", "Found ${allLeaves.size} leaves for date")
+        var allLeaves = leavesForDate + pendingLeaves.filter { !leavesForDate.any { approved -> approved.id == it.id } }
+        
+        // Point 4: Filter irrelevant substitutions.
+        // Hide leaves that have been accepted by someone else, unless it's the user's own leave OR the user is the one who accepted it.
+        if (tabType == TAB_TYPE_TEACHING && userRollNumber.isNotEmpty()) {
+            allLeaves = allLeaves.filter { leave ->
+                val isMyLeave = leave.rollNumber == userRollNumber
+                val iAcceptedIt = leave.status == EventStatus.ACCEPTED && leave.substitutedByRollNumber == userRollNumber
+                val isUnaccepted = leave.status != EventStatus.ACCEPTED
+
+                // Show it if it's my leave, or I accepted it, or it hasn't been accepted yet
+                isMyLeave || iAcceptedIt || isUnaccepted
+            }
+        }
+        
+        Log.d("CalendarTabFragment", "Found ${allLeaves.size} relevant leaves for date")
+        
+        // Map user assignments to events if this is the teaching tab
+        if (tabType == TAB_TYPE_TEACHING) {
+            val assignments = viewModel.userAssignments.value ?: emptyList()
+            if (assignments.isNotEmpty()) {
+                val cal = Calendar.getInstance().apply { time = date }
+                val dayFormat = SimpleDateFormat("EEE", Locale.getDefault())
+                val dayName = dayFormat.format(cal.time) // "Mon", "Tue", etc.
+                
+                Log.d("CalendarTabFragment", "⭐ CHECKING ASSIGNMENTS ⭐")
+                Log.d("CalendarTabFragment", "Target Day: '$dayName'")
+                
+                val dayAssignments = assignments.filter { 
+                    val dbDay = it.dayName.trim().lowercase()
+                    val targetDay = dayName.trim().lowercase()
+                    Log.d("CalendarTabFragment", "Comparing: DB day = '$dbDay' vs Selected = '$targetDay'")
+                    
+                    // Match if they are equal OR if one is a substring of the other (e.g. "fri" vs "friday")
+                    dbDay == targetDay || dbDay.startsWith(targetDay) || targetDay.startsWith(dbDay)
+                }
+                
+                Log.d("CalendarTabFragment", "Found ${dayAssignments.size} assignments out of ${assignments.size} total for $dayName")
+                
+                // Get leaves specifically for this user on this date
+                val userLeavesOnDate = allLeaves.filter { it.rollNumber == userRollNumber }
+                
+                val virtualEvents = dayAssignments.mapNotNull { assignment ->
+                    // Check if there is already a leave applied for this specific class
+                    val hasLeaveForThisClass = userLeavesOnDate.any { leave -> 
+                        leave.subject.equals(assignment.subjectName, ignoreCase = true) && 
+                        leave.slot.equals(assignment.slotName, ignoreCase = true) 
+                    }
+                    
+                    if (hasLeaveForThisClass) {
+                        null // Skip generating the scheduled class card
+                    } else {
+                        CalendarEvent(
+                            id = "assignment_${assignment.subjectCode}_${assignment.dayName}_${assignment.slotName}",
+                            date = date,
+                            title = assignment.subjectName,
+                            description = "${assignment.schoolName} - ${assignment.classAndSection}",
+                            eventType = EventType.TEACHING,
+                            timeSlot = assignment.slotName,
+                            status = EventStatus.SCHEDULED,
+                            createdBy = "system",
+                            timestamp = System.currentTimeMillis()
+                        )
+                    }
+                }
+                
+                // Add virtual events at the top
+                eventsForDate.addAll(0, virtualEvents)
+            }
+        }
+        Log.d("CalendarTabFragment", "Found ${eventsForDate.size} total events for date")
         
         // Update adapters on the main thread to ensure proper synchronization
         activity?.runOnUiThread {
@@ -381,10 +503,7 @@ class CalendarTabFragment : Fragment() {
         
         dialogView.findViewById<android.widget.TextView>(R.id.tvEventDescription).text = description.toString()
         
-        val leaveButton = dialogView.findViewById<MaterialButton>(R.id.btnApplyForLeave)
-        val acceptClassButton = dialogView.findViewById<MaterialButton>(R.id.btnAcceptClass)
-        
-        val dialogBuilder = MaterialAlertDialogBuilder(requireContext())
+        val dialogBuilder = MaterialAlertDialogBuilder(requireContext(), R.style.CalendarDarkDialog)
             .setView(dialogView)
             .setPositiveButton("Close", null)
             
@@ -400,36 +519,6 @@ class CalendarTabFragment : Fragment() {
         }
         
         val dialog = dialogBuilder.show()
-        
-        // Setup buttons if user role is USER
-        if (viewModel.currentUserRole.value == UserRole.USER) {
-            // Setup apply for leave button - always visible
-            leaveButton.visibility = View.VISIBLE
-            leaveButton.setOnClickListener {
-                dialog.dismiss()
-                showLeaveApplicationDialog(event.date)
-            }
-            
-            // Only show accept class button if the class hasn't been accepted yet
-            // and if there are approved leaves
-            val hasApprovedLeaves = approvedLeaves.any { 
-                isSameDay(it.date, event.date) && it.status == EventStatus.APPROVED 
-            }
-            
-            if (event.acceptedByRollNumber.isEmpty() && hasApprovedLeaves) {
-                acceptClassButton.visibility = View.VISIBLE
-                acceptClassButton.setOnClickListener {
-                    dialog.dismiss()
-                    showAcceptClassDialog(event)
-                }
-            } else {
-                acceptClassButton.visibility = View.GONE
-            }
-        } else {
-            // Hide buttons for ADMIN
-            leaveButton.visibility = View.GONE
-            acceptClassButton.visibility = View.GONE
-        }
     }
     
     private fun showAcceptClassDialog(event: CalendarEvent) {
@@ -439,29 +528,29 @@ class CalendarTabFragment : Fragment() {
             return
         }
         
-        // Check if there are any approved leaves for this date
-        val approvedLeaves = viewModel.getLeaveApplicationsForDay(event.date)
+        // Check if there are any available leaves for this date
+        val availableLeavesForDate = viewModel.getLeaveApplicationsForDay(event.date)
             .filter { it.status == EventStatus.APPROVED }
         
         // Log for debugging
         Log.d("CalendarTabFragment", "Date: ${dateFormat.format(event.date)}")
         Log.d("CalendarTabFragment", "All leave applications: ${viewModel.getLeaveApplicationsForDay(event.date).size}")
-        Log.d("CalendarTabFragment", "Approved leaves: ${approvedLeaves.size}")
+        Log.d("CalendarTabFragment", "Available leaves: ${availableLeavesForDate.size}")
         
-        if (approvedLeaves.isEmpty()) {
-            Toast.makeText(requireContext(), "Cannot accept class: No approved leaves for this date", Toast.LENGTH_SHORT).show()
+        if (availableLeavesForDate.isEmpty()) {
+            Toast.makeText(requireContext(), "Cannot accept class: No available leaves for this date", Toast.LENGTH_SHORT).show()
             return
         }
         
-        // First show the list of approved leaves to select from
-        val leaveOptions = approvedLeaves.map { leave -> 
+        // First show the list of available leaves to select from
+        val leaveOptions = availableLeavesForDate.map { leave -> 
             "Student: ${leave.userName}, Roll: ${leave.rollNumber}, Slot: ${leave.slot}, Subject: ${leave.subject}"
         }.toTypedArray()
         
-        AlertDialog.Builder(requireContext())
+        MaterialAlertDialogBuilder(requireContext(), R.style.CalendarDarkDialog)
             .setTitle("Select Leave to Substitute")
             .setItems(leaveOptions) { _, which ->
-                val selectedLeave = approvedLeaves[which]
+                val selectedLeave = availableLeavesForDate[which]
                 
                 // Create a virtual class event for this leave if needed
                 val eventToUse = if (event.eventType == EventType.TEACHING) {
@@ -489,59 +578,60 @@ class CalendarTabFragment : Fragment() {
     }
     
     private fun showClassAcceptanceDetailsDialog(event: CalendarEvent, selectedLeave: LeaveApplication) {
-        // Show the dialog
-        val dialogView = layoutInflater.inflate(R.layout.dialog_accept_class, null)
-        val etRollNumber = dialogView.findViewById<TextInputEditText>(R.id.etRollNumber)
-        val tvClassDetails = dialogView.findViewById<TextView>(R.id.tvClassDetails)
+        // Prevent accepting if the logged-in user hasn't set their roll number
+        if (userRollNumber.isEmpty()) {
+            Toast.makeText(requireContext(), "Your roll number is not configured properly. Cannot accept class.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // Verify that the roll number is DIFFERENT from the selected leave's roll number
+        if (userRollNumber == selectedLeave.rollNumber) {
+            Toast.makeText(requireContext(), 
+                "You cannot accept your own leave application.", 
+                Toast.LENGTH_LONG).show()
+            return
+        }
+
+        // Check for schedule conflicts
+        val cal = Calendar.getInstance().apply { time = event.date }
+        val dayFormat = SimpleDateFormat("EEE", Locale.getDefault())
+        val dayName = dayFormat.format(cal.time).lowercase()
         
+        val assignments = viewModel.userAssignments.value ?: emptyList()
+        val hasConflict = assignments.any { assignment ->
+            val dbDay = assignment.dayName.trim().lowercase()
+            val isSameDay = dbDay == dayName || dbDay.startsWith(dayName) || dayName.startsWith(dbDay)
+            val isSameSlot = assignment.slotName.equals(selectedLeave.slot, ignoreCase = true)
+            isSameDay && isSameSlot
+        }
+
         // Create details text with the selected leave information
-        val detailsText = StringBuilder()
+        val detailsText = java.lang.StringBuilder()
+        if (hasConflict) {
+            detailsText.append("⚠️ WARNING: You are already scheduled for a class during this time slot today. Please ensure you can manage both or have made arrangements.\n\n")
+        }
+        
+        detailsText.append("Class Details:\n")
         detailsText.append("Subject: ${selectedLeave.subject}\n")
         detailsText.append("Time: ${selectedLeave.slot}\n")
         detailsText.append("Student on Leave: ${selectedLeave.userName}\n\n")
         
-        detailsText.append("SELECTED LEAVE:\n")
-        detailsText.append("Student: ${selectedLeave.userName}\n")
-        detailsText.append("Roll Number: ${selectedLeave.rollNumber}\n")
-        detailsText.append("Subject: ${selectedLeave.subject}\n")
-        detailsText.append("Slot: ${selectedLeave.slot}\n\n")
-        
-        detailsText.append("Please enter your roll number to confirm\n")
-        detailsText.append("(Must be different from the leave applicant's roll number)")
-        
-        tvClassDetails.text = detailsText.toString()
-        
-        // Don't pre-fill with the leave applicant's roll number anymore
-        etRollNumber.setText("")
-        
-        val dialog = AlertDialog.Builder(requireContext())
-            .setTitle("Accept Class")
-            .setView(dialogView)
+        detailsText.append("You are accepting this class as: $userRollNumber\n\n")
+        detailsText.append("Are you sure you want to substitute for this class?")
+
+        MaterialAlertDialogBuilder(requireContext(), R.style.CalendarDarkDialog)
+            .setTitle("Confirm Substitution")
+            .setMessage(detailsText.toString())
             .setPositiveButton("Accept") { _, _ ->
-                val rollNumber = etRollNumber.text.toString().trim()
-                
-                if (rollNumber.isEmpty()) {
-                    Toast.makeText(requireContext(), "Please enter your roll number", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
-                }
-                
-                // Verify that the roll number is DIFFERENT from the selected leave's roll number
-                if (rollNumber == selectedLeave.rollNumber) {
-                    Toast.makeText(requireContext(), 
-                        "You cannot accept your own leave application. Roll number must be different from the leave applicant.", 
-                        Toast.LENGTH_LONG).show()
-                    return@setPositiveButton
-                }
-                
                 // For virtual events, record acceptance in the leave application itself
                 lifecycleScope.launch {
                     try {
                         if (event.id.startsWith("virtual_")) {
                             // This is a virtual event based on a leave, update the leave directly
-                            viewModel.markLeaveAsSubstituted(selectedLeave.id, rollNumber)
+                            viewModel.markLeaveAsSubstituted(selectedLeave.id, userRollNumber)
                         } else {
                             // This is a real teaching event
-                            viewModel.acceptClass(event.id, rollNumber)
+                            viewModel.acceptClass(event.id, userRollNumber)
                         }
                         
                         Toast.makeText(requireContext(), "Class accepted successfully", Toast.LENGTH_SHORT).show()
@@ -555,9 +645,7 @@ class CalendarTabFragment : Fragment() {
                 }
             }
             .setNegativeButton("Cancel", null)
-            .create()
-        
-        dialog.show()
+            .show()
     }
     
     private fun showGeneralEventDetailsDialog(event: CalendarEvent) {
@@ -568,7 +656,7 @@ class CalendarTabFragment : Fragment() {
         }
         
         val locationText = if (event.location.isNotBlank()) "\nLocation: ${event.location}" else ""
-        val dialogBuilder = MaterialAlertDialogBuilder(requireContext())
+        val dialogBuilder = MaterialAlertDialogBuilder(requireContext(), R.style.CalendarDarkDialog)
             .setTitle(event.title)
             .setMessage("${event.description}$locationText\n\nTime: ${event.timeSlot}\nStatus: ${event.status}\n$bookedStatus")
             .setPositiveButton("Close", null)
@@ -601,30 +689,290 @@ class CalendarTabFragment : Fragment() {
         dialogBuilder.show()
     }
     
+    private fun showTeachingDayOptions(date: Date) {
+        // Determine availability of actions
+        val assignments = viewModel.userAssignments.value ?: emptyList()
+        val cal = Calendar.getInstance().apply { time = date }
+        val dayFormat = SimpleDateFormat("EEE", Locale.getDefault())
+        val dayName = dayFormat.format(cal.time).lowercase()
+        
+        val hasClass = assignments.any { assignment ->
+            val dbDay = assignment.dayName.trim().lowercase()
+            dbDay == dayName || dbDay.startsWith(dayName) || dayName.startsWith(dbDay)
+        }
+        
+        val availableLeavesForDate = viewModel.getLeaveApplicationsForDay(date)
+            .filter { it.status == EventStatus.APPROVED && it.rollNumber != userRollNumber} // exclude user's own leaves
+            
+        val hasSubstitutions = availableLeavesForDate.isNotEmpty()
+        
+        if (!hasClass && !hasSubstitutions) {
+            // Nothing to do for this day
+            return
+        }
+        
+        val options = mutableListOf<String>()
+        val actions = mutableListOf<() -> Unit>()
+        
+        if (hasClass) {
+            options.add("Apply for Leave")
+            actions.add { showLeaveApplicationDialog(date) }
+        }
+        
+        if (hasSubstitutions) {
+            options.add("Accept Substitute Class")
+            actions.add { showAcceptClassDialogForDate(date) }
+        }
+        
+        MaterialAlertDialogBuilder(requireContext(), R.style.CalendarDarkDialog)
+            .setTitle(dateFormat.format(date))
+            .setItems(options.toTypedArray()) { _, which ->
+                actions[which].invoke()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+    
+    private fun showAcceptClassDialogForDate(date: Date) {
+        val availableLeavesForDate = viewModel.getLeaveApplicationsForDay(date)
+            .filter { it.status == EventStatus.APPROVED && it.rollNumber != userRollNumber }
+            
+        if (availableLeavesForDate.isEmpty()) {
+            Toast.makeText(requireContext(), "No classes available to substitute on this date.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        // Show the list of available leaves to select from
+        val leaveOptions = availableLeavesForDate.map { leave -> 
+            "Student: ${leave.userName}, Roll: ${leave.rollNumber}, Slot: ${leave.slot}, Subject: ${leave.subject}"
+        }.toTypedArray()
+        
+        MaterialAlertDialogBuilder(requireContext(), R.style.CalendarDarkDialog)
+            .setTitle("Select Class to Substitute")
+            .setItems(leaveOptions) { _, which ->
+                val selectedLeave = availableLeavesForDate[which]
+                
+                // Create a virtual class event for this leave
+                val virtualEvent = CalendarEvent(
+                    id = "virtual_" + selectedLeave.id,
+                    date = selectedLeave.date,
+                    title = "Class for ${selectedLeave.subject}",
+                    description = "Substitution class for ${selectedLeave.userName}",
+                    eventType = EventType.TEACHING,
+                    timeSlot = selectedLeave.slot,
+                    status = EventStatus.SCHEDULED,
+                    createdBy = selectedLeave.userName,
+                    timestamp = System.currentTimeMillis()
+                )
+                
+                showClassAcceptanceDetailsDialog(virtualEvent, selectedLeave)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /** Called when user taps an "AVAILABLE SUBSTITUTION" card directly. */
+    private fun showAcceptClassDialogForLeave(leave: LeaveApplication) {
+        val virtualEvent = CalendarEvent(
+            id = "virtual_" + leave.id,
+            date = leave.date,
+            title = "Class for ${leave.subject}",
+            description = "Substitution class for ${leave.userName}",
+            eventType = EventType.TEACHING,
+            timeSlot = leave.slot,
+            status = EventStatus.SCHEDULED,
+            createdBy = leave.userName,
+            timestamp = System.currentTimeMillis()
+        )
+        showClassAcceptanceDetailsDialog(virtualEvent, leave)
+    }
+
+    /**
+     * Called when user taps a SCHEDULED class card.
+     * Matches the tapped event back to its SubjectAssignmentDetails and
+     * goes straight to the confirm dialog — no class picker needed.
+     */
+    private fun showLeaveForEvent(event: CalendarEvent) {
+        val assignments = viewModel.userAssignments.value ?: emptyList()
+
+        // Match by subject name AND slot (both are stored in the virtual event)
+        val matches = assignments.filter { a ->
+            a.subjectName.equals(event.title, ignoreCase = true) &&
+            a.slotName.equals(event.timeSlot, ignoreCase = true)
+        }
+
+        when {
+            matches.size == 1 -> {
+                // Exactly one match — go straight to confirm
+                showLeaveConfirmationDialog(event.date, matches[0])
+            }
+            matches.size > 1 -> {
+                // Rare edge: multiple assignments for same subject+slot on different days
+                // Fall back to picker limited to these matches
+                val classOptions = matches.map { a ->
+                    "${a.subjectName} — ${a.schoolName} ${a.classAndSection}\nSlot: ${a.slotName}"
+                }.toTypedArray()
+                MaterialAlertDialogBuilder(requireContext(), R.style.CalendarDarkDialog)
+                    .setTitle("Select Class for Leave")
+                    .setItems(classOptions) { _, which ->
+                        showLeaveConfirmationDialog(event.date, matches[which])
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+            else -> {
+                // No match found — fall back to day-based search
+                showLeaveApplicationDialog(event.date)
+            }
+        }
+    }
+
     private fun showLeaveApplicationDialog(date: Date) {
-        // Check if date is in the past
+        // Fallback used when no specific event is known (e.g. from old paths)
+        val assignments = viewModel.userAssignments.value ?: emptyList()
+        val cal = Calendar.getInstance().apply { time = date }
+        val dayFormat = SimpleDateFormat("EEE", Locale.getDefault())
+        val dayName = dayFormat.format(cal.time).lowercase()
+        
+        val dayAssignments = assignments.filter { assignment ->
+            val dbDay = assignment.dayName.trim().lowercase()
+            dbDay == dayName || dbDay.startsWith(dayName) || dayName.startsWith(dbDay)
+        }
+        
+        if (dayAssignments.isEmpty()) {
+            Toast.makeText(requireContext(), "You don't have any classes scheduled for $dayName.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        if (dayAssignments.size == 1) {
+            // Only one class that day — skip picker, go straight to confirm
+            showLeaveConfirmationDialog(date, dayAssignments[0])
+            return
+        }
+
+        // Multiple classes that day — show picker
+        val classOptions = dayAssignments.map { assignment ->
+            "${assignment.subjectName} — ${assignment.schoolName} ${assignment.classAndSection}\nSlot: ${assignment.slotName}"
+        }.toTypedArray()
+        
+        MaterialAlertDialogBuilder(requireContext(), R.style.CalendarDarkDialog)
+            .setTitle("Select Class for Leave")
+            .setItems(classOptions) { _, which ->
+                showLeaveConfirmationDialog(date, dayAssignments[which])
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+    
+    private fun showLeaveConfirmationDialog(date: Date, assignment: SubjectAssignmentDetails) {
+        // Edge Case: Check for duplicate leave
+        val existingLeaves = viewModel.leaveApplications.value ?: emptyList()
+        val isDuplicate = existingLeaves.any { leave ->
+            isSameDay(leave.date, date) && 
+            leave.subject == assignment.subjectName && 
+            leave.slot == assignment.slotName &&
+            leave.rollNumber == userRollNumber
+        }
+
+        if (isDuplicate) {
+            Toast.makeText(requireContext(), "You have already applied for leave for this class.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // Edge Case: Check for past dates
         val today = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, 0)
             set(Calendar.MINUTE, 0)
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
         }.time
+
+        val applyTitle = if (date.before(today)) {
+            "Confirm Leave Application (Past Date)"
+        } else {
+            "Confirm Leave Application"
+        }
+
+        val details = "Subject: ${assignment.subjectName}\n" +
+                "School: ${assignment.schoolName} ${assignment.classAndSection}\n" +
+                "Slot: ${assignment.slotName}\n" +
+                "Date: ${dateFormat.format(date)}"
         
-        if (date.before(today)) {
-            Toast.makeText(requireContext(), "Cannot apply for leave on past dates", Toast.LENGTH_SHORT).show()
-            return
+        val message = if (date.before(today)) {
+            "Warning: You are applying for leave on a past date.\n\n$details"
+        } else {
+            details
         }
         
+        MaterialAlertDialogBuilder(requireContext(), R.style.CalendarDarkDialog)
+            .setTitle(applyTitle)
+            .setMessage(message)
+            .setPositiveButton("Apply for Leave") { _, _ ->
+                submitSmartLeave(date, assignment)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+    
+    private fun submitSmartLeave(date: Date, assignment: SubjectAssignmentDetails) {
+        val userId = userRollNumber.ifEmpty { "current_user_id" }
+        val displayName = userName.ifEmpty { "Current User" }
+        val slot = assignment.slotName
+        val subject = assignment.subjectName
+        val school = "${assignment.schoolName} ${assignment.classAndSection}".trim()
+        val rollNumber = userRollNumber
+        
+        // Create a temporary leave application for immediate UI update
+        val newLeave = LeaveApplication(
+            id = UUID.randomUUID().toString(),
+            userId = userId,
+            userName = displayName,
+            rollNumber = rollNumber,
+            date = date,
+            slot = slot,
+            subject = subject,
+            school = school,
+            status = EventStatus.APPROVED, // Auto-approve per requirements
+            timestamp = System.currentTimeMillis()
+        )
+        
+        val updatedLeaves = availableLeaves.toMutableList()
+        updatedLeaves.add(newLeave)
+        availableLeaves = updatedLeaves
+        updateCalendarWithLeaves(availableLeaves)
+        
+        lifecycleScope.launch {
+            val repository = (viewModel as CalendarViewModel).getCalendarRepository()
+            val success = repository.applyForLeave(userId, displayName, rollNumber, date, slot, subject, school)
+            
+            if (success) {
+                Toast.makeText(requireContext(), "Leave application submitted!", Toast.LENGTH_SHORT).show()
+                (parentFragment as? CalendarFragment)?.notifyLeaveApplicationSubmitted()
+            } else {
+                Toast.makeText(requireContext(), "Failed to submit leave", Toast.LENGTH_SHORT).show()
+                val filteredLeaves = availableLeaves.filter { it.id != newLeave.id }
+                availableLeaves = filteredLeaves
+                updateCalendarWithLeaves(availableLeaves)
+            }
+        }
+    }
+    
+    // Fallback manual leave form (used when no schedule data is available)
+    private fun showManualLeaveApplicationDialog(date: Date) {
         val dialogView = LayoutInflater.from(requireContext())
             .inflate(R.layout.dialog_leave_application, null)
         
-        // Find views in dialog
         val etSlot = dialogView.findViewById<android.widget.EditText>(R.id.etSlot)
         val etSubject = dialogView.findViewById<android.widget.EditText>(R.id.etSubject)
         val etSchool = dialogView.findViewById<android.widget.EditText>(R.id.etSchool)
         val etRollNumber = dialogView.findViewById<android.widget.EditText>(R.id.etRollNumber)
         
-        MaterialAlertDialogBuilder(requireContext())
+        // Pre-fill roll number if available
+        if (userRollNumber.isNotEmpty()) {
+            etRollNumber.setText(userRollNumber)
+        }
+        
+        MaterialAlertDialogBuilder(requireContext(), R.style.CalendarDarkDialog)
             .setTitle("Apply for Leave")
             .setView(dialogView)
             .setPositiveButton("Submit") { _, _ ->
@@ -638,50 +986,39 @@ class CalendarTabFragment : Fragment() {
                     return@setPositiveButton
                 }
                 
-                // In a real app, get the actual user ID and name from auth
-                val userId = "current_user_id"
-                val userName = "Current User"
+                val userId = userRollNumber.ifEmpty { "current_user_id" }
+                val displayName = userName.ifEmpty { "Current User" }
                 
-                // Create a temporary leave application object for immediate UI update
                 val newLeave = LeaveApplication(
-                    id = UUID.randomUUID().toString(), // Temporary ID
+                    id = UUID.randomUUID().toString(),
                     userId = userId,
-                    userName = userName,
+                    userName = displayName,
                     rollNumber = rollNumber,
                     date = date,
                     slot = slot,
                     subject = subject,
                     school = school,
-                    status = EventStatus.PENDING,
+                    status = EventStatus.APPROVED, // Auto-approve per requirements
                     timestamp = System.currentTimeMillis()
                 )
                 
-                // Add to the local list immediately for UI update
-                val updatedLeaves = approvedLeaves.toMutableList()
+                val updatedLeaves = availableLeaves.toMutableList()
                 updatedLeaves.add(newLeave)
-                approvedLeaves = updatedLeaves
+                availableLeaves = updatedLeaves
+                updateCalendarWithLeaves(availableLeaves)
                 
-                // Update calendar UI immediately
-                Log.d("CalendarTabFragment", "Updating calendar with new leave application")
-                updateCalendarWithLeaves(approvedLeaves)
-                
-                // Submit leave application to Firestore
                 lifecycleScope.launch {
                     val repository = (viewModel as CalendarViewModel).getCalendarRepository()
-                    val success = repository.applyForLeave(userId, userName, rollNumber, date, slot, subject, school)
+                    val success = repository.applyForLeave(userId, displayName, rollNumber, date, slot, subject, school)
                     
                     if (success) {
-                        Toast.makeText(requireContext(), "Leave application submitted successfully", Toast.LENGTH_SHORT).show()
-                        
-                        // Notify parent fragment to update all calendar tabs
+                        Toast.makeText(requireContext(), "Leave application submitted!", Toast.LENGTH_SHORT).show()
                         (parentFragment as? CalendarFragment)?.notifyLeaveApplicationSubmitted()
                     } else {
-                        Toast.makeText(requireContext(), "Failed to submit leave application", Toast.LENGTH_SHORT).show()
-                        
-                        // Remove the temporary leave if submission failed
-                        val filteredLeaves = approvedLeaves.filter { it.id != newLeave.id }
-                        approvedLeaves = filteredLeaves
-                        updateCalendarWithLeaves(approvedLeaves)
+                        Toast.makeText(requireContext(), "Failed to submit leave", Toast.LENGTH_SHORT).show()
+                        val filteredLeaves = availableLeaves.filter { it.id != newLeave.id }
+                        availableLeaves = filteredLeaves
+                        updateCalendarWithLeaves(availableLeaves)
                     }
                 }
             }
@@ -697,7 +1034,9 @@ class CalendarTabFragment : Fragment() {
                 context = requireContext(), 
                 events = viewModel.events.value ?: emptyList(),
                 leaveApplications = leaveApplications,
-                isTeachingCalendar = (tabType == TAB_TYPE_TEACHING)
+                teachingAssignments = viewModel.userAssignments.value ?: emptyList(),
+                isTeachingCalendar = (tabType == TAB_TYPE_TEACHING),
+                userRollNumber = userRollNumber
             )
             
             // Keep the current month and selected date
@@ -727,7 +1066,7 @@ class CalendarTabFragment : Fragment() {
             return
         }
         
-        MaterialAlertDialogBuilder(requireContext())
+        MaterialAlertDialogBuilder(requireContext(), R.style.CalendarDarkDialog)
             .setTitle("Book Slot")
             .setMessage("Would you like to book this slot for ${event.title} on ${dateFormat.format(event.date)}?")
             .setPositiveButton("Yes") { _, _ ->
@@ -750,51 +1089,56 @@ class CalendarTabFragment : Fragment() {
             .show()
     }
 
-    private fun updateUIForRangeMode(isRangeMode: Boolean) {
-        // Update UI elements for range selection mode
-        val toggleButton = view?.findViewById<MaterialButton>(R.id.btnToggleRange)
-        toggleButton?.text = if (isRangeMode) "Exit Range Mode" else "Select Range"
-        
-        // Update title text
-        if (isRangeMode) {
-            binding.tvSelectedDate.text = "Select a date range"
-            
-            val startDate = viewModel.startDate.value
-            val endDate = viewModel.endDate.value
-            
-            if (startDate != null && endDate != null) {
-                binding.tvSelectedDate.text = "Range: ${dateFormat.format(startDate)} - ${dateFormat.format(endDate)}"
-            } else if (startDate != null) {
-                binding.tvSelectedDate.text = "Range start: ${dateFormat.format(startDate)}"
+    private fun showCancelLeaveDialog(leaveApplication: LeaveApplication) {
+        val title = "Cancel Leave Application"
+        val message = if (leaveApplication.status == EventStatus.ACCEPTED && leaveApplication.substitutedByRollNumber.isNotEmpty()) {
+            "This class has already been accepted by ${leaveApplication.substitutedByRollNumber}. Cancelling your leave will notify them and you will have to take the class. Are you sure you want to cancel?"
+        } else {
+            "Are you sure you want to cancel your leave application for ${leaveApplication.subject}?"
+        }
+
+        MaterialAlertDialogBuilder(requireContext(), R.style.CalendarDarkDialog)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton("Cancel Leave") { _, _ ->
+                val success = viewModel.deleteLeaveApplication(leaveApplication.id)
+                if (success) {
+                    Toast.makeText(requireContext(), "Leave application cancelled", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(requireContext(), "Failed to cancel leave", Toast.LENGTH_SHORT).show()
+                }
             }
-        }
-    }
-    
-    private fun updateEventsForDateRange(dateRange: List<Date>) {
-        if (dateRange.isEmpty()) return
-        
-        val eventsInRange = viewModel.getEventsForDateRange()
-        
-        // Update adapter on the main thread
-        activity?.runOnUiThread {
-            eventsAdapter.updateEvents(eventsInRange)
-            leavesAdapter.updateLeaves(emptyList()) // Clear leaves in range mode
-            
-            // Notify the ConcatAdapter
-            concatAdapter.notifyDataSetChanged()
-            
-            updateNoEventsVisibility(eventsInRange.isEmpty())
-        }
-        
-        // Update the selected date range display
-        val startDate = viewModel.startDate.value
-        val endDate = viewModel.endDate.value
-        
-        if (startDate != null && endDate != null) {
-            binding.tvSelectedDate.text = "Events from ${dateFormat.format(startDate)} to ${dateFormat.format(endDate)}"
-        }
+            .setNegativeButton("Keep Leave", null)
+            .show()
     }
 
+    private fun showCancelSubstitutionDialog(leaveApplication: LeaveApplication) {
+        val title = "Withdraw Substitution"
+        val message = "Are you sure you want to withdraw from substituting for ${leaveApplication.userName} in ${subjectName(leaveApplication)} at ${leaveApplication.slot}?"
+
+        MaterialAlertDialogBuilder(requireContext(), R.style.CalendarDarkDialog)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton("Withdraw") { _, _ ->
+                lifecycleScope.launch {
+                    val success = (viewModel as CalendarViewModel).withdrawSubstitution(leaveApplication.id)
+                    if (success) {
+                        Toast.makeText(requireContext(), "Substitution withdrawn", Toast.LENGTH_SHORT).show()
+                        // The LiveData observers in the ViewModel will automatically 
+                        // update the UI when the Firestore data changes.
+                    } else {
+                        Toast.makeText(requireContext(), "Failed to withdraw", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            .setNegativeButton("Keep Class", null)
+            .show()
+    }
+
+    private fun subjectName(leaveApplication: LeaveApplication): String {
+        return leaveApplication.subject.ifEmpty { "the class" }
+    }
+    
     private fun showLeaveDetailsDialog(leaveApplication: LeaveApplication) {
         val statusText = when (leaveApplication.status) {
             EventStatus.ACCEPTED -> "ACCEPTED/SUBSTITUTED"
@@ -823,14 +1167,37 @@ class CalendarTabFragment : Fragment() {
             messageBuilder.append("----------------------------------------")
         }
         
-        val dialogBuilder = MaterialAlertDialogBuilder(requireContext())
+        val dialogBuilder = MaterialAlertDialogBuilder(requireContext(), R.style.CalendarDarkDialog)
             .setTitle("Leave Application Details")
             .setMessage(messageBuilder.toString())
             .setPositiveButton("Close", null)
+            
+        // Setup Accept Class functionality
+        val isUser = viewModel.currentUserRole.value == UserRole.USER
+        val isApproved = leaveApplication.status == EventStatus.APPROVED
+        val notSelf = leaveApplication.rollNumber != userRollNumber
+        
+        if (isUser && isApproved && notSelf) {
+            dialogBuilder.setNeutralButton("Accept Class") { _, _ ->
+                // Create a virtual class event for this leave
+                val virtualEvent = CalendarEvent(
+                    id = "virtual_" + leaveApplication.id,
+                    date = leaveApplication.date,
+                    title = "Class for ${leaveApplication.subject}",
+                    description = "Substitution class for ${leaveApplication.userName}",
+                    eventType = EventType.TEACHING,
+                    timeSlot = leaveApplication.slot,
+                    status = EventStatus.SCHEDULED,
+                    createdBy = leaveApplication.userName,
+                    timestamp = System.currentTimeMillis()
+                )
+                showClassAcceptanceDetailsDialog(virtualEvent, leaveApplication)
+            }
+        }
         
         // Add delete button for admins
         if (viewModel.currentUserRole.value == UserRole.ADMIN1 || viewModel.currentUserRole.value == UserRole.ADMIN2) {
-            dialogBuilder.setNeutralButton("Delete") { _, _ ->
+            dialogBuilder.setNegativeButton("Delete") { _, _ ->
                 showDeleteConfirmationDialog(
                     itemName = "Leave Application",
                     itemId = leaveApplication.id,
@@ -850,7 +1217,7 @@ class CalendarTabFragment : Fragment() {
     
     // Show confirmation dialog before deletion
     private fun showDeleteConfirmationDialog(itemName: String, itemId: String, itemType: EntryType) {
-        MaterialAlertDialogBuilder(requireContext())
+        MaterialAlertDialogBuilder(requireContext(), R.style.CalendarDarkDialog)
             .setTitle("Confirm Deletion")
             .setMessage("Are you sure you want to delete this $itemName? This action cannot be undone.")
             .setPositiveButton("Delete") { _, _ ->
@@ -921,7 +1288,7 @@ class CalendarTabFragment : Fragment() {
                 
                 Log.d("CalendarTabFragment", "Leave applications by status: Pending=$pendingCount, Approved=$approvedCount, Rejected=$rejectedCount")
                 
-                approvedLeaves = allLeaveApplications
+                availableLeaves = allLeaveApplications
                 
                 // Update calendar UI with the loaded leave applications
                 updateCalendarWithLeaves(allLeaveApplications)
@@ -952,7 +1319,7 @@ class CalendarTabFragment : Fragment() {
 
     // Add method to get the month header text
     fun getMonthHeaderText(): String? {
-        return binding.tvMonthYear.text?.toString()
+        return "${binding.tvMonthName.text} ${binding.tvYearNumber.text}"
     }
 
     // Add method to get the currently selected day

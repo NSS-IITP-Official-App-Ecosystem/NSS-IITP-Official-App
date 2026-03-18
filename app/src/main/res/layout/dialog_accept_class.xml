@@ -4,6 +4,7 @@
     android:orientation="vertical"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:background="@color/cal_surface"
     android:padding="16dp">
 
     <TextView
@@ -11,6 +12,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:textSize="16sp"
+        android:textColor="@color/cal_text_primary"
         android:layout_marginBottom="16dp"
         android:text="Class details will appear here" />
 
@@ -33,6 +35,7 @@
         android:layout_height="wrap_content"
         android:text="By accepting this class, you agree to take on teaching responsibilities for this session."
         android:textSize="12sp"
+        android:textColor="@color/cal_text_secondary"
         android:textStyle="italic" />
 
 </LinearLayout> 

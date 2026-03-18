@@ -8,7 +8,7 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreSettings
-import com.google.firebase.messaging.FirebaseMessaging
+
 import com.phad.chatapp.repositories.GroupRepository
 import com.phad.chatapp.utils.SessionManager
 import com.phad.chatapp.utils.MultiDatabaseHelper
@@ -62,8 +62,7 @@ class ChatApplication : Application() {
             // Initialize the secondary Firebase app
             initializeSecondaryFirebase()
             
-            // Initialize FCM
-            initializeFCM()
+
             
             // Test Firestore access permissions
             // Removed test connection diagnostics
@@ -115,63 +114,7 @@ class ChatApplication : Application() {
         }
     }
     
-    /**
-     * Initialize Firebase Cloud Messaging
-     */
-    private fun initializeFCM() {
-        try {
-            // Get the FCM token
-            FirebaseMessaging.getInstance().token
-                .addOnSuccessListener { token ->
-                    Log.d(TAG, "FCM Token: $token")
-                    saveTokenToFirestore(token)
-                }
-                .addOnFailureListener { e ->
-                    Log.e(TAG, "Failed to retrieve FCM token", e)
-                }
-            
-            // Subscribe to a default topic for global announcements
-            FirebaseMessaging.getInstance().subscribeToTopic("global")
-                .addOnSuccessListener {
-                    Log.d(TAG, "Subscribed to 'global' FCM topic")
-                }
-                .addOnFailureListener { e ->
-                    Log.e(TAG, "Failed to subscribe to 'global' FCM topic", e)
-                }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error initializing FCM", e)
-        }
-    }
-    
-    /**
-     * Save FCM token to the user's Firestore document
-     */
-    private fun saveTokenToFirestore(token: String) {
-        val sessionManager = SessionManager(this)
-        val userId = sessionManager.fetchUserId()
-        
-        if (userId.isEmpty()) {
-            Log.d(TAG, "User not logged in yet, token will be saved after login")
-            return
-        }
-        
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val db = FirebaseFirestore.getInstance()
-                db.collection("users")
-                    .document(userId)
-                    .update("fcmToken", token)
-                    .addOnSuccessListener {
-                        Log.d(TAG, "FCM token updated in Firestore for user $userId")
-                    }
-                    .addOnFailureListener { e ->
-                        Log.e(TAG, "Failed to update FCM token in Firestore", e)
-                    }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error saving FCM token to Firestore", e)
-            }
-        }
-    }
+
     
     /**
      * Ensure the system Announcement group exists

@@ -31,7 +31,7 @@ import com.phad.chatapp.models.Message
 import com.phad.chatapp.utils.AttachmentHandler
 import com.phad.chatapp.utils.DriveServiceHelper
 import com.phad.chatapp.utils.FileTypeEnum
-import com.phad.chatapp.utils.NotificationHelper
+
 import com.phad.chatapp.utils.SessionManager
 import java.util.Date
 import java.util.regex.Pattern
@@ -295,17 +295,7 @@ class ChatActivity : AppCompatActivity() {
                 Log.d(TAG, "Message sent with ID: $messageId")
                 binding.messageInput.setText("")
                 
-                // Send notification to recipient
-                val notificationHelper = NotificationHelper(this)
-                notificationHelper.sendMessageNotification(
-                    "", // FCM token - will be fetched in the method
-                    currentUserRollNumber, // sender roll number - will be used to fetch the actual name
-                    text, // message 
-                    otherUserRollNumber, // receiver
-                    false, // not a group message
-                    "", // no group ID
-                    currentUserRollNumber // sender ID
-                )
+
                 
                 // Update last message in conversation
                 updateLastMessage(text)
@@ -642,18 +632,6 @@ class ChatActivity : AppCompatActivity() {
         
         // Mark messages as read initially
         markMessagesAsRead()
-        
-        // Start listening for notifications for this user
-        val notificationHelper = NotificationHelper(this)
-        notificationHelper.startListeningForNotifications(currentUserRollNumber)
-    }
-    
-    override fun onPause() {
-        super.onPause()
-        
-        // Stop notification listener when activity is paused
-        val notificationHelper = NotificationHelper(this)
-        notificationHelper.stopListeningForNotifications()
     }
     
     private fun markSpecificMessagesAsRead(messages: List<com.google.firebase.firestore.DocumentSnapshot>) {
@@ -791,18 +769,7 @@ class ChatActivity : AppCompatActivity() {
             .addOnSuccessListener {
                 Log.d(TAG, "Media message sent with ID: $messageId")
                 
-                // Send notification to recipient
-                val notificationHelper = NotificationHelper(this)
-                val notificationText = "Sent a $fileType"
-                notificationHelper.sendMessageNotification(
-                    "", // FCM token - will be fetched in the method
-                    currentUserRollNumber, // sender roll number - will be used to fetch the actual name
-                    notificationText, // message 
-                    otherUserRollNumber, // receiver
-                    false, // not a group message
-                    "", // no group ID
-                    currentUserRollNumber // sender ID
-                )
+
                 
                 // Update last message in conversation
                 updateLastMessage("[${fileType.capitalize()}]")

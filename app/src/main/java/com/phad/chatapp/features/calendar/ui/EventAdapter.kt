@@ -4,7 +4,6 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
-import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
@@ -25,7 +24,8 @@ class EventAdapter(
     }
 
     class EventViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        val card: CardView = itemView.findViewById(R.id.event_card)
+        val card: View = itemView.findViewById(R.id.event_card)
+        val dateText: TextView = itemView.findViewById(R.id.tv_event_date)
         val title: TextView = itemView.findViewById(R.id.event_title)
         val description: TextView = itemView.findViewById(R.id.event_description)
     }
@@ -41,6 +41,12 @@ class EventAdapter(
         
         // Set event details
         holder.title.text = event.title
+        
+        // Parse date into massive 2-digit day format for the minimal UI
+        val calendar = java.util.Calendar.getInstance()
+        calendar.time = event.date
+        val dayNumber = String.format(java.util.Locale.getDefault(), "%02d", calendar.get(java.util.Calendar.DAY_OF_MONTH))
+        holder.dateText.text = dayNumber
         
         // Build description text that includes roll number if accepted
         val descriptionBuilder = StringBuilder()
@@ -69,16 +75,16 @@ class EventAdapter(
         
         holder.description.text = descriptionBuilder.toString()
         
-        // Set card color based on event type and status
-        val cardColor = when {
+        // Set date color based on event type and status instead of card background
+        val dateColor = when {
             event.eventType == EventType.TEACHING && event.status == EventStatus.ACCEPTED -> 
-                R.color.slot_booked // Use green for accepted classes
+                R.color.cal_success // Use green for accepted classes
             event.eventType == EventType.TEACHING -> 
-                R.color.teaching_day
+                R.color.cal_accent
             else -> 
-                R.color.accent
+                android.R.color.white
         }
-        holder.card.setCardBackgroundColor(ContextCompat.getColor(holder.itemView.context, cardColor))
+        holder.dateText.setTextColor(ContextCompat.getColor(holder.itemView.context, dateColor))
         
         // Set click listener
         holder.card.setOnClickListener {

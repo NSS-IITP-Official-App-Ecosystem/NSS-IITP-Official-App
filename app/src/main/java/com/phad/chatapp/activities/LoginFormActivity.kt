@@ -321,22 +321,7 @@ class LoginFormActivity : AppCompatActivity() {
                     val finalUserType = (userData["userType"] as? String ?: "student").replaceFirstChar { it.lowercase() }
                     sessionManager.createLoginSession(if (finalUserType == "admin") "Admin" else "Student", rollNumber, 0)
                     sessionManager.saveUserName(fullName)
-                    // Update FCM token (only for users collection)
-                    if (true) {
-                    val currentUser = auth.currentUser
-                    if (currentUser != null) {
-                        try {
-                            val token = com.google.firebase.messaging.FirebaseMessaging.getInstance().token.await()
-                            db.collection("users")
-                                .document(rollNumber)
-                                .update("fcmToken", token)
-                                .await()
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Error updating FCM token", e)
-                            // Continue anyway
-                        }
-                    }
-                    }
+
                     // Now fetch full profile and save to session
                     fetchProfileAndProceed(rollNumber, finalUserType)
                     // Default interface to NSS after unified login

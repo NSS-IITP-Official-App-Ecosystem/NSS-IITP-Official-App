@@ -1,10 +1,9 @@
 package com.phad.chatapp
 
-import android.Manifest
 import android.content.Intent
 import com.phad.chatapp.activities.LoginActivity
-import android.content.pm.PackageManager
-import android.os.Build
+
+
 import android.os.Bundle
 import android.util.Log
 import android.view.Menu
@@ -14,7 +13,7 @@ import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
+
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -30,7 +29,7 @@ import com.google.firebase.firestore.FirebaseFirestoreException
 import com.phad.chatapp.utils.FirestoreSetup
 import com.phad.chatapp.utils.NetworkUtils
 import com.phad.chatapp.utils.SessionManager
-import com.phad.chatapp.utils.NotificationHelper
+
 import com.phad.chatapp.utils.MultiDatabaseHelper
 import com.phad.chatapp.fragments.HomeFragment
 import com.phad.chatapp.features.calendar.ui.CalendarFragment
@@ -43,7 +42,7 @@ class MainActivity : AppCompatActivity() {
     private val TAG = "MainActivity"
     private lateinit var sessionManager: SessionManager
     private lateinit var auth: FirebaseAuth
-    private lateinit var notificationHelper: NotificationHelper
+
     private lateinit var navController: NavController
 
     // User data
@@ -51,8 +50,7 @@ class MainActivity : AppCompatActivity() {
     private var userRoll: String? = null
     private var userYear: Int = 0
     
-    // Request code for notification permission
-    private val NOTIFICATION_PERMISSION_REQUEST_CODE = 100
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         Log.d("MainActivity", "onCreate start")
@@ -67,11 +65,7 @@ class MainActivity : AppCompatActivity() {
         // Initialize session manager
         sessionManager = SessionManager(this)
         
-        // Initialize notification helper
-        notificationHelper = NotificationHelper(this)
-        
-        // Request notification permission if needed
-        requestNotificationPermissionIfNeeded()
+
         
         // Set up window flags for proper status bar handling
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -102,12 +96,7 @@ class MainActivity : AppCompatActivity() {
         loadUserData()
         Log.d("MainActivity", "after loadUserData")
 
-        // Start notification listener for the current user
-        val currentUserId = sessionManager.fetchUserId()
-        if (currentUserId.isNotEmpty()) {
-            notificationHelper.startListeningForNotifications(currentUserId)
-        }
-        Log.d("MainActivity", "after notificationHelper.startListeningForNotifications")
+
 
         // Set up custom navigation buttons
         setupCustomNavigation()
@@ -118,67 +107,10 @@ class MainActivity : AppCompatActivity() {
         Log.d("MainActivity", "onResume start")
         super.onResume()
         Log.d("MainActivity", "after super.onResume")
-
-        // Restart notification listener when returning to the app
-        val currentUserId = sessionManager.fetchUserId()
-        if (currentUserId.isNotEmpty()) {
-            notificationHelper.startListeningForNotifications(currentUserId)
-        }
-        
         Log.d("MainActivity", "onResume end")
     }
     
-    override fun onPause() {
-        super.onPause()
-        
-        // Stop notification listener when app is in background
-        notificationHelper.stopListeningForNotifications()
-    }
-    
-    override fun onDestroy() {
-        super.onDestroy()
-        
-        // Ensure notification listener is stopped to prevent memory leaks
-        notificationHelper.stopListeningForNotifications()
-    }
 
-    /**
-     * Request notification permission for Android 13+
-     */
-    private fun requestNotificationPermissionIfNeeded() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.POST_NOTIFICATIONS
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                    NOTIFICATION_PERMISSION_REQUEST_CODE
-                )
-            }
-        }
-    }
-    
-    /**
-     * Handle permission request results
-     */
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        
-        if (requestCode == NOTIFICATION_PERMISSION_REQUEST_CODE) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                Log.d(TAG, "Notification permission granted")
-            } else {
-                Log.w(TAG, "Notification permission denied - notifications won't work")
-            }
-        }
-    }
     
     private fun redirectToLogin() {
         val intent = Intent(this, LoginActivity::class.java)
@@ -330,16 +262,14 @@ class MainActivity : AppCompatActivity() {
             ViewCompat.setOnApplyWindowInsetsListener(it) { v, insets ->
                 val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
                 v.updatePadding(
-                    left = systemBars.left,
+                    left = 0,    // No horizontal padding — avoids the narrow-banner gap
                     top = systemBars.top,
-                    right = systemBars.right,
+                    right = 0,   // No horizontal padding — avoids the narrow-banner gap
                     bottom = systemBars.bottom
                 )
                 insets
             }
         }
-
-        // Removed obsolete toolbar content handling.
     }
 
     private fun loadUserData() {

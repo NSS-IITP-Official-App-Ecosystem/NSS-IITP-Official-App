@@ -1,47 +1,62 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/event_card"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginStart="8dp"
-    android:layout_marginEnd="8dp"
-    android:layout_marginTop="4dp"
-    android:layout_marginBottom="4dp"
+    android:layout_marginTop="8dp"
+    android:layout_marginBottom="16dp"
     android:clickable="true"
     android:focusable="true"
     android:foreground="?attr/selectableItemBackground"
-    app:cardBackgroundColor="@color/teaching_day"
-    app:cardCornerRadius="8dp"
-    app:cardElevation="2dp">
+    android:paddingStart="24dp"
+    android:paddingEnd="24dp">
+
+    <TextView
+        android:id="@+id/tv_event_date"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="sans-serif-black"
+        android:textColor="@android:color/white"
+        android:textSize="56sp"
+        android:includeFontPadding="false"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:text="15" />
 
     <LinearLayout
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
+        android:layout_marginStart="24dp"
         android:orientation="vertical"
-        android:padding="12dp">
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toEndOf="@id/tv_event_date"
+        app:layout_constraintTop_toTopOf="parent">
 
         <TextView
             android:id="@+id/event_title"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textAppearance="@style/TextAppearance.Material3.TitleSmall"
             android:textColor="@android:color/white"
+            android:textSize="18sp"
             android:textStyle="bold"
-            tools:text="Teaching - Algorithm Design" />
+            tools:text="Design Patterns" />
 
         <TextView
             android:id="@+id/event_description"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:textAppearance="@style/TextAppearance.Material3.BodySmall"
-            android:textColor="@android:color/white"
+            android:layout_marginTop="4dp"
+            android:textColor="@color/cal_text_secondary"
+            android:textSize="14sp"
             android:maxLines="3"
             android:ellipsize="end"
-            tools:text="Core teaching session on algorithm design principles" />
+            android:lineSpacingExtra="2dp"
+            tools:text="Location: Room 302\nTime: 10:00 AM" />
 
     </LinearLayout>
 
-</androidx.cardview.widget.CardView> 
+</androidx.constraintlayout.widget.ConstraintLayout>

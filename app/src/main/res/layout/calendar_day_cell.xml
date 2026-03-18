@@ -4,20 +4,20 @@
     android:id="@+id/cardDayCell"
     android:layout_width="match_parent"
     android:layout_height="48dp"
-    android:layout_margin="2dp"
+    android:layout_margin="4dp"
     android:clickable="true"
     android:focusable="true"
     android:foreground="?attr/selectableItemBackground"
-    app:cardBackgroundColor="@android:color/white"
-    app:cardCornerRadius="4dp"
-    app:cardElevation="2dp">
+    app:cardBackgroundColor="@android:color/transparent"
+    app:cardCornerRadius="24dp"
+    app:cardElevation="0dp">
 
     <TextView
         android:id="@+id/tvDayNumber"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:gravity="center"
-        android:textColor="@android:color/black"
+        android:textColor="@color/cal_text_primary"
         android:textSize="12sp"
         android:maxLines="1"
         android:ellipsize="none"
