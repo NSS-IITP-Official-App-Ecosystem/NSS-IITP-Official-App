@@ -113,7 +113,8 @@ class CalendarTabFragment : Fragment() {
             leaveApplications = emptyList(),
             teachingAssignments = viewModel.userAssignments.value ?: emptyList(),
             isTeachingCalendar = (tabType == TAB_TYPE_TEACHING),
-            userRollNumber = userRollNumber
+            userRollNumber = userRollNumber,
+            isAdmin = (viewModel.currentUserRole.value == UserRole.ADMIN1 || viewModel.currentUserRole.value == UserRole.ADMIN2)
         )
         calendarAdapter.onDateSelectedListener = { clickedDate ->
             Log.d("CalendarTabFragment", "Date clicked: ${dateFormat.format(clickedDate)}")
@@ -122,12 +123,15 @@ class CalendarTabFragment : Fragment() {
             // which updates the event list and date header below the calendar
             viewModel.selectDate(clickedDate)
             
-            // For non-teaching tabs or admin users, also propagate to parent
-            if (!(tabType == TAB_TYPE_TEACHING && viewModel.currentUserRole.value == UserRole.USER)) {
+            // For non-teaching tabs, also propagate to parent to show date actions
+            if (tabType != TAB_TYPE_TEACHING) {
                 (parentFragment as? CalendarFragment)?.let { parent ->
                     parent.updateLastClickedDate(clickedDate)
                     parent.showDateActionDialog(clickedDate, tabType)
                 }
+            } else {
+                // For teaching tab, just update the selected date in the parent
+                (parentFragment as? CalendarFragment)?.updateLastClickedDate(clickedDate)
             }
         }
         
@@ -174,7 +178,8 @@ class CalendarTabFragment : Fragment() {
                 availableLeaves,
                 viewModel.userAssignments.value ?: emptyList(),
                 (tabType == TAB_TYPE_TEACHING),
-                userRollNumber
+                userRollNumber,
+                isAdmin = (viewModel.currentUserRole.value == UserRole.ADMIN1 || viewModel.currentUserRole.value == UserRole.ADMIN2)
             )
             adapter.setMonth(year, month)
             adapter.onDateSelectedListener = calendarAdapter.onDateSelectedListener
@@ -210,10 +215,19 @@ class CalendarTabFragment : Fragment() {
     }
 
     private fun setupWindowInsets() {
-        // The activity root view already has systemBars.top applied, so the banner
-        // starts below the status bar. We only need a small base padding for visual breathing room.
-        val basePaddingPx = (16 * resources.displayMetrics.density).toInt()
-        binding.topBannerLayout.setPadding(0, basePaddingPx, 0, binding.topBannerLayout.paddingBottom)
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(binding.topBannerLayout) { v, insets ->
+            val systemBars = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            // Base padding below the status bar so the content has visual breathing room
+            val basePaddingPx = (16 * resources.displayMetrics.density).toInt()
+            
+            v.setPadding(
+                0, // stretch banner horizontally
+                systemBars.top + basePaddingPx,
+                0, // stretch banner horizontally
+                v.paddingBottom
+            )
+            insets
+        }
     }
 
     private fun setupEventsRecyclerView() {
@@ -235,20 +249,16 @@ class CalendarTabFragment : Fragment() {
                 val isMyLeave = leaveApplication.rollNumber == userRollNumber
                 
                 if (isMyLeave && (leaveApplication.status == EventStatus.PENDING || leaveApplication.status == EventStatus.APPROVED)) {
-                    // Clicked my own pending or approved leave -> Offer to cancel it (Implementation in Point 6)
+                    // Clicked my own pending or approved leave -> Offer to cancel it
                     showCancelLeaveDialog(leaveApplication)
                 } else if (!isMyLeave && leaveApplication.status == EventStatus.APPROVED) {
                     // Clicked someone else's approved leave -> Offer to substitute
                     showAcceptClassDialogForLeave(leaveApplication)
-                } else if (isMyLeave && leaveApplication.status == EventStatus.ACCEPTED && leaveApplication.substitutedByRollNumber.isNotEmpty()) {
-                    // Clicked my own leave that was accepted by someone else -> Show details (or could be withdraw later)
-                    showLeaveDetailsDialog(leaveApplication)
                 } else if (!isMyLeave && leaveApplication.status == EventStatus.ACCEPTED && leaveApplication.substitutedByRollNumber == userRollNumber) {
-                     // Clicked a leave I accepted for someone else -> Show details (or could be withdraw substitution later)
-                    showLeaveDetailsDialog(leaveApplication)
-                } else {
-                    showLeaveDetailsDialog(leaveApplication)
+                    // Clicked someone else's leave that I accepted -> Go straight to chained leave
+                    showChainedLeaveConfirmationDialog(leaveApplication)
                 }
+                // Intentionally do nothing for the sender's own ACCEPTED leave or REJECTED leaves
             } else {
                 showLeaveDetailsDialog(leaveApplication)
             }
@@ -283,7 +293,19 @@ class CalendarTabFragment : Fragment() {
             updateEventsForDate(date)
             
             // The date is now elegantly handled by the top app bar structure
-            // Update the header label simply to: Events for Mar 17, 2026
+            // Update the header label simply to: Events on 12th March
+            val cal = java.util.Calendar.getInstance()
+            cal.time = date
+            val day = cal.get(java.util.Calendar.DAY_OF_MONTH)
+            val suffix = when {
+                day in 11..13 -> "th"
+                day % 10 == 1 -> "st"
+                day % 10 == 2 -> "nd"
+                day % 10 == 3 -> "rd"
+                else -> "th"
+            }
+            val displayMonth = java.text.SimpleDateFormat("MMMM", java.util.Locale.getDefault()).format(date)
+            binding.tvSelectedDate.text = "Events on $day$suffix $displayMonth"
             
             Log.d("CalendarTabFragment", "Loading data for ${date.time}")
         }
@@ -297,7 +319,8 @@ class CalendarTabFragment : Fragment() {
                 leaveApplications = availableLeaves,
                 teachingAssignments = viewModel.userAssignments.value ?: emptyList(),
                 isTeachingCalendar = (tabType == TAB_TYPE_TEACHING),
-                userRollNumber = userRollNumber
+                userRollNumber = userRollNumber,
+                isAdmin = (viewModel.currentUserRole.value == UserRole.ADMIN1 || viewModel.currentUserRole.value == UserRole.ADMIN2)
             )
             // Keep the current month when updating
             adapter.setMonth(calendarAdapter.getCurrentYear(), calendarAdapter.getCurrentMonth())
@@ -323,7 +346,8 @@ class CalendarTabFragment : Fragment() {
                     leaveApplications = leaveApplications,
                     teachingAssignments = viewModel.userAssignments.value ?: emptyList(),
                     isTeachingCalendar = true,
-                    userRollNumber = userRollNumber
+                    userRollNumber = userRollNumber,
+                    isAdmin = (viewModel.currentUserRole.value == UserRole.ADMIN1 || viewModel.currentUserRole.value == UserRole.ADMIN2)
                 )
                 // Keep the current month when updating
                 adapter.setMonth(calendarAdapter.getCurrentYear(), calendarAdapter.getCurrentMonth())
@@ -349,7 +373,8 @@ class CalendarTabFragment : Fragment() {
                     leaveApplications = availableLeaves,
                     teachingAssignments = assignments,
                     isTeachingCalendar = true,
-                    userRollNumber = userRollNumber
+                    userRollNumber = userRollNumber,
+                    isAdmin = (viewModel.currentUserRole.value == UserRole.ADMIN1 || viewModel.currentUserRole.value == UserRole.ADMIN2)
                 )
                 adapter.setMonth(calendarAdapter.getCurrentYear(), calendarAdapter.getCurrentMonth())
                 adapter.onDateSelectedListener = calendarAdapter.onDateSelectedListener
@@ -377,15 +402,35 @@ class CalendarTabFragment : Fragment() {
         var allLeaves = leavesForDate + pendingLeaves.filter { !leavesForDate.any { approved -> approved.id == it.id } }
         
         // Point 4: Filter irrelevant substitutions.
-        // Hide leaves that have been accepted by someone else, unless it's the user's own leave OR the user is the one who accepted it.
-        if (tabType == TAB_TYPE_TEACHING && userRollNumber.isNotEmpty()) {
-            allLeaves = allLeaves.filter { leave ->
-                val isMyLeave = leave.rollNumber == userRollNumber
-                val iAcceptedIt = leave.status == EventStatus.ACCEPTED && leave.substitutedByRollNumber == userRollNumber
-                val isUnaccepted = leave.status != EventStatus.ACCEPTED
+        val role = viewModel.currentUserRole.value
+        val isAdmin = role == UserRole.ADMIN1 || role == UserRole.ADMIN2
 
-                // Show it if it's my leave, or I accepted it, or it hasn't been accepted yet
-                isMyLeave || iAcceptedIt || isUnaccepted
+        if (tabType == TAB_TYPE_TEACHING) {
+            if (isAdmin) {
+                // Admins see all classes available for substitution and all classes being substituted
+                allLeaves = allLeaves.filter { leave ->
+                    leave.status == EventStatus.APPROVED || leave.status == EventStatus.ACCEPTED
+                }
+            } else if (userRollNumber.isNotEmpty()) {
+                val myLeavesThisDay = allLeaves.filter { it.rollNumber == userRollNumber }
+                
+                allLeaves = allLeaves.filter { leave ->
+                    val isMyLeave = leave.rollNumber == userRollNumber
+                    
+                    val iAcceptedIt = leave.status == EventStatus.ACCEPTED && leave.substitutedByRollNumber == userRollNumber
+                    var showIAcceptedIt = false
+                    if (iAcceptedIt) {
+                        val iTookLeaveForThis = myLeavesThisDay.any { myLeave -> 
+                            myLeave.subject == leave.subject && myLeave.slot == leave.slot && (myLeave.status == EventStatus.PENDING || myLeave.status == EventStatus.APPROVED)
+                        }
+                        showIAcceptedIt = !iTookLeaveForThis
+                    }
+                    
+                    val isUnaccepted = leave.status != EventStatus.ACCEPTED
+
+                    // Show it if it's my leave, or I accepted it (and didn't apply for leave), or it hasn't been accepted yet
+                    isMyLeave || showIAcceptedIt || isUnaccepted
+                }
             }
         }
         
@@ -461,6 +506,11 @@ class CalendarTabFragment : Fragment() {
     }
     
     private fun updateUIForRole(role: UserRole) {
+        // Update leavesAdapter with admin status
+        if (::leavesAdapter.isInitialized) {
+            leavesAdapter.setAdminStatus(role == UserRole.ADMIN1 || role == UserRole.ADMIN2)
+        }
+        
         // The redundant action buttons have been removed from the layout
         // so we don't need to update them anymore based on role
         
@@ -507,16 +557,8 @@ class CalendarTabFragment : Fragment() {
             .setView(dialogView)
             .setPositiveButton("Close", null)
             
-        // Add delete button for admins
-        if (viewModel.currentUserRole.value == UserRole.ADMIN1 || viewModel.currentUserRole.value == UserRole.ADMIN2) {
-            dialogBuilder.setNeutralButton("Delete") { _, _ ->
-                showDeleteConfirmationDialog(
-                    itemName = "Event",
-                    itemId = event.id,
-                    itemType = EntryType.EVENT
-                )
-            }
-        }
+        // Admin delete button removed as per requirement to only show relevant info
+
         
         val dialog = dialogBuilder.show()
     }
@@ -614,9 +656,10 @@ class CalendarTabFragment : Fragment() {
         detailsText.append("Class Details:\n")
         detailsText.append("Subject: ${selectedLeave.subject}\n")
         detailsText.append("Time: ${selectedLeave.slot}\n")
-        detailsText.append("Student on Leave: ${selectedLeave.userName}\n\n")
+        detailsText.append("School: ${selectedLeave.school}\n")
+        detailsText.append("Student on Leave: ${selectedLeave.userName}\n")
+        detailsText.append("Student Roll Number: ${selectedLeave.rollNumber}\n\n")
         
-        detailsText.append("You are accepting this class as: $userRollNumber\n\n")
         detailsText.append("Are you sure you want to substitute for this class?")
 
         MaterialAlertDialogBuilder(requireContext(), R.style.CalendarDarkDialog)
@@ -628,10 +671,10 @@ class CalendarTabFragment : Fragment() {
                     try {
                         if (event.id.startsWith("virtual_")) {
                             // This is a virtual event based on a leave, update the leave directly
-                            viewModel.markLeaveAsSubstituted(selectedLeave.id, userRollNumber)
+                            viewModel.markLeaveAsSubstituted(selectedLeave.id, userRollNumber, userName)
                         } else {
                             // This is a real teaching event
-                            viewModel.acceptClass(event.id, userRollNumber)
+                            viewModel.acceptClass(event.id, userRollNumber, userName)
                         }
                         
                         Toast.makeText(requireContext(), "Class accepted successfully", Toast.LENGTH_SHORT).show()
@@ -667,17 +710,10 @@ class CalendarTabFragment : Fragment() {
                 showBookSlotConfirmationDialog(event)
             }
         } 
-        // For admins, show delete button and optionally the book slot button
+        // For admins, optionally the book slot button
         else if (viewModel.currentUserRole.value == UserRole.ADMIN1 || viewModel.currentUserRole.value == UserRole.ADMIN2) {
-            // Delete button as neutral button
-            dialogBuilder.setNeutralButton("Delete") { _, _ ->
-                showDeleteConfirmationDialog(
-                    itemName = "Event",
-                    itemId = event.id,
-                    itemType = EntryType.EVENT
-                )
-            }
-            
+            // Admin delete button removed as per requirement
+               
             // If the event isn't booked, also allow admins to book it (as negative button)
             if (event.bookedBy.isEmpty()) {
                 dialogBuilder.setNegativeButton("Book Slot") { _, _ ->
@@ -1036,7 +1072,8 @@ class CalendarTabFragment : Fragment() {
                 leaveApplications = leaveApplications,
                 teachingAssignments = viewModel.userAssignments.value ?: emptyList(),
                 isTeachingCalendar = (tabType == TAB_TYPE_TEACHING),
-                userRollNumber = userRollNumber
+                userRollNumber = userRollNumber,
+                isAdmin = (viewModel.currentUserRole.value == UserRole.ADMIN1 || viewModel.currentUserRole.value == UserRole.ADMIN2)
             )
             
             // Keep the current month and selected date
@@ -1140,31 +1177,18 @@ class CalendarTabFragment : Fragment() {
     }
     
     private fun showLeaveDetailsDialog(leaveApplication: LeaveApplication) {
-        val statusText = when (leaveApplication.status) {
-            EventStatus.ACCEPTED -> "ACCEPTED/SUBSTITUTED"
-            EventStatus.APPROVED -> "APPROVED"
-            EventStatus.REJECTED -> "REJECTED"
-            else -> "PENDING"
-        }
-        
         val messageBuilder = StringBuilder()
         messageBuilder.append("Student: ${leaveApplication.userName}\n")
         messageBuilder.append("Roll Number: ${leaveApplication.rollNumber}\n")
         messageBuilder.append("Subject: ${leaveApplication.subject}\n")
         messageBuilder.append("Time: ${leaveApplication.slot}\n")
         messageBuilder.append("School: ${leaveApplication.school}\n")
-        messageBuilder.append("Status: $statusText\n")
+        messageBuilder.append("Status: ${leaveApplication.status.name}\n")
         
-        // Add substitution information if this leave has been accepted by someone
-        if (leaveApplication.status == EventStatus.ACCEPTED && leaveApplication.substitutedByRollNumber.isNotEmpty()) {
-            messageBuilder.append("\n")
-            messageBuilder.append("----------------------------------------\n")
-            messageBuilder.append("SUBSTITUTION INFORMATION:\n")
-            messageBuilder.append("----------------------------------------\n")
-            messageBuilder.append("Original Student: ${leaveApplication.userName}\n")
-            messageBuilder.append("Original Roll Number: ${leaveApplication.rollNumber}\n")
-            messageBuilder.append("Substituted By Roll Number: ${leaveApplication.substitutedByRollNumber}\n")
-            messageBuilder.append("----------------------------------------")
+        if (leaveApplication.status == EventStatus.ACCEPTED) {
+            val subName = leaveApplication.substitutedByName.takeIf { it.isNotEmpty() } ?: "Unknown"
+            val subRoll = leaveApplication.substitutedByRollNumber.takeIf { it.isNotEmpty() } ?: "Unknown"
+            messageBuilder.append("\nSubstituted By:\n$subName ($subRoll)")
         }
         
         val dialogBuilder = MaterialAlertDialogBuilder(requireContext(), R.style.CalendarDarkDialog)
@@ -1195,18 +1219,75 @@ class CalendarTabFragment : Fragment() {
             }
         }
         
-        // Add delete button for admins
-        if (viewModel.currentUserRole.value == UserRole.ADMIN1 || viewModel.currentUserRole.value == UserRole.ADMIN2) {
-            dialogBuilder.setNegativeButton("Delete") { _, _ ->
-                showDeleteConfirmationDialog(
-                    itemName = "Leave Application",
-                    itemId = leaveApplication.id,
-                    itemType = EntryType.LEAVE_APPLICATION
-                )
-            }
-        }
+
+        // Admin delete button removed as per requirement to only show relevant info
+
         
         dialogBuilder.show()
+    }
+    
+    private fun showChainedLeaveConfirmationDialog(originalLeave: LeaveApplication) {
+        val details = "Subject: ${originalLeave.subject}\n" +
+                "School: ${originalLeave.school}\n" +
+                "Slot: ${originalLeave.slot}\n" +
+                "Date: ${dateFormat.format(originalLeave.date)}"
+
+        MaterialAlertDialogBuilder(requireContext(), R.style.CalendarDarkDialog)
+            .setTitle("Apply for Leave")
+            .setMessage("You accepted this class for ${originalLeave.userName}, but now want to apply for leave. Are you sure?\n\n$details")
+            .setPositiveButton("Apply for Leave") { _, _ ->
+                submitChainedLeave(originalLeave)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun submitChainedLeave(originalLeave: LeaveApplication) {
+        val userId = userRollNumber.ifEmpty { "current_user_id" }
+        val displayName = userName.ifEmpty { "Current User" }
+        val rollNum = userRollNumber
+        
+        // Create a temporary leave application for immediate UI update
+        val newLeave = LeaveApplication(
+            id = UUID.randomUUID().toString(),
+            userId = userId,
+            userName = displayName,
+            rollNumber = rollNum,
+            date = originalLeave.date,
+            slot = originalLeave.slot,
+            subject = originalLeave.subject,
+            school = originalLeave.school,
+            status = EventStatus.APPROVED, // Auto-approve per requirements
+            timestamp = System.currentTimeMillis()
+        )
+        
+        val updatedLeaves = availableLeaves.toMutableList()
+        updatedLeaves.add(newLeave)
+        availableLeaves = updatedLeaves
+        updateEventsForDate(originalLeave.date)
+        
+        lifecycleScope.launch {
+            val repository = (viewModel as CalendarViewModel).getCalendarRepository()
+            val success = repository.applyForLeave(
+                userId = userId, 
+                userName = displayName, 
+                rollNumber = rollNum, 
+                date = originalLeave.date, 
+                slot = originalLeave.slot, 
+                subject = originalLeave.subject, 
+                school = originalLeave.school
+            )
+            
+            if (success) {
+                Toast.makeText(requireContext(), "Leave application submitted!", Toast.LENGTH_SHORT).show()
+                (parentFragment as? CalendarFragment)?.notifyLeaveApplicationSubmitted()
+            } else {
+                Toast.makeText(requireContext(), "Failed to submit leave", Toast.LENGTH_SHORT).show()
+                val filteredLeaves = availableLeaves.filter { it.id != newLeave.id }
+                availableLeaves = filteredLeaves
+                updateEventsForDate(originalLeave.date)
+            }
+        }
     }
     
     // Helper enum for distinguishing between different types of entries

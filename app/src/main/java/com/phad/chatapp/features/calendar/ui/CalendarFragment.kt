@@ -358,10 +358,10 @@ class CalendarFragment : Fragment() {
                     try {
                         val success = if (event.id.startsWith("virtual_")) {
                             // This is a virtual event based on a leave, update the leave directly
-                            sharedViewModel.markLeaveAsSubstituted(selectedLeave.id, rollNumber)
+                            sharedViewModel.markLeaveAsSubstituted(selectedLeave.id, rollNumber, "")
                         } else {
                             // This is a regular teaching event
-                            sharedViewModel.acceptClass(event.id, rollNumber)
+                            sharedViewModel.acceptClass(event.id, rollNumber, "")
                         }
                         
                         if (success) {
@@ -474,20 +474,10 @@ class CalendarFragment : Fragment() {
                     showEventDetailsDialog(event)
                 }
                 
-                // Set delete button - only visible for admins
+                // Set delete button - removed for both users and admins
                 val btnDelete = view.findViewById<View>(R.id.btnDelete)
-                if (sharedViewModel.currentUserRole.value == UserRole.ADMIN1 || sharedViewModel.currentUserRole.value == UserRole.ADMIN2) {
-                    btnDelete.visibility = View.VISIBLE
-                    btnDelete.setOnClickListener {
-                        showDeleteConfirmationDialog(
-                            itemName = "Event",
-                            itemId = event.id,
-                            itemType = EntryType.EVENT
-                        )
-                    }
-                } else {
-                    btnDelete.visibility = View.GONE
-                }
+                btnDelete.visibility = View.GONE
+
             }
             
             override fun getItemCount(): Int = eventsForDay.size
@@ -529,16 +519,8 @@ class CalendarFragment : Fragment() {
             .setMessage(detailsBuilder.toString())
             .setPositiveButton("Close", null)
         
-        // Add delete button for admins
-        if (sharedViewModel.currentUserRole.value == UserRole.ADMIN1 || sharedViewModel.currentUserRole.value == UserRole.ADMIN2) {
-            dialogBuilder.setNeutralButton("Delete") { _, _ ->
-                showDeleteConfirmationDialog(
-                    itemName = "Event",
-                    itemId = event.id,
-                    itemType = EntryType.EVENT
-                )
-            }
-        }
+        // Admin delete button removed as per requirement to only show relevant info
+
         
         dialogBuilder.show()
     }
@@ -1097,32 +1079,12 @@ class CalendarFragment : Fragment() {
 
     // Add this method to display leave details
     private fun showLeaveDetailsDialog(leaveApplication: LeaveApplication) {
-        val statusText = when (leaveApplication.status) {
-            EventStatus.ACCEPTED -> "ACCEPTED/SUBSTITUTED"
-            EventStatus.APPROVED -> "APPROVED"
-            EventStatus.REJECTED -> "REJECTED"
-            else -> "PENDING"
-        }
-        
         val messageBuilder = StringBuilder()
         messageBuilder.append("Student: ${leaveApplication.userName}\n")
         messageBuilder.append("Roll Number: ${leaveApplication.rollNumber}\n")
         messageBuilder.append("Subject: ${leaveApplication.subject}\n")
         messageBuilder.append("Time: ${leaveApplication.slot}\n")
-        messageBuilder.append("School: ${leaveApplication.school}\n")
-        messageBuilder.append("Status: $statusText\n")
-        
-        // Add substitution information if this leave has been accepted by someone
-        if (leaveApplication.status == EventStatus.ACCEPTED && leaveApplication.substitutedByRollNumber.isNotEmpty()) {
-            messageBuilder.append("\n")
-            messageBuilder.append("----------------------------------------\n")
-            messageBuilder.append("SUBSTITUTION INFORMATION:\n")
-            messageBuilder.append("----------------------------------------\n")
-            messageBuilder.append("Original Student: ${leaveApplication.userName}\n")
-            messageBuilder.append("Original Roll Number: ${leaveApplication.rollNumber}\n")
-            messageBuilder.append("Substituted By Roll Number: ${leaveApplication.substitutedByRollNumber}\n")
-            messageBuilder.append("----------------------------------------")
-        }
+        messageBuilder.append("School: ${leaveApplication.school}")
         
         val dialogBuilder = MaterialAlertDialogBuilder(requireContext())
             .setTitle("Leave Application Details")

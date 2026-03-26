@@ -391,7 +391,8 @@ class CalendarRepository {
      */
     suspend fun acceptClass(
         eventId: String,
-        rollNumber: String
+        rollNumber: String,
+        substituteName: String
     ): Boolean {
         try {
             // Determine if this is a teaching or general event
@@ -424,6 +425,7 @@ class CalendarRepository {
                 .update(
                     mapOf(
                         "acceptedByRollNumber" to rollNumber,
+                        "bookedByName" to substituteName,
                         "status" to EventStatus.ACCEPTED.toString()
                     )
                 )
@@ -440,6 +442,7 @@ class CalendarRepository {
             
             val updatedEvent = currentEvents[eventIndex].copy(
                 acceptedByRollNumber = rollNumber,
+                bookedByName = substituteName,
                 status = EventStatus.ACCEPTED
             )
             currentEvents[eventIndex] = updatedEvent
@@ -614,7 +617,11 @@ class CalendarRepository {
     /**
      * Mark a leave as substituted by a student with given roll number
      */
-    suspend fun markLeaveAsSubstituted(leaveId: String, rollNumber: String): Boolean {
+    suspend fun markLeaveAsSubstituted(
+        leaveId: String,
+        rollNumber: String,
+        substituteName: String
+    ): Boolean {
         try {
             val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
             val leaveDocRef = leaveApplicationsCollection.document(leaveId)
@@ -644,6 +651,7 @@ class CalendarRepository {
                         leaveDocRef,
                         mapOf(
                             "substitutedByRollNumber" to rollNumber,
+                            "substitutedByName" to substituteName,
                             "status" to EventStatus.ACCEPTED.toString()
                         )
                     )
@@ -654,6 +662,7 @@ class CalendarRepository {
                         availableLeaveDocRef,
                         mapOf(
                             "substitutedByRollNumber" to rollNumber,
+                            "substitutedByName" to substituteName,
                             "status" to EventStatus.ACCEPTED.toString()
                         )
                     )
@@ -667,9 +676,11 @@ class CalendarRepository {
             if (leaveIndex != -1) {
                 // We need to update the leave application with the substitution information
                 val leave = currentLeaves[leaveIndex]
-                // Since LeaveApplication doesn't have a substitutedByRollNumber field yet,
-                // we'll just update its status to ACCEPTED for now
-                val updatedLeave = leave.copy(status = EventStatus.ACCEPTED)
+                val updatedLeave = leave.copy(
+                    substitutedByRollNumber = rollNumber,
+                    substitutedByName = substituteName,
+                    status = EventStatus.ACCEPTED
+                )
                 currentLeaves[leaveIndex] = updatedLeave
                 _leaveApplications.postValue(currentLeaves)
             }

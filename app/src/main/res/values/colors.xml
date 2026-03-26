@@ -99,7 +99,7 @@
     <color name="cal_error">#FFFF5252</color>
     <color name="cal_warning">#FFFFC107</color>
     <color name="cal_info">#FF1E88E5</color>
-    
+    <color name="cal_substitution_open">#AB47BC</color>
     
     <!-- Calendar UI colors -->
     <color name="calendar_header_bg">#2196F3</color>

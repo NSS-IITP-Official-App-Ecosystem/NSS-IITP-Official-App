@@ -18,16 +18,16 @@ class EventAdapter(
     private val onEventClick: (CalendarEvent) -> Unit
 ) : RecyclerView.Adapter<EventAdapter.EventViewHolder>() {
 
-    // Unique view type constant for this adapter
-    override fun getItemViewType(position: Int): Int {
-        return EVENT_VIEW_TYPE
-    }
+    override fun getItemViewType(position: Int): Int = EVENT_VIEW_TYPE
 
     class EventViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         val card: View = itemView.findViewById(R.id.event_card)
-        val dateText: TextView = itemView.findViewById(R.id.tv_event_date)
+        val accentBar: View = itemView.findViewById(R.id.view_event_accent)
         val title: TextView = itemView.findViewById(R.id.event_title)
-        val description: TextView = itemView.findViewById(R.id.event_description)
+        val statusBadge: TextView = itemView.findViewById(R.id.tv_event_status_badge)
+        val time: TextView = itemView.findViewById(R.id.tv_event_time)
+        val schoolClass: TextView = itemView.findViewById(R.id.tv_event_school_class)
+        val acceptorInfo: TextView = itemView.findViewById(R.id.tv_event_acceptor)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): EventViewHolder {
@@ -38,58 +38,71 @@ class EventAdapter(
 
     override fun onBindViewHolder(holder: EventViewHolder, position: Int) {
         val event = events[position]
-        
-        // Set event details
+        val ctx = holder.itemView.context
+
+        // Subject name
         holder.title.text = event.title
-        
-        // Parse date into massive 2-digit day format for the minimal UI
-        val calendar = java.util.Calendar.getInstance()
-        calendar.time = event.date
-        val dayNumber = String.format(java.util.Locale.getDefault(), "%02d", calendar.get(java.util.Calendar.DAY_OF_MONTH))
-        holder.dateText.text = dayNumber
-        
-        // Build description text that includes roll number if accepted
-        val descriptionBuilder = StringBuilder()
-        
-        // Add description
-        descriptionBuilder.append(event.description)
 
-        // Add location if available
-        if (event.location.isNotBlank()) {
-            descriptionBuilder.append("\nLocation: ${event.location}")
+        // Time slot with better icon
+        holder.time.text = "🕐  ${event.timeSlot}"
+
+        // School · Class from description
+        holder.schoolClass.text = "🏛  ${event.description}"
+
+        // Status badge text + accent bar color + faint card tint
+        val accentColorRes: Int
+        when (event.status) {
+            EventStatus.SCHEDULED -> {
+                holder.statusBadge.text = "Scheduled"
+                accentColorRes = R.color.cal_info // blue
+            }
+            EventStatus.ACCEPTED -> {
+                holder.statusBadge.text = "Class Covered"
+                accentColorRes = R.color.cal_success // green
+            }
+            EventStatus.PENDING -> {
+                holder.statusBadge.text = "Leave Applied"
+                accentColorRes = R.color.cal_accent // yellow
+            }
+            EventStatus.APPROVED -> {
+                holder.statusBadge.text = "Leave Active"
+                accentColorRes = R.color.cal_success
+            }
+            EventStatus.REJECTED -> {
+                holder.statusBadge.text = "Rejected"
+                accentColorRes = R.color.cal_error // red
+            }
+            else -> {
+                holder.statusBadge.text = event.status.name
+                accentColorRes = R.color.cal_text_secondary
+            }
+        }
+        val accentColor = ContextCompat.getColor(ctx, accentColorRes)
+        holder.accentBar.setBackgroundColor(accentColor)
+        // Set faint tinted card background (~12% opacity of accent color)
+        val faintColor = android.graphics.Color.argb(
+            0x1E,
+            android.graphics.Color.red(accentColor),
+            android.graphics.Color.green(accentColor),
+            android.graphics.Color.blue(accentColor)
+        )
+        holder.card.setBackgroundColor(faintColor)
+
+        // Acceptor info – only visible when someone has accepted the class
+        if (event.acceptedByRollNumber.isNotEmpty()) {
+            holder.acceptorInfo.visibility = View.VISIBLE
+            val acceptorNameText = if (event.bookedByName.isNotBlank()) {
+                "${event.bookedByName} (${event.acceptedByRollNumber})"
+            } else {
+                event.acceptedByRollNumber
+            }
+            holder.acceptorInfo.text = "✔  Covered by $acceptorNameText"
+        } else {
+            holder.acceptorInfo.visibility = View.GONE
         }
 
-        // Add time slot
-        descriptionBuilder.append("\nTime: ${event.timeSlot}")
-
-        // Add status
-        descriptionBuilder.append("\nStatus: ${event.status}")
-        
-        // Add roll number information if a class has been accepted - make it more prominent
-        if (event.eventType == EventType.TEACHING && event.acceptedByRollNumber.isNotEmpty()) {
-            descriptionBuilder.append("\n=================================")
-            descriptionBuilder.append("\n✓ CLASS SUBSTITUTED")
-            descriptionBuilder.append("\n✓ Accepted by: ${event.acceptedByRollNumber}")
-            descriptionBuilder.append("\n=================================")
-        }
-        
-        holder.description.text = descriptionBuilder.toString()
-        
-        // Set date color based on event type and status instead of card background
-        val dateColor = when {
-            event.eventType == EventType.TEACHING && event.status == EventStatus.ACCEPTED -> 
-                R.color.cal_success // Use green for accepted classes
-            event.eventType == EventType.TEACHING -> 
-                R.color.cal_accent
-            else -> 
-                android.R.color.white
-        }
-        holder.dateText.setTextColor(ContextCompat.getColor(holder.itemView.context, dateColor))
-        
-        // Set click listener
-        holder.card.setOnClickListener {
-            onEventClick(event)
-        }
+        // Click listener
+        holder.card.setOnClickListener { onEventClick(event) }
     }
 
     override fun getItemCount(): Int = events.size
@@ -98,34 +111,33 @@ class EventAdapter(
         Log.d("EventAdapter", "Updating events: ${newEvents.size}")
         val diffCallback = EventDiffCallback(events, newEvents)
         val diffResult = DiffUtil.calculateDiff(diffCallback)
-        
         events = newEvents
         diffResult.dispatchUpdatesTo(this)
     }
-    
+
     private class EventDiffCallback(
         private val oldList: List<CalendarEvent>,
         private val newList: List<CalendarEvent>
     ) : DiffUtil.Callback() {
         override fun getOldListSize(): Int = oldList.size
         override fun getNewListSize(): Int = newList.size
-        
+
         override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
             return oldList[oldItemPosition].id == newList[newItemPosition].id
         }
-        
+
         override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
             val oldItem = oldList[oldItemPosition]
             val newItem = newList[newItemPosition]
             return oldItem.id == newItem.id &&
                    oldItem.title == newItem.title &&
                    oldItem.description == newItem.description &&
-                   oldItem.status == newItem.status
+                   oldItem.status == newItem.status &&
+                   oldItem.acceptedByRollNumber == newItem.acceptedByRollNumber
         }
     }
-    
+
     companion object {
-        // Define a unique view type constant for this adapter
         const val EVENT_VIEW_TYPE = 100
     }
-} 
+}

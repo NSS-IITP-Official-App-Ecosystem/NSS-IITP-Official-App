@@ -40,7 +40,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="16dp"
-                android:text="Event Calendar"
+                android:text="Teaching Calendar"
                 android:textColor="@android:color/white"
                 android:textSize="22sp"
                 android:textStyle="bold" />
@@ -59,14 +59,14 @@
         <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:paddingBottom="24dp">
+            android:paddingBottom="100dp">
 
             <!-- Month navigation bar -->
             <androidx.constraintlayout.widget.ConstraintLayout
                 android:id="@+id/monthNavigationBar"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
+                android:layout_marginTop="64dp"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent">
@@ -206,12 +206,13 @@
             </LinearLayout>
 
             <!-- Calendar grid -->
-            <GridView
+            <com.phad.chatapp.features.calendar.ui.ExpandableHeightGridView
                 android:id="@+id/gridCalendar"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:background="@color/cal_background"
                 android:horizontalSpacing="4dp"
+                android:nestedScrollingEnabled="false"
                 android:numColumns="7"
                 android:padding="8dp"
                 android:stretchMode="columnWidth"
@@ -225,17 +226,16 @@
                 android:id="@+id/tvSelectedDate"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:background="@color/cal_accent"
+                android:layout_marginTop="0dp"
                 android:gravity="center"
-                android:padding="16dp"
-                android:textColor="@color/cal_background"
-                android:textSize="14sp"
+                android:padding="4dp"
+                android:textColor="@color/cal_accent"
+                android:textSize="22sp"
                 android:textStyle="bold"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@id/gridCalendar"
-                tools:text="Events for Mar 17, 2026" />
+                tools:text="Events on 12th March" />
 
             <!-- Empty state message -->
             <TextView
@@ -258,12 +258,11 @@
                 android:id="@+id/recyclerEvents"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="4dp"
                 android:clipToPadding="false"
-                android:minHeight="200dp"
-                android:paddingStart="16dp"
-                android:paddingTop="8dp"
-                android:paddingEnd="16dp"
+                android:nestedScrollingEnabled="false"
+                android:paddingTop="4dp"
+                android:paddingBottom="120dp"
                 android:visibility="gone"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"

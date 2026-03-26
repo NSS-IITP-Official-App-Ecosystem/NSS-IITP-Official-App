@@ -220,10 +220,10 @@ class CalendarViewModel(
         }
     }
     
-    // Accept a class with roll number (New method)
-    suspend fun acceptClass(eventId: String, rollNumber: String): Boolean {
+    // Accept a class with roll number and name (Updated method)
+    suspend fun acceptClass(eventId: String, rollNumber: String, substituteName: String): Boolean {
         return try {
-            repository.acceptClass(eventId, rollNumber)
+            repository.acceptClass(eventId, rollNumber, substituteName)
         } catch (e: Exception) {
             Log.e("CalendarViewModel", "Error accepting class: ${e.message}", e)
             false
@@ -246,12 +246,12 @@ class CalendarViewModel(
         }
     }
     
-    // Mark a leave as substituted by a student with the given roll number
-    suspend fun markLeaveAsSubstituted(leaveId: String, rollNumber: String): Boolean {
+    // Mark a leave as substituted by a student with the given roll number and name
+    suspend fun markLeaveAsSubstituted(leaveId: String, rollNumber: String, substituteName: String): Boolean {
         return try {
-            val success = repository.markLeaveAsSubstituted(leaveId, rollNumber)
+            val success = repository.markLeaveAsSubstituted(leaveId, rollNumber, substituteName)
             if (success) {
-                Log.d("CalendarViewModel", "Leave $leaveId marked as substituted by roll number $rollNumber")
+                Log.d("CalendarViewModel", "Leave $leaveId marked as substituted by $substituteName ($rollNumber)")
             } else {
                 Log.e("CalendarViewModel", "Failed to mark leave as substituted")
             }

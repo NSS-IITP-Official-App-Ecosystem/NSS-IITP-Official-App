@@ -256,19 +256,33 @@ class MainActivity : AppCompatActivity() {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }
 
+    private var currentWindowInsets: WindowInsetsCompat? = null
+
     private fun setupWindowInsets() {
         val mainLayout = findViewById<View>(R.id.main)
-        mainLayout?.let {
-            ViewCompat.setOnApplyWindowInsetsListener(it) { v, insets ->
-                val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-                v.updatePadding(
-                    left = 0,    // No horizontal padding — avoids the narrow-banner gap
-                    top = systemBars.top,
-                    right = 0,   // No horizontal padding — avoids the narrow-banner gap
-                    bottom = systemBars.bottom
-                )
+        mainLayout?.let { layout ->
+            ViewCompat.setOnApplyWindowInsetsListener(layout) { v, insets ->
+                currentWindowInsets = insets
+                applyPadding(v, insets, navController.currentDestination?.id)
                 insets
             }
+        }
+        
+        navController.addOnDestinationChangedListener { _, destination, _ ->
+            mainLayout?.let { layout ->
+                currentWindowInsets?.let { insets ->
+                    applyPadding(layout, insets, destination.id)
+                }
+            }
+        }
+    }
+
+    private fun applyPadding(v: View, insets: WindowInsetsCompat, destinationId: Int?) {
+        val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+        if (destinationId == R.id.calendarFragment) {
+            v.setPadding(0, 0, 0, systemBars.bottom)
+        } else {
+            v.setPadding(0, systemBars.top, 0, systemBars.bottom)
         }
     }
 

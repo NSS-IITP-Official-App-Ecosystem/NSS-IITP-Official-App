@@ -7,6 +7,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.BaseAdapter
 import android.widget.TextView
+import android.graphics.drawable.GradientDrawable
 import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
 import com.phad.chatapp.R
@@ -26,7 +27,8 @@ class CalendarGridAdapter(
     private val leaveApplications: List<LeaveApplication> = emptyList(),
     private val teachingAssignments: List<SubjectAssignmentDetails> = emptyList(),
     private val isTeachingCalendar: Boolean = false, // Flag to determine if this is the teaching calendar
-    private val userRollNumber: String = "" // Roll number to highlight accepted substitutions
+    private val userRollNumber: String = "", // Roll number to highlight accepted substitutions
+    private val isAdmin: Boolean = false // Flag to show all substitutions to admins
 ) : BaseAdapter() {
     
     private val calendar: Calendar = Calendar.getInstance()
@@ -110,8 +112,11 @@ class CalendarGridAdapter(
         val view = convertView ?: LayoutInflater.from(context)
             .inflate(R.layout.calendar_day_cell, parent, false)
         
-        val dayCell = view.findViewById<CardView>(R.id.cardDayCell)
         val dateText = view.findViewById<TextView>(R.id.tvDayNumber)
+        val dayCell = view.findViewById<CardView>(R.id.cardDayCell)
+
+        // Reset text background before applying conditions (to handle view recycling)
+        dateText.background = null
         
         val date = getItem(position)
         val dateCalendar = Calendar.getInstance().apply { time = date }
@@ -185,40 +190,95 @@ class CalendarGridAdapter(
                     false
                 }
                 
+                // Get current user's leaves for this day to cross-check
+                val myLeavesCurrentDay = leaveApplications.filter {
+                    it.rollNumber == userRollNumber && isSameDay(dateCalendar, Calendar.getInstance().apply { time = it.date })
+                }
+                
                 // Color the cell green if the current user has an accepted substitution on this day
+                // AND hasn't applied for a leave on it (chained leave)
                 val userIsSubstituting = leaveApplications.any { leave -> 
-                    leave.status == EventStatus.ACCEPTED &&
-                    leave.substitutedByRollNumber.isNotEmpty() &&
-                    leave.substitutedByRollNumber == userRollNumber &&
+                    val iAmSubstituting = leave.status == EventStatus.ACCEPTED &&
+                        leave.substitutedByRollNumber == userRollNumber &&
+                        isSameDay(dateCalendar, Calendar.getInstance().apply { time = leave.date })
+                    val iAppliedForLeaveOnThis = myLeavesCurrentDay.any { myLeave ->
+                        myLeave.subject == leave.subject && myLeave.slot == leave.slot && (myLeave.status == EventStatus.PENDING || myLeave.status == EventStatus.APPROVED)
+                    }
+                    iAmSubstituting && !iAppliedForLeaveOnThis
+                }
+                
+                // Check if the current user applied for a leave that was accepted by someone else
+                val myLeaveAcceptedBySomeoneElse = myLeavesCurrentDay.any { leave ->
+                    leave.status == EventStatus.ACCEPTED
+                }
+                
+                val hasMyApprovedLeave = myLeavesCurrentDay.any { leave ->
+                    leave.status == EventStatus.APPROVED
+                }
+                
+                val hasMyPendingLeave = myLeavesCurrentDay.any { leave ->
+                    leave.status == EventStatus.PENDING
+                }
+                
+                val hasOtherAvailableLeave = leaveApplications.any { leave -> 
+                    leave.rollNumber != userRollNumber && leave.status == EventStatus.APPROVED && 
                     isSameDay(dateCalendar, Calendar.getInstance().apply { time = leave.date })
                 }
                 
-                if (userIsSubstituting) {
+                val adminHasAnyAvailableLeave = isAdmin && leaveApplications.any { leave -> 
+                    leave.status == EventStatus.APPROVED && 
+                    isSameDay(dateCalendar, Calendar.getInstance().apply { time = leave.date })
+                }
+                
+                val adminHasAnyAcceptedLeave = isAdmin && leaveApplications.any { leave -> 
+                    leave.status == EventStatus.ACCEPTED && 
+                    isSameDay(dateCalendar, Calendar.getInstance().apply { time = leave.date })
+                }
+                
+                val hasEvent = events.any { event ->
+                    isSameDay(dateCalendar, Calendar.getInstance().apply { time = event.date })
+                }
+                
+                if ((adminHasAnyAvailableLeave || hasOtherAvailableLeave) && !allLeavesAccepted) {
+                    dayCell.setCardBackgroundColor(ContextCompat.getColor(context, R.color.cal_substitution_open))
+                    dateText.setTextColor(ContextCompat.getColor(context, R.color.cal_text_primary))
+                } else if (!isAdmin && userIsSubstituting) {
                     dayCell.setCardBackgroundColor(ContextCompat.getColor(context, R.color.cal_success))
                     dateText.setTextColor(ContextCompat.getColor(context, R.color.cal_text_primary))
-                } else if (hasAvailableLeave && !allLeavesAccepted) {
+                } else if (adminHasAnyAcceptedLeave || myLeaveAcceptedBySomeoneElse) {
+                    // Red background, Green border stroke
+                    val bgColor = ContextCompat.getColor(context, R.color.cal_error)
+                    val strokeColor = ContextCompat.getColor(context, R.color.cal_success)
+                    val strokeWidthPx = (2 * context.resources.displayMetrics.density).toInt()
+                    
+                    val bgDrawable = GradientDrawable()
+                    bgDrawable.shape = GradientDrawable.OVAL
+                    bgDrawable.setColor(bgColor)
+                    bgDrawable.setStroke(strokeWidthPx, strokeColor)
+                    
+                    // Clear card background and let textview handle it
+                    dayCell.setCardBackgroundColor(android.graphics.Color.TRANSPARENT)
+                    dateText.background = bgDrawable
+                    dateText.setTextColor(ContextCompat.getColor(context, R.color.cal_text_primary))
+                } else if (!isAdmin && (hasMyApprovedLeave || hasMyPendingLeave)) {
                     dayCell.setCardBackgroundColor(ContextCompat.getColor(context, R.color.cal_error))
                     dateText.setTextColor(ContextCompat.getColor(context, R.color.cal_text_primary))
-                } else if (hasPendingLeave) {
-                    dayCell.setCardBackgroundColor(ContextCompat.getColor(context, R.color.cal_warning))
-                    dateText.setTextColor(Color.BLACK)
-                } else if (hasRejectedLeave) {
-                    dayCell.setCardBackgroundColor(ContextCompat.getColor(context, R.color.cal_text_disabled))
-                    dateText.setTextColor(ContextCompat.getColor(context, R.color.cal_text_primary))
+                } else if (hasEvent || hasTeachingAssignment) {
+                    dayCell.setCardBackgroundColor(ContextCompat.getColor(context, R.color.cal_info))
+                    dateText.setTextColor(Color.WHITE)
+                    if (isSameDay(dateCalendar, today)) {
+                        dateText.setTextColor(ContextCompat.getColor(context, R.color.cal_accent))
+                    }
                 } else if (isSameDay(dateCalendar, today)) {
                     // Today: elevated surface with yellow accent text
                     dayCell.setCardBackgroundColor(ContextCompat.getColor(context, R.color.cal_surface_elevated))
                     dateText.setTextColor(ContextCompat.getColor(context, R.color.cal_accent))
-                } else {
-                    val hasEvent = events.any { event ->
-                        isSameDay(dateCalendar, Calendar.getInstance().apply { time = event.date })
-                    }
-
-                    if (hasEvent || hasTeachingAssignment) {
-                        // Teaching day: amber/gold background
-                        dayCell.setCardBackgroundColor(ContextCompat.getColor(context, R.color.cal_accent_dim))
-                        dateText.setTextColor(Color.BLACK)
-                    }
+                } else if (hasRejectedLeave) {
+                    dayCell.setCardBackgroundColor(ContextCompat.getColor(context, R.color.cal_text_disabled))
+                    dateText.setTextColor(ContextCompat.getColor(context, R.color.cal_text_primary))
+                } else if (hasPendingLeave) {
+                    dayCell.setCardBackgroundColor(ContextCompat.getColor(context, R.color.cal_warning))
+                    dateText.setTextColor(Color.BLACK)
                 }
             } else {
                 // Non-teaching calendar (general events)
@@ -241,6 +301,7 @@ class CalendarGridAdapter(
             if (position == selectedPosition) {
                 dayCell.setCardBackgroundColor(ContextCompat.getColor(context, R.color.cal_accent))
                 dateText.setTextColor(Color.BLACK)
+                dateText.background = null
             }
         }
 
