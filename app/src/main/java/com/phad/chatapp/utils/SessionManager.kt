@@ -6,7 +6,7 @@ import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.phad.chatapp.ui.profile.ProfileUiState
-import com.phad.chatapp.services.TokenRefreshService
+
 import kotlinx.coroutines.*
 import kotlinx.coroutines.tasks.await
 
@@ -74,8 +74,6 @@ class SessionManager(context: Context) {
         val firebaseUser = FirebaseAuth.getInstance().currentUser
         if (firebaseUser != null) {
             Log.d(TAG, "Firebase user is authenticated: ${firebaseUser.email}")
-            // Start token refresh service for automatic token renewal
-            startTokenRefreshService()
         } else {
             Log.w(TAG, "Firebase user is NOT authenticated!")
         }
@@ -231,8 +229,7 @@ class SessionManager(context: Context) {
     fun logoutUser() {
         Log.d(TAG, "Logging out user")
         
-        // Stop token refresh service
-        stopTokenRefreshService()
+
         
         // Sign out from Firebase Auth
         FirebaseAuth.getInstance().signOut()
@@ -242,29 +239,7 @@ class SessionManager(context: Context) {
         editor.apply()
     }
     
-    /**
-     * Start token refresh service for automatic Firebase token renewal
-     */
-    fun startTokenRefreshService() {
-        try {
-            Log.d(TAG, "Starting token refresh service")
-            TokenRefreshService.startService(context)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to start token refresh service", e)
-        }
-    }
-    
-    /**
-     * Stop token refresh service
-     */
-    fun stopTokenRefreshService() {
-        try {
-            Log.d(TAG, "Stopping token refresh service")
-            TokenRefreshService.stopService(context)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to stop token refresh service", e)
-        }
-    }
+
     
     /**
      * Manually refresh Firebase token (for immediate refresh if needed)

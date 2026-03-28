@@ -1,9 +1,8 @@
 package com.phad.chatapp.activities
 
-import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
+
+
 import android.os.Bundle
 import android.util.Log
 import android.view.View
@@ -13,14 +12,14 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
+
+
 import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
 import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.messaging.FirebaseMessaging
+
 import com.phad.chatapp.BuildConfig
 import com.phad.chatapp.models.Admin
 import com.phad.chatapp.utils.Constants
@@ -272,11 +271,13 @@ class LoginActivity : AppCompatActivity() {
                         if (currentUser != null && currentUser.email == email) {
                             Log.d(TAG, "User is already authenticated: ${currentUser.email}")
                             
-                            // Login success - extract additional data
-                            val year = 0L
-                            
-                            // Update FCM token and complete login
-                            updateFCMTokenAndCompleteLogin(actualRollNumber, email, firestoreUserType, year.toInt())
+                            // Complete login
+                            addUserToAnnouncementGroup(actualRollNumber)
+                            withContext(Dispatchers.Main) {
+                                val year = 0L
+                                sessionManager.createLoginSession(firestoreUserType, actualRollNumber, year.toInt())
+                                redirectToMain()
+                            }
                             return@launch
                         }
                         
@@ -320,11 +321,25 @@ class LoginActivity : AppCompatActivity() {
                             return@launch
                         }
                         
-                        // Extract additional data for session
-                        val userYearValue = 0L
+                        // Complete login
+                        addUserToAnnouncementGroup(actualRollNumber)
                         
-                        // Update FCM token and complete login
-                        updateFCMTokenAndCompleteLogin(actualRollNumber, email, firestoreUserType, userYearValue.toInt())
+                        // Add roll number to Firebase user's display name
+                        try {
+                            auth.currentUser?.updateProfile(
+                                com.google.firebase.auth.UserProfileChangeRequest.Builder()
+                                    .setDisplayName("$firestoreUserType|$actualRollNumber")
+                                    .build()
+                            )?.await()
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed to update Firebase user profile", e)
+                        }
+                        
+                        withContext(Dispatchers.Main) {
+                            val userYearValue = 0L
+                            sessionManager.createLoginSession(firestoreUserType, actualRollNumber, userYearValue.toInt())
+                            redirectToMain()
+                        }
                         
                     } catch (e: FirebaseAuthInvalidUserException) {
                         Log.e(TAG, "Firebase Auth error: User not found", e)
@@ -369,125 +384,22 @@ class LoginActivity : AppCompatActivity() {
         }
     }
     
+    private fun showError(message: String) {
+        runOnUiThread {
+            showLoading(false)
+            textViewStatus.text = message
+            Toast.makeText(this@LoginActivity, message, Toast.LENGTH_LONG).show()
+        }
+    }
+    
     private fun redirectToMain() {
-        // After successful login, save FCM token and then redirect
-        saveFcmTokenToUserDocument(sessionManager.fetchUserId())
-        
         val intent = Intent(this, MainActivity::class.java)
         intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         startActivity(intent)
         finish()
     }
     
-    /**
-     * Save FCM token to the user's document in Firestore
-     */
-    private fun saveFcmTokenToUserDocument(userRollNumber: String) {
-        if (userRollNumber.isEmpty()) return
-        
-        // Request notification permissions if needed
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.POST_NOTIFICATIONS
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                    100
-                )
-            }
-        }
-        
-        // Get the FCM token and update the user document
-        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-            if (!task.isSuccessful) {
-                Log.w(TAG, "Fetching FCM token failed", task.exception)
-                return@addOnCompleteListener
-            }
-            
-            // Get token
-            val token = task.result
-            
-            // Update Firestore document with token
-            FirebaseFirestore.getInstance()
-                .collection("users")
-                .document(userRollNumber)
-                .update("fcmToken", token)
-                .addOnSuccessListener {
-                    Log.d(TAG, "FCM token updated for user $userRollNumber")
-                }
-                .addOnFailureListener { e ->
-                    Log.e(TAG, "Failed to update FCM token", e)
-                }
-        }
-    }
-    
-    private suspend fun showError(message: String) {
-        withContext(Dispatchers.Main) {
-            showLoading(false)
-            textViewStatus.text = message
-            textViewStatus.setTextColor(resources.getColor(android.R.color.holo_red_light))
-            textViewStatus.visibility = View.VISIBLE
-            
-            // Log the error message for debugging
-            Log.e(TAG, "Login Error: $message")
-            
-            // Show toast for better visibility
-            Toast.makeText(this@LoginActivity, message, Toast.LENGTH_LONG).show()
-        }
-    }
-    
-    private fun showToast(message: String) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
-    }
-    
-    private fun updateFCMTokenAndCompleteLogin(userId: String, email: String, userType: String, year: Int) {
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                // Get FCM token
-                val token = FirebaseMessaging.getInstance().token.await()
-                
-                // Update token in Firestore
-                firestore.collection("users")
-                    .document(userId)
-                    .update("fcmToken", token)
-                    .await()
-                
-                Log.d(TAG, "FCM token updated successfully for user $userId")
-                
-                // Add user to the announcement group
-                addUserToAnnouncementGroup(userId)
-                
-                // Add roll number to Firebase user's display name for easier identification
-                try {
-                    auth.currentUser?.updateProfile(
-                        com.google.firebase.auth.UserProfileChangeRequest.Builder()
-                            .setDisplayName("$userType|$userId")
-                            .build()
-                    )?.await()
-                    Log.d(TAG, "Updated Firebase user profile with roll number")
-                } catch (e: Exception) {
-                    Log.w(TAG, "Failed to update Firebase user profile", e)
-                }
-                
-                // Complete login and redirect
-                withContext(Dispatchers.Main) {
-                    sessionManager.createLoginSession(userType, userId, year)
-                    redirectToMain()
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error updating FCM token", e)
-                
-                // Still complete login even if FCM token update fails
-                withContext(Dispatchers.Main) {
-                    sessionManager.createLoginSession(userType, userId, year)
-                    redirectToMain()
-                }
-            }
-        }
-    }
+
     
     /**
      * Add the user to the system-wide announcement group

@@ -7,6 +7,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.BaseAdapter
 import android.widget.TextView
+import android.graphics.drawable.GradientDrawable
 import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
 import com.phad.chatapp.R
@@ -17,24 +18,23 @@ import java.util.Calendar
 import java.util.Date
 import java.text.SimpleDateFormat
 import android.util.Log
+import java.util.Locale
+import com.phad.chatapp.features.scheduling.models.SubjectAssignmentDetails
 
 class CalendarGridAdapter(
     private val context: Context,
     private val events: List<CalendarEvent> = emptyList(),
     private val leaveApplications: List<LeaveApplication> = emptyList(),
-    private val isTeachingCalendar: Boolean = false // Flag to determine if this is the teaching calendar
+    private val teachingAssignments: List<SubjectAssignmentDetails> = emptyList(),
+    private val isTeachingCalendar: Boolean = false, // Flag to determine if this is the teaching calendar
+    private val userRollNumber: String = "", // Roll number to highlight accepted substitutions
+    private val isAdmin: Boolean = false // Flag to show all substitutions to admins
 ) : BaseAdapter() {
     
     private val calendar: Calendar = Calendar.getInstance()
     private val today: Calendar = Calendar.getInstance()
     private val dates: MutableList<Date> = ArrayList()
     private var selectedPosition = -1
-    
-    // Date range selection support
-    private var isRangeModeEnabled = false
-    private var selectedDateRange: List<Date> = emptyList()
-    private var rangeStartDate: Date? = null
-    private var rangeEndDate: Date? = null
     
     var onDateSelectedListener: ((Date) -> Unit)? = null
     
@@ -72,25 +72,6 @@ class CalendarGridAdapter(
                 break
             }
         }
-    }
-    
-    // Set range selection mode
-    fun setRangeSelectionMode(enabled: Boolean) {
-        isRangeModeEnabled = enabled
-        if (!enabled) {
-            selectedDateRange = emptyList()
-            rangeStartDate = null
-            rangeEndDate = null
-        }
-        notifyDataSetChanged()
-    }
-    
-    // Update the selected date range
-    fun setSelectedDateRange(range: List<Date>, start: Date?, end: Date?) {
-        selectedDateRange = range
-        rangeStartDate = start
-        rangeEndDate = end
-        notifyDataSetChanged()
     }
     
     private fun initCalendarDates() {
@@ -131,8 +112,11 @@ class CalendarGridAdapter(
         val view = convertView ?: LayoutInflater.from(context)
             .inflate(R.layout.calendar_day_cell, parent, false)
         
-        val dayCell = view.findViewById<CardView>(R.id.cardDayCell)
         val dateText = view.findViewById<TextView>(R.id.tvDayNumber)
+        val dayCell = view.findViewById<CardView>(R.id.cardDayCell)
+
+        // Reset text background before applying conditions (to handle view recycling)
+        dateText.background = null
         
         val date = getItem(position)
         val dateCalendar = Calendar.getInstance().apply { time = date }
@@ -140,22 +124,26 @@ class CalendarGridAdapter(
         // Set date number
         dateText.text = dateCalendar.get(Calendar.DAY_OF_MONTH).toString()
         
-        // Set cell style based on the date
-        // Default style - consistent white background with dark text
-        dayCell.setCardBackgroundColor(Color.WHITE)
-        dateText.setTextColor(Color.BLACK)
+        var hasTeachingAssignment = false
         
+        // Set cell style based on the date
         // Style for dates not in current month
         if (dateCalendar.get(Calendar.MONTH) != calendar.get(Calendar.MONTH)) {
-            dayCell.alpha = 0.3f
+            dayCell.setCardBackgroundColor(Color.TRANSPARENT)
+            dateText.setTextColor(ContextCompat.getColor(context, R.color.cal_text_disabled))
+            dayCell.alpha = 0.2f
             // Disable clicking on dates outside current month
             dayCell.isClickable = false
         } else {
+            // Default style for in-month dates - surface gray, white text
+            dayCell.setCardBackgroundColor(ContextCompat.getColor(context, R.color.cal_surface))
+            dateText.setTextColor(ContextCompat.getColor(context, R.color.cal_text_primary))
+            
             dayCell.alpha = 1.0f
             dayCell.isClickable = true
             
             // Check for leave applications on this date
-            val hasApprovedLeave = leaveApplications.any { leave -> 
+            val hasAvailableLeave = leaveApplications.any { leave -> 
                 leave.status == EventStatus.APPROVED && 
                 isSameDay(dateCalendar, Calendar.getInstance().apply { time = leave.date })
             }
@@ -170,16 +158,26 @@ class CalendarGridAdapter(
                 isSameDay(dateCalendar, Calendar.getInstance().apply { time = leave.date })
             }
             
+            // Check for teaching assignments (matching by day of week)
+            hasTeachingAssignment = if (isTeachingCalendar) {
+                val dayFormat = SimpleDateFormat("EEE", Locale.getDefault())
+                val dayName = dayFormat.format(dateCalendar.time).lowercase()
+                teachingAssignments.any { assignment: SubjectAssignmentDetails ->
+                    val dbDay = assignment.dayName.trim().lowercase()
+                    dbDay == dayName || dbDay.startsWith(dayName) || dayName.startsWith(dbDay)
+                }
+            } else false
+            
             // Special handling for teaching calendar
             if (isTeachingCalendar) {
-                // Check if there are approved leaves that have been accepted
-                val approvedLeavesForDate = leaveApplications.filter { leave -> 
+                // Check if there are available leaves that have been accepted
+                val availableLeavesForDate = leaveApplications.filter { leave -> 
                     leave.status == EventStatus.APPROVED && 
                     isSameDay(dateCalendar, Calendar.getInstance().apply { time = leave.date })
                 }
                 
-                // Check if all approved leaves have associated accepted classes
-                val allLeavesAccepted = if (approvedLeavesForDate.isNotEmpty()) {
+                // Check if all available leaves have associated accepted classes
+                val allLeavesAccepted = if (availableLeavesForDate.isNotEmpty()) {
                     val acceptedEventsForDate = events.filter { event ->
                         event.acceptedByRollNumber.isNotEmpty() &&
                         event.status == EventStatus.ACCEPTED &&
@@ -192,77 +190,118 @@ class CalendarGridAdapter(
                     false
                 }
                 
-                if (hasApprovedLeave && !allLeavesAccepted) {
-                    // Priority 1: Highlight dates with approved leaves that haven't been accepted yet
-                    dayCell.setCardBackgroundColor(ContextCompat.getColor(context, R.color.leave_approved))
-                    dateText.setTextColor(Color.WHITE)
-                } else if (hasPendingLeave) {
-                    // Priority 2: Highlight dates with pending leaves
-                    dayCell.setCardBackgroundColor(ContextCompat.getColor(context, R.color.leave_pending))
-                    dateText.setTextColor(Color.BLACK)
-                } else if (hasRejectedLeave) {
-                    // Priority 3: Highlight dates with rejected leaves
-                    dayCell.setCardBackgroundColor(ContextCompat.getColor(context, R.color.leave_rejected))
-                    dateText.setTextColor(Color.WHITE)
-                } else if (isSameDay(dateCalendar, today)) {
-                    // Priority 4: Style for today - consistent appearance with blue text
-                    dayCell.setCardBackgroundColor(Color.WHITE)
-                    dateText.setTextColor(ContextCompat.getColor(context, R.color.teaching_day)) // Blue color
-                } else {
-                    // Style for days with events in teaching calendar
-                    val hasEvent = events.any { event -> 
-                        isSameDay(dateCalendar, Calendar.getInstance().apply { time = event.date })
+                // Get current user's leaves for this day to cross-check
+                val myLeavesCurrentDay = leaveApplications.filter {
+                    it.rollNumber == userRollNumber && isSameDay(dateCalendar, Calendar.getInstance().apply { time = it.date })
+                }
+                
+                // Color the cell green if the current user has an accepted substitution on this day
+                // AND hasn't applied for a leave on it (chained leave)
+                val userIsSubstituting = leaveApplications.any { leave -> 
+                    val iAmSubstituting = leave.status == EventStatus.ACCEPTED &&
+                        leave.substitutedByRollNumber == userRollNumber &&
+                        isSameDay(dateCalendar, Calendar.getInstance().apply { time = leave.date })
+                    val iAppliedForLeaveOnThis = myLeavesCurrentDay.any { myLeave ->
+                        myLeave.subject == leave.subject && myLeave.slot == leave.slot && (myLeave.status == EventStatus.PENDING || myLeave.status == EventStatus.APPROVED)
                     }
+                    iAmSubstituting && !iAppliedForLeaveOnThis
+                }
+                
+                // Check if the current user applied for a leave that was accepted by someone else
+                val myLeaveAcceptedBySomeoneElse = myLeavesCurrentDay.any { leave ->
+                    leave.status == EventStatus.ACCEPTED
+                }
+                
+                val hasMyApprovedLeave = myLeavesCurrentDay.any { leave ->
+                    leave.status == EventStatus.APPROVED
+                }
+                
+                val hasMyPendingLeave = myLeavesCurrentDay.any { leave ->
+                    leave.status == EventStatus.PENDING
+                }
+                
+                val hasOtherAvailableLeave = leaveApplications.any { leave -> 
+                    leave.rollNumber != userRollNumber && leave.status == EventStatus.APPROVED && 
+                    isSameDay(dateCalendar, Calendar.getInstance().apply { time = leave.date })
+                }
+                
+                val adminHasAnyAvailableLeave = isAdmin && leaveApplications.any { leave -> 
+                    leave.status == EventStatus.APPROVED && 
+                    isSameDay(dateCalendar, Calendar.getInstance().apply { time = leave.date })
+                }
+                
+                val adminHasAnyAcceptedLeave = isAdmin && leaveApplications.any { leave -> 
+                    leave.status == EventStatus.ACCEPTED && 
+                    isSameDay(dateCalendar, Calendar.getInstance().apply { time = leave.date })
+                }
+                
+                val hasEvent = events.any { event ->
+                    isSameDay(dateCalendar, Calendar.getInstance().apply { time = event.date })
+                }
+                
+                if ((adminHasAnyAvailableLeave || hasOtherAvailableLeave) && !allLeavesAccepted) {
+                    dayCell.setCardBackgroundColor(ContextCompat.getColor(context, R.color.cal_substitution_open))
+                    dateText.setTextColor(ContextCompat.getColor(context, R.color.cal_text_primary))
+                } else if (!isAdmin && userIsSubstituting) {
+                    dayCell.setCardBackgroundColor(ContextCompat.getColor(context, R.color.cal_success))
+                    dateText.setTextColor(ContextCompat.getColor(context, R.color.cal_text_primary))
+                } else if (adminHasAnyAcceptedLeave || myLeaveAcceptedBySomeoneElse) {
+                    // Red background, Green border stroke
+                    val bgColor = ContextCompat.getColor(context, R.color.cal_error)
+                    val strokeColor = ContextCompat.getColor(context, R.color.cal_success)
+                    val strokeWidthPx = (2 * context.resources.displayMetrics.density).toInt()
                     
-                    if (hasEvent) {
-                        // If all leaves are accepted or there are no leaves, use normal teaching day color
-                        dayCell.setCardBackgroundColor(ContextCompat.getColor(context, R.color.teaching_day))
-                        dateText.setTextColor(Color.WHITE)
+                    val bgDrawable = GradientDrawable()
+                    bgDrawable.shape = GradientDrawable.OVAL
+                    bgDrawable.setColor(bgColor)
+                    bgDrawable.setStroke(strokeWidthPx, strokeColor)
+                    
+                    // Clear card background and let textview handle it
+                    dayCell.setCardBackgroundColor(android.graphics.Color.TRANSPARENT)
+                    dateText.background = bgDrawable
+                    dateText.setTextColor(ContextCompat.getColor(context, R.color.cal_text_primary))
+                } else if (!isAdmin && (hasMyApprovedLeave || hasMyPendingLeave)) {
+                    dayCell.setCardBackgroundColor(ContextCompat.getColor(context, R.color.cal_error))
+                    dateText.setTextColor(ContextCompat.getColor(context, R.color.cal_text_primary))
+                } else if (hasEvent || hasTeachingAssignment) {
+                    dayCell.setCardBackgroundColor(ContextCompat.getColor(context, R.color.cal_info))
+                    dateText.setTextColor(Color.WHITE)
+                    if (isSameDay(dateCalendar, today)) {
+                        dateText.setTextColor(ContextCompat.getColor(context, R.color.cal_accent))
                     }
+                } else if (isSameDay(dateCalendar, today)) {
+                    // Today: elevated surface with yellow accent text
+                    dayCell.setCardBackgroundColor(ContextCompat.getColor(context, R.color.cal_surface_elevated))
+                    dateText.setTextColor(ContextCompat.getColor(context, R.color.cal_accent))
+                } else if (hasRejectedLeave) {
+                    dayCell.setCardBackgroundColor(ContextCompat.getColor(context, R.color.cal_text_disabled))
+                    dateText.setTextColor(ContextCompat.getColor(context, R.color.cal_text_primary))
+                } else if (hasPendingLeave) {
+                    dayCell.setCardBackgroundColor(ContextCompat.getColor(context, R.color.cal_warning))
+                    dateText.setTextColor(Color.BLACK)
                 }
             } else {
                 // Non-teaching calendar (general events)
                 if (isSameDay(dateCalendar, today)) {
-                    // Priority 1: Style for today - consistent appearance with blue text
-                    dayCell.setCardBackgroundColor(Color.WHITE)
-                    dateText.setTextColor(ContextCompat.getColor(context, R.color.teaching_day)) // Blue color
+                    dayCell.setCardBackgroundColor(ContextCompat.getColor(context, R.color.cal_surface_elevated))
+                    dateText.setTextColor(ContextCompat.getColor(context, R.color.cal_accent))
                 } else {
-                    // Style for days with events
-                    val hasEvent = events.any { event -> 
+                    val hasEvent = events.any { event ->
                         isSameDay(dateCalendar, Calendar.getInstance().apply { time = event.date })
                     }
-                    
+
                     if (hasEvent) {
-                        dayCell.setCardBackgroundColor(ContextCompat.getColor(context, R.color.event_day))
-                        dateText.setTextColor(Color.WHITE)
+                        dayCell.setCardBackgroundColor(ContextCompat.getColor(context, R.color.cal_info))
+                        dateText.setTextColor(ContextCompat.getColor(context, R.color.cal_text_primary))
                     }
                 }
             }
             
-            // Style for range selection mode (don't override leave colors in teaching calendar)
-            if ((!isTeachingCalendar || (!hasApprovedLeave && !hasPendingLeave && !hasRejectedLeave)) && 
-                isRangeModeEnabled && selectedDateRange.isNotEmpty()) {
-                // Check if date is in the selected range
-                val isInRange = selectedDateRange.any { rangeDate ->
-                    isSameDay(dateCalendar, Calendar.getInstance().apply { time = rangeDate })
-                }
-                
-                if (isInRange) {
-                    // Style for dates in range
-                    dayCell.setCardBackgroundColor(ContextCompat.getColor(context, R.color.range_selection))
-                    
-                    // Special styling for range boundaries
-                    if (rangeStartDate != null && isSameDay(dateCalendar, Calendar.getInstance().apply { time = rangeStartDate!! })) {
-                        dayCell.setCardBackgroundColor(ContextCompat.getColor(context, R.color.range_start))
-                    } else if (rangeEndDate != null && isSameDay(dateCalendar, Calendar.getInstance().apply { time = rangeEndDate!! })) {
-                        dayCell.setCardBackgroundColor(ContextCompat.getColor(context, R.color.range_end))
-                    }
-                }
-            } else if ((!isTeachingCalendar || (!hasApprovedLeave && !hasPendingLeave && !hasRejectedLeave)) && 
-                position == selectedPosition) {
-                // Style for selected date (single selection mode)
-                dayCell.setCardBackgroundColor(ContextCompat.getColor(context, R.color.selected_date))
+            // Style for selected date
+            if (position == selectedPosition) {
+                dayCell.setCardBackgroundColor(ContextCompat.getColor(context, R.color.cal_accent))
                 dateText.setTextColor(Color.BLACK)
+                dateText.background = null
             }
         }
 
@@ -275,15 +314,10 @@ class CalendarGridAdapter(
             isSameDay(dateCalendar, Calendar.getInstance().apply { time = leave.date })
         }
 
-        // Make empty days visually non-clickable
-        if (!hasEvent && !hasLeaveApplication && dateCalendar.get(Calendar.MONTH) == calendar.get(Calendar.MONTH)) {
-            dayCell.isClickable = false
-            dayCell.isFocusable = false
-            dayCell.foreground = null // Remove ripple effect
-        } else if (dateCalendar.get(Calendar.MONTH) == calendar.get(Calendar.MONTH)) {
+        // All dates in the current month are always clickable
+        if (dateCalendar.get(Calendar.MONTH) == calendar.get(Calendar.MONTH)) {
             dayCell.isClickable = true
             dayCell.isFocusable = true
-            // Restore ripple effect for clickable days
             val typedValue = android.util.TypedValue()
             context.theme.resolveAttribute(android.R.attr.selectableItemBackground, typedValue, true)
             dayCell.foreground = ContextCompat.getDrawable(context, typedValue.resourceId)
@@ -301,39 +335,35 @@ class CalendarGridAdapter(
                 val hasLeaveForClick = leaveApplications.any { leave ->
                     isSameDay(dateCalendar, Calendar.getInstance().apply { time = leave.date })
                 }
-
-                // Only allow clicks on days that have events or leave applications
-                if (hasEventForClick || hasLeaveForClick) {
-                    // Get the exact calendar date for the clicked cell
-                    val clickedDay = dateCalendar.get(Calendar.DAY_OF_MONTH)
-                    val clickedMonth = dateCalendar.get(Calendar.MONTH)
-                    val clickedYear = dateCalendar.get(Calendar.YEAR)
-
-                    // IMPORTANT: Create a fresh Calendar object to ensure we have the correct date
-                    val exactDate = Calendar.getInstance().apply {
-                        clear() // Clear all fields to start fresh
-                        set(clickedYear, clickedMonth, clickedDay, 0, 0, 0)
-                        set(Calendar.MILLISECOND, 0)
-                    }.time
-
-                    // Log EXACT date being clicked
-                    Log.d("CalendarGridAdapter", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                    Log.d("CalendarGridAdapter", "EXACT DATE CLICKED:")
-                    Log.d("CalendarGridAdapter", "Day: $clickedDay, Month: ${clickedMonth + 1}, Year: $clickedYear")
-                    Log.d("CalendarGridAdapter", "Formatted date: ${dateFormat.format(exactDate)}")
-                    Log.d("CalendarGridAdapter", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-
-                    // Update selected position
-                    val oldPosition = selectedPosition
-                    selectedPosition = position
-
-                    // Force redraw of old and new positions
-                    notifyDataSetChanged()
-
-                    // Call the listener with the EXACT date
-                    onDateSelectedListener?.invoke(exactDate)
+                
+                // Check if this date has any teaching assignments (periodic)
+                val dayFormat = SimpleDateFormat("EEE", Locale.getDefault())
+                val dayNameFormatted = dayFormat.format(dateCalendar.time).lowercase()
+                val hasAssignmentForClick = isTeachingCalendar && teachingAssignments.any { assignment: SubjectAssignmentDetails ->
+                    val dbDay = assignment.dayName.trim().lowercase()
+                    dbDay == dayNameFormatted || dbDay.startsWith(dayNameFormatted) || dayNameFormatted.startsWith(dbDay)
                 }
-                // Empty days are now non-interactive - no action taken
+
+                // Get the exact calendar date for the clicked cell
+                val clickedDay = dateCalendar.get(Calendar.DAY_OF_MONTH)
+                val clickedMonth = dateCalendar.get(Calendar.MONTH)
+                val clickedYear = dateCalendar.get(Calendar.YEAR)
+
+                // IMPORTANT: Create a fresh Calendar object to ensure we have the correct date
+                val exactDate = Calendar.getInstance().apply {
+                    clear() // Clear all fields to start fresh
+                    set(clickedYear, clickedMonth, clickedDay, 0, 0, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }.time
+
+                Log.d("CalendarGridAdapter", "Date clicked: ${dateFormat.format(exactDate)}")
+
+                // Update selected position
+                selectedPosition = position
+                notifyDataSetChanged()
+
+                // Always call the listener with the EXACT date
+                onDateSelectedListener?.invoke(exactDate)
             }
         }
         

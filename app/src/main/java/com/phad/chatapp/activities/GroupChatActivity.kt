@@ -39,7 +39,7 @@ import com.phad.chatapp.databinding.DialogGroupInfoBinding
 import com.phad.chatapp.models.Group
 import com.phad.chatapp.models.Message
 import com.phad.chatapp.repositories.MessageRepository
-import com.phad.chatapp.utils.NotificationHelper
+
 import com.phad.chatapp.utils.SessionManager
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -66,7 +66,7 @@ class GroupChatActivity : AppCompatActivity() {
     
     private val senderNames = ConcurrentHashMap<String, String>()
     
-    private lateinit var notificationHelper: NotificationHelper
+
     private lateinit var db: FirebaseFirestore
     private lateinit var auth: FirebaseAuth
     
@@ -110,9 +110,7 @@ class GroupChatActivity : AppCompatActivity() {
         
         Log.d(TAG, "Opened group chat: $groupName (ID: $groupId)")
         
-        // Initialize notification helper
         currentUserRole = sessionManager.fetchUserType()
-        notificationHelper = NotificationHelper(this)
         
         // Initialize attachment handler
         attachmentHandler = AttachmentHandler(this)
@@ -794,8 +792,7 @@ class GroupChatActivity : AppCompatActivity() {
                 // Clear input field
                 binding.messageInput.setText("")
                 
-                // Send notification to group members
-                sendMessageNotifications(displayText, currentUserId, false, emptyList())
+
             }
             .addOnFailureListener { e ->
                 Log.e(TAG, "Error adding media message", e)
@@ -951,8 +948,7 @@ class GroupChatActivity : AppCompatActivity() {
                 Log.d(TAG, "Message sent successfully with ID: $messageId")
                 binding.messageInput.setText("")
                 
-                // Send notifications to group members
-                sendMessageNotifications(text, currentUserId, hasEveryoneMention, mentionedUsers)
+
             }
             .addOnFailureListener { e ->
                 Log.e(TAG, "Error sending message", e)
@@ -960,34 +956,7 @@ class GroupChatActivity : AppCompatActivity() {
             }
     }
     
-    /**
-     * Send notifications to group members when a message is sent
-     */
-    private fun sendMessageNotifications(
-        messageText: String, 
-        senderId: String, 
-        mentionsEveryone: Boolean,
-        mentionedUsers: List<String>
-    ) {
-        // Get the sender's name for the notification
-        val senderName = senderNames[senderId] ?: senderId
-        
-        // Use lifecycleScope to launch the coroutine
-        lifecycleScope.launch {
-            try {
-                // Use the already initialized notificationHelper with context
-                notificationHelper.sendGroupMessageNotification(
-                    groupId = groupId,
-                    groupName = groupName,
-                    message = messageText,
-                    senderRollNumber = senderId,
-                    senderName = senderName
-                )
-            } catch (e: Exception) {
-                Log.e(TAG, "Error sending notification", e)
-            }
-        }
-    }
+
     
     /**
      * Fetch sender name if not already cached
@@ -1011,20 +980,11 @@ class GroupChatActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         Log.d(TAG, "GroupChatActivity resumed")
-        
-        // Start listening for notifications when this activity is visible
-        val userId = sessionManager.fetchUserId()
-        if (userId.isNotEmpty()) {
-            notificationHelper.startListeningForNotifications(userId)
-        }
     }
     
     override fun onPause() {
         super.onPause()
         Log.d(TAG, "GroupChatActivity paused")
-        
-        // Stop listening for notifications when this activity is not visible
-        notificationHelper.stopListeningForNotifications()
     }
 
     /**

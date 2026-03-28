@@ -18,7 +18,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import com.google.firebase.auth.FirebaseAuth
 import com.phad.chatapp.utils.SessionManager
-import com.phad.chatapp.utils.NotificationHelper
+
 import android.content.Intent
 import android.content.pm.PackageManager
 import com.phad.chatapp.activities.LoginActivity
@@ -27,7 +27,7 @@ class NssMainActivity : AppCompatActivity() {
     private val TAG = "NssMainActivity"
     private lateinit var sessionManager: SessionManager
     private lateinit var auth: FirebaseAuth
-    private lateinit var notificationHelper: NotificationHelper
+
     private lateinit var navController: NavController
 
     private val NOTIFICATION_PERMISSION_REQUEST_CODE = 100
@@ -41,8 +41,6 @@ class NssMainActivity : AppCompatActivity() {
         auth = FirebaseAuth.getInstance()
         // Initialize session manager
         sessionManager = SessionManager(this)
-        // Initialize notification helper
-        notificationHelper = NotificationHelper(this)
 
         // Request notification permission if needed
         requestNotificationPermissionIfNeeded()
@@ -56,11 +54,6 @@ class NssMainActivity : AppCompatActivity() {
         setupWindowInsets()
         // Load user data - will also set up navigation
         loadUserData()
-        // Start notification listener for the current user
-        val currentUserId = sessionManager.fetchUserId()
-        if (currentUserId.isNotEmpty()) {
-            notificationHelper.startListeningForNotifications(currentUserId)
-        }
         // Set up custom navigation buttons
         setupCustomNavigation()
 

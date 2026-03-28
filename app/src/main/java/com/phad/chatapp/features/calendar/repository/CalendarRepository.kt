@@ -15,7 +15,9 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
-
+import com.phad.chatapp.features.scheduling.models.AssignmentEntry
+import com.phad.chatapp.features.scheduling.models.SubjectAssignmentDetails
+import com.phad.chatapp.features.scheduling.models.SubjectConstants
 /**
  * Repository for calendar events using Firestore
  */
@@ -27,7 +29,7 @@ class CalendarRepository {
     private val teachingEventsCollection = firestore.collection("teaching_events")
     private val generalEventsCollection = firestore.collection("general_events")
     private val leaveApplicationsCollection = firestore.collection("leave_applications")
-    private val acceptedLeavesCollection = firestore.collection("accepted_leaves")
+    private val availableLeavesCollection = firestore.collection("available_leaves")
     
     private val _events = MutableLiveData<List<CalendarEvent>>(emptyList())
     val events: LiveData<List<CalendarEvent>> = _events
@@ -140,10 +142,10 @@ class CalendarRepository {
                     
                     // Log the leave applications by status for debugging
                     val pendingCount = applications.count { it.status == EventStatus.PENDING }
-                    val approvedCount = applications.count { it.status == EventStatus.APPROVED }
+                    val availableCount = applications.count { it.status == EventStatus.APPROVED }
                     val rejectedCount = applications.count { it.status == EventStatus.REJECTED }
                     
-                    Log.d("CalendarRepository", "Leave applications loaded - Pending: $pendingCount, Approved: $approvedCount, Rejected: $rejectedCount")
+                    Log.d("CalendarRepository", "Leave applications loaded - Pending: $pendingCount, Available: $availableCount, Rejected: $rejectedCount")
                 } catch (e: Exception) {
                     Log.e("CalendarRepository", "Error converting leave applications: ${e.message}")
                     _leaveApplications.value = emptyList()
@@ -284,12 +286,15 @@ class CalendarRepository {
                 slot = slot,
                 subject = subject,
                 school = school,
-                status = EventStatus.PENDING,
+                status = EventStatus.APPROVED, // Auto-approve per requirements
                 timestamp = timestamp
             )
             
             // Add to leave applications collection
             leaveApplicationsCollection.document(leaveId).set(leaveApplication).await()
+            
+            // Auto-approved: Add to available leaves collection as well
+            availableLeavesCollection.document(leaveId).set(leaveApplication).await()
             
             // Update in-memory list
             val currentApplications = _leaveApplications.value?.toMutableList() ?: mutableListOf()
@@ -312,13 +317,13 @@ class CalendarRepository {
                 .update("status", status.toString())
                 .await()
             
-            // If approved, add to accepted leaves collection
+            // If approved, add to available leaves collection
             if (status == EventStatus.APPROVED) {
                 val leaveDoc = leaveApplicationsCollection.document(leaveId).get().await()
                 if (leaveDoc.exists()) {
                     val leaveApplication = leaveDoc.toObject(LeaveApplication::class.java)
                     if (leaveApplication != null) {
-                        acceptedLeavesCollection.document(leaveId).set(leaveApplication).await()
+                        availableLeavesCollection.document(leaveId).set(leaveApplication).await()
                     }
                 }
             }
@@ -386,7 +391,8 @@ class CalendarRepository {
      */
     suspend fun acceptClass(
         eventId: String,
-        rollNumber: String
+        rollNumber: String,
+        substituteName: String
     ): Boolean {
         try {
             // Determine if this is a teaching or general event
@@ -419,6 +425,7 @@ class CalendarRepository {
                 .update(
                     mapOf(
                         "acceptedByRollNumber" to rollNumber,
+                        "bookedByName" to substituteName,
                         "status" to EventStatus.ACCEPTED.toString()
                     )
                 )
@@ -435,6 +442,7 @@ class CalendarRepository {
             
             val updatedEvent = currentEvents[eventIndex].copy(
                 acceptedByRollNumber = rollNumber,
+                bookedByName = substituteName,
                 status = EventStatus.ACCEPTED
             )
             currentEvents[eventIndex] = updatedEvent
@@ -504,19 +512,15 @@ class CalendarRepository {
         val dateString = dateFormatter.format(date)
         
         try {
-            val snapshot = acceptedLeavesCollection
+            val snapshot = availableLeavesCollection
                 .whereEqualTo("status", EventStatus.APPROVED.toString())
                 .get()
                 .await()
             
             // Manually handle document IDs to avoid conflict with field 'id'
-            return snapshot.documents.map { doc ->
-                val application = doc.toObject(LeaveApplication::class.java) ?: LeaveApplication()
-                // Set document ID manually if needed
-                if (application.id.isEmpty()) {
-                    application.copy(id = doc.id)
-                } else {
-                    application
+            return snapshot.documents.mapNotNull { doc ->
+                doc.toObject(LeaveApplication::class.java)?.let { app ->
+                    if (app.id.isEmpty()) app.copy(id = doc.id) else app
                 }
             }.filter { isSameDay(it.date, date) }
             
@@ -567,19 +571,15 @@ class CalendarRepository {
      */
     suspend fun getAllApprovedLeaves(): List<LeaveApplication> {
         try {
-            val snapshot = acceptedLeavesCollection
+            val snapshot = availableLeavesCollection
                 .whereEqualTo("status", EventStatus.APPROVED.toString())
                 .get()
                 .await()
             
             // Manually handle document IDs to avoid conflict with field 'id'
-            return snapshot.documents.map { doc ->
-                val application = doc.toObject(LeaveApplication::class.java) ?: LeaveApplication()
-                // Set document ID manually if needed
-                if (application.id.isEmpty()) {
-                    application.copy(id = doc.id)
-                } else {
-                    application
+            return snapshot.documents.mapNotNull { doc ->
+                doc.toObject(LeaveApplication::class.java)?.let { app ->
+                    if (app.id.isEmpty()) app.copy(id = doc.id) else app
                 }
             }
         } catch (e: Exception) {
@@ -617,24 +617,104 @@ class CalendarRepository {
     /**
      * Mark a leave as substituted by a student with given roll number
      */
-    suspend fun markLeaveAsSubstituted(leaveId: String, rollNumber: String): Boolean {
+    suspend fun markLeaveAsSubstituted(
+        leaveId: String,
+        rollNumber: String,
+        substituteName: String
+    ): Boolean {
         try {
-            // Add a field to indicate this leave is being substituted
+            val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+            val leaveDocRef = leaveApplicationsCollection.document(leaveId)
+            val availableLeaveDocRef = availableLeavesCollection.document(leaveId)
+
+            db.runTransaction { transaction ->
+                // First perform all reads
+                val snapshot = transaction.get(leaveDocRef)
+                val availableSnapshot = transaction.get(availableLeaveDocRef)
+                
+                // Then perform validation
+                if (snapshot.exists()) {
+                    val status = snapshot.getString("status")
+                    val substitutedBy = snapshot.getString("substitutedByRollNumber")
+                    
+                    if (status == EventStatus.ACCEPTED.toString() || !substitutedBy.isNullOrEmpty()) {
+                        throw com.google.firebase.firestore.FirebaseFirestoreException(
+                            "Leave already accepted",
+                            com.google.firebase.firestore.FirebaseFirestoreException.Code.ABORTED
+                        )
+                    }
+                }
+
+                // Then perform all writes
+                if (snapshot.exists()) {
+                    transaction.update(
+                        leaveDocRef,
+                        mapOf(
+                            "substitutedByRollNumber" to rollNumber,
+                            "substitutedByName" to substituteName,
+                            "status" to EventStatus.ACCEPTED.toString()
+                        )
+                    )
+                }
+
+                if (availableSnapshot.exists()) {
+                    transaction.update(
+                        availableLeaveDocRef,
+                        mapOf(
+                            "substitutedByRollNumber" to rollNumber,
+                            "substitutedByName" to substituteName,
+                            "status" to EventStatus.ACCEPTED.toString()
+                        )
+                    )
+                }
+            }.await()
+                
+            // Update in-memory list
+            val currentLeaves = _leaveApplications.value?.toMutableList() ?: return false
+            val leaveIndex = currentLeaves.indexOfFirst { it.id == leaveId }
+            
+            if (leaveIndex != -1) {
+                // We need to update the leave application with the substitution information
+                val leave = currentLeaves[leaveIndex]
+                val updatedLeave = leave.copy(
+                    substitutedByRollNumber = rollNumber,
+                    substitutedByName = substituteName,
+                    status = EventStatus.ACCEPTED
+                )
+                currentLeaves[leaveIndex] = updatedLeave
+                _leaveApplications.postValue(currentLeaves)
+            }
+            
+            Log.d("CalendarRepository", "Leave $leaveId marked as substituted by roll number $rollNumber")
+            return true
+        } catch (e: Exception) {
+            Log.e("CalendarRepository", "Error marking leave as substituted: ${e.message}", e)
+            return false
+        }
+    }
+
+    /**
+     * Withdraw from a previously accepted substitution
+     * Sets status back to APPROVED and clears substitutedByRollNumber
+     */
+    suspend fun withdrawSubstitution(leaveId: String): Boolean {
+        try {
+            // Update in leave applications collection
             leaveApplicationsCollection.document(leaveId)
                 .update(
                     mapOf(
-                        "substitutedByRollNumber" to rollNumber,
-                        "status" to EventStatus.ACCEPTED.toString()
+                        "substitutedByRollNumber" to "",
+                        "status" to EventStatus.APPROVED.toString()
                     )
                 )
                 .await()
             
-            // Also update the leave in the accepted_leaves collection if it exists there
-            acceptedLeavesCollection.document(leaveId)
+            // Also update in accepted leaves collection if it exists there
+            availableLeavesCollection.document(leaveId)
                 .update(
                     mapOf(
-                        "substitutedByRollNumber" to rollNumber,
-                        "status" to EventStatus.ACCEPTED.toString()
+                        "substitutedByRollNumber" to "",
+                        "status" to EventStatus.APPROVED.toString()
                     )
                 )
                 .await()
@@ -644,19 +724,19 @@ class CalendarRepository {
             val leaveIndex = currentLeaves.indexOfFirst { it.id == leaveId }
             
             if (leaveIndex != -1) {
-                // We need to update the leave application with the substitution information
                 val leave = currentLeaves[leaveIndex]
-                // Since LeaveApplication doesn't have a substitutedByRollNumber field yet,
-                // we'll just update its status to ACCEPTED for now
-                val updatedLeave = leave.copy(status = EventStatus.ACCEPTED)
+                val updatedLeave = leave.copy(
+                    status = EventStatus.APPROVED,
+                    substitutedByRollNumber = ""
+                )
                 currentLeaves[leaveIndex] = updatedLeave
                 _leaveApplications.postValue(currentLeaves)
             }
             
-            Log.d("CalendarRepository", "Leave $leaveId marked as substituted by roll number $rollNumber")
+            Log.d("CalendarRepository", "Substitution withdrawn for leave $leaveId")
             return true
         } catch (e: Exception) {
-            Log.e("CalendarRepository", "Error marking leave as substituted: ${e.message}", e)
+            Log.e("CalendarRepository", "Error withdrawing substitution: ${e.message}", e)
             return false
         }
     }
@@ -675,10 +755,10 @@ class CalendarRepository {
                 }
                 
             // Also delete from accepted leaves collection if it exists there
-            acceptedLeavesCollection.document(leaveId).get()
+            availableLeavesCollection.document(leaveId).get()
                 .addOnSuccessListener { document ->
                     if (document != null && document.exists()) {
-                        acceptedLeavesCollection.document(leaveId).delete()
+                        availableLeavesCollection.document(leaveId).delete()
                     }
                 }
             
@@ -698,5 +778,89 @@ class CalendarRepository {
             Log.e("CalendarRepository", "Error deleting leave application: ${e.message}", e)
             return false
         }
+    }
+
+    /**
+     * Get a specific user's assigned classes from generated schedules
+     */
+    suspend fun getUserAssignments(rollNumber: String): List<SubjectAssignmentDetails> {
+        if (rollNumber.isBlank()) return emptyList()
+        
+        val result = mutableListOf<SubjectAssignmentDetails>()
+        try {
+            val snapshot = firestore.collection("generatedSchedules").get().await()
+            
+            for (document in snapshot.documents) {
+                val data = document.data ?: continue
+                val scheduleName = data["name"] as? String ?: data["scheduleName"] as? String ?: document.id
+                
+                val assignmentsList = (data["optimizedAssignments"] as? List<Map<String, Any>>) 
+                    ?: (data["assignments"] as? List<Map<String, Any>>)
+                
+                if (assignmentsList == null) continue
+                
+                val referenceData = data["referenceData"] as? Map<String, Any>
+                val dayNames = (referenceData?.get("dayNames") as? List<String>) ?: emptyList()
+                val slotNames = (referenceData?.get("timeSlotNames") as? List<String>) ?: emptyList()
+                val standardDays = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+                val isStandardDays = dayNames.any { it in standardDays }
+                
+                for (assignmentMap in assignmentsList) {
+                    val volunteerRollNo = assignmentMap["volunteerRollNo"] as? String ?: ""
+                    
+                    // Only process assignments for this specific user
+                    if (volunteerRollNo != rollNumber) continue
+                    
+                    val subjectCode = (assignmentMap["assignedSubject"] as? String) 
+                        ?: (assignmentMap["subjectCode"] as? String) ?: ""
+                    
+                    if (subjectCode.isBlank()) continue
+                    
+                    var schoolName = ""
+                    var classAndSection = ""
+                    if (scheduleName.contains(" ")) {
+                        val parts = scheduleName.split(" ", limit = 2)
+                        schoolName = parts[0].trim()
+                        classAndSection = if (parts.size > 1) parts[1].trim() else ""
+                    } else if (scheduleName.contains("-")) {
+                        val parts = scheduleName.split("-", limit = 2)
+                        schoolName = parts[0].trim()
+                        classAndSection = if (parts.size > 1) parts[1].trim() else ""
+                    } else {
+                        schoolName = scheduleName.trim()
+                    }
+                    
+                    val dayIndex = (assignmentMap["dayIndex"] as? Number)?.toInt() ?: 0
+                    val slotIndex = (assignmentMap["slotIndex"] as? Number)?.toInt() ?: 0
+                    
+                    val dayName = if (isStandardDays && dayIndex < standardDays.size) {
+                        standardDays[dayIndex]
+                    } else if (dayIndex < dayNames.size) {
+                        dayNames[dayIndex]
+                    } else {
+                        "Day ${dayIndex + 1}"
+                    }
+                    
+                    val slotName = if (slotIndex < slotNames.size) slotNames[slotIndex] else "Slot ${slotIndex + 1}"
+                    val subjectName = SubjectConstants.SUBJECT_NAMES[subjectCode] ?: subjectCode
+                    
+                    val details = SubjectAssignmentDetails(
+                        volunteerName = assignmentMap["volunteerName"] as? String ?: "",
+                        volunteerRollNo = volunteerRollNo,
+                        volunteerGroup = assignmentMap["volunteerGroup"] as? String ?: "",
+                        subjectCode = subjectCode,
+                        subjectName = subjectName,
+                        dayName = dayName,
+                        slotName = slotName,
+                        schoolName = schoolName,
+                        classAndSection = classAndSection
+                    )
+                    result.add(details)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("CalendarRepository", "Error fetching user assignments: ${e.message}", e)
+        }
+        return result
     }
 } 

@@ -8,7 +8,7 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreSettings
-import com.google.firebase.messaging.FirebaseMessaging
+
 import com.phad.chatapp.repositories.GroupRepository
 import com.phad.chatapp.utils.SessionManager
 import com.phad.chatapp.utils.MultiDatabaseHelper
@@ -62,8 +62,7 @@ class ChatApplication : Application() {
             // Initialize the secondary Firebase app
             initializeSecondaryFirebase()
             
-            // Initialize FCM
-            initializeFCM()
+
             
             // Test Firestore access permissions
             // Removed test connection diagnostics

@@ -41,9 +41,8 @@ import com.phad.chatapp.viewmodels.AttendanceViewModel
 import com.phad.chatapp.viewmodels.AttendanceViewModelFactory
 import com.phad.chatapp.utils.SessionManager // Added import
 import com.phad.chatapp.ui.components.GradientHeader
-import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.ZoneId
@@ -96,14 +95,11 @@ fun EventHistoryScreen(
     val isAdmin = remember { sessionManager.fetchUserType().equals("Admin", ignoreCase = true) }
     val currentUserRollNumber = remember { sessionManager.fetchUserId() }
 
-    // Sync pull-to-refresh state
-    if (pullRefreshState.isRefreshing) {
-        LaunchedEffect(true) {
-            isRefreshing = true
-            // Load events with force refresh
+    // Setup refresh action
+    val onRefresh: () -> Unit = {
+        isRefreshing = true
+        coroutineScope.launch {
             try {
-                // Determine if we should force refresh logic inside loadEvents
-                // But here we'll just call the loading logic directly
                 val currentTime = System.currentTimeMillis()
                 closedEvents = viewModel.getClosedEvents()
                 lastRefreshTime = currentTime
@@ -111,7 +107,6 @@ fun EventHistoryScreen(
                 Log.e("EventHistory", "Error refreshing events", e)
             } finally {
                 isRefreshing = false
-                pullRefreshState.endRefresh()
             }
         }
     }
@@ -203,11 +198,13 @@ fun EventHistoryScreen(
             )
         }
     ) { paddingValues ->
-        Box(
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = onRefresh,
+            state = pullRefreshState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .nestedScroll(pullRefreshState.nestedScrollConnection)
         ) {
             Column(
                 modifier = Modifier
@@ -435,12 +432,6 @@ fun EventHistoryScreen(
                 }
             }
 
-            PullToRefreshContainer(
-                state = pullRefreshState,
-                modifier = Modifier.align(Alignment.TopCenter),
-                containerColor = Color.White,
-                contentColor = Color(0xFF2196F3)
-            )
         }
     }
 

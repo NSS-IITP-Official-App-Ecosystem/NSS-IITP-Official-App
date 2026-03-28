@@ -44,7 +44,7 @@ import java.io.FileNotFoundException
 import java.util.Calendar
 import java.util.UUID
 import com.google.firebase.firestore.FieldValue
-import com.phad.chatapp.utils.NotificationHelper
+
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -1072,14 +1072,14 @@ class HomeFragment : Fragment() {
                             loadUpdates()
 
                             // Send notification to all users
-                            sendUpdateNotification(update)
+        
                         }
                         .addOnFailureListener { e ->
                             Toast.makeText(requireContext(), "Posted to Teaching Wing but failed to cross-post to NSS: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
                             createUpdateDialog?.dismiss()
                             updateCache = null
                             loadUpdates()
-                            sendUpdateNotification(update)
+        
                         }
                 } else {
                     Toast.makeText(requireContext(), "NSS Update posted", Toast.LENGTH_SHORT).show()
@@ -1090,7 +1090,7 @@ class HomeFragment : Fragment() {
                     loadUpdates()
 
                     // Send notification to all users
-                    sendUpdateNotification(update)
+
                 }
             }
             .addOnFailureListener { e ->

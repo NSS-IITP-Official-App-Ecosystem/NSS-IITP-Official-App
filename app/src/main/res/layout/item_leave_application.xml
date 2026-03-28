@@ -3,86 +3,110 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="4dp"
-    app:cardCornerRadius="8dp"
-    app:cardElevation="2dp">
+    android:layout_marginStart="8dp"
+    android:layout_marginEnd="8dp"
+    android:layout_margin="6dp"
+    app:cardBackgroundColor="@color/cal_card_surface"
+    app:cardCornerRadius="12dp"
+    app:cardElevation="4dp">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="12dp">
+        android:orientation="horizontal">
 
-        <TextView
-            android:id="@+id/tvLeaveName"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            android:text="User Name" />
-
-        <TextView
-            android:id="@+id/tvLeaveRollNumber"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:text="Roll: 12345" />
-
-        <TextView
-            android:id="@+id/tvLeaveSubject"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="Computer Science" />
-
-        <TextView
-            android:id="@+id/tvLeaveSlot"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:text="9:00 AM - 11:00 AM" />
-
-        <TextView
-            android:id="@+id/tvLeaveSchool"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:text="Engineering School" />
-
-        <TextView
-            android:id="@+id/tvLeaveStatus"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:textStyle="italic"
-            android:text="PENDING" />
+        <!-- Status-colored accent strip on left edge (colored programmatically) -->
+        <View
+            android:id="@+id/viewStatusStrip"
+            android:layout_width="4dp"
+            android:layout_height="match_parent"
+            android:background="@color/cal_warning" />
 
         <LinearLayout
-            android:id="@+id/actionButtonsLayout"
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="end"
-            android:layout_marginTop="8dp">
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:padding="12dp">
 
-            <Button
-                android:id="@+id/btnReject"
-                android:layout_width="wrap_content"
+            <TextView
+                android:id="@+id/tvLeaveName"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Reject"
-                android:textSize="12sp"
-                android:backgroundTint="#F44336"
-                style="@style/Widget.MaterialComponents.Button" />
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textColor="@color/cal_text_primary"
+                android:text="User Name" />
 
-            <Button
-                android:id="@+id/btnApprove"
-                android:layout_width="wrap_content"
+            <TextView
+                android:id="@+id/tvLeaveRollNumber"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:text="Approve"
-                android:textSize="12sp"
-                android:backgroundTint="#4CAF50"
-                style="@style/Widget.MaterialComponents.Button" />
+                android:layout_marginTop="2dp"
+                android:textColor="@color/cal_text_secondary"
+                android:text="Roll: 12345" />
+
+            <TextView
+                android:id="@+id/tvLeaveSubject"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:textColor="@color/cal_text_primary"
+                android:text="Computer Science" />
+
+            <TextView
+                android:id="@+id/tvLeaveSlot"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:textColor="@color/cal_text_secondary"
+                android:text="9:00 AM - 11:00 AM" />
+
+            <TextView
+                android:id="@+id/tvLeaveSchool"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:textColor="@color/cal_text_secondary"
+                android:text="Engineering School" />
+
+            <!-- Status text — tinted programmatically by adapter -->
+            <TextView
+                android:id="@+id/tvLeaveStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:textStyle="bold"
+                android:textColor="@color/cal_warning"
+                android:text="PENDING" />
+
+            <LinearLayout
+                android:id="@+id/actionButtonsLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="end"
+                android:layout_marginTop="8dp">
+
+                <Button
+                    android:id="@+id/btnReject"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Reject"
+                    android:textSize="12sp"
+                    android:backgroundTint="@color/cal_error"
+                    style="@style/Widget.MaterialComponents.Button" />
+
+                <Button
+                    android:id="@+id/btnApprove"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="Approve"
+                    android:textSize="12sp"
+                    android:backgroundTint="@color/cal_success"
+                    style="@style/Widget.MaterialComponents.Button" />
+            </LinearLayout>
         </LinearLayout>
     </LinearLayout>
-</androidx.cardview.widget.CardView> 
+</androidx.cardview.widget.CardView>

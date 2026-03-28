@@ -1,10 +1,9 @@
 package com.phad.chatapp
 
-import android.Manifest
 import android.content.Intent
 import com.phad.chatapp.activities.LoginActivity
-import android.content.pm.PackageManager
-import android.os.Build
+
+
 import android.os.Bundle
 import android.util.Log
 import android.view.Menu
@@ -14,7 +13,7 @@ import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
+
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -30,7 +29,7 @@ import com.google.firebase.firestore.FirebaseFirestoreException
 import com.phad.chatapp.utils.FirestoreSetup
 import com.phad.chatapp.utils.NetworkUtils
 import com.phad.chatapp.utils.SessionManager
-import com.phad.chatapp.utils.NotificationHelper
+
 import com.phad.chatapp.utils.MultiDatabaseHelper
 import com.phad.chatapp.fragments.HomeFragment
 import com.phad.chatapp.features.calendar.ui.CalendarFragment
@@ -43,7 +42,7 @@ class MainActivity : AppCompatActivity() {
     private val TAG = "MainActivity"
     private lateinit var sessionManager: SessionManager
     private lateinit var auth: FirebaseAuth
-    private lateinit var notificationHelper: NotificationHelper
+
     private lateinit var navController: NavController
 
     // User data
@@ -68,11 +67,7 @@ class MainActivity : AppCompatActivity() {
         // Initialize session manager
         sessionManager = SessionManager(this)
         
-        // Initialize notification helper
-        notificationHelper = NotificationHelper(this)
-        
-        // Request notification permission if needed
-        requestNotificationPermissionIfNeeded()
+
         
         // Set up window flags for proper status bar handling
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -103,12 +98,7 @@ class MainActivity : AppCompatActivity() {
         loadUserData()
         Log.d("MainActivity", "after loadUserData")
 
-        // Start notification listener for the current user
-        val currentUserId = sessionManager.fetchUserId()
-        if (currentUserId.isNotEmpty()) {
-            notificationHelper.startListeningForNotifications(currentUserId)
-        }
-        Log.d("MainActivity", "after notificationHelper.startListeningForNotifications")
+
 
         // Set up custom navigation buttons
         setupCustomNavigation()
@@ -131,19 +121,6 @@ class MainActivity : AppCompatActivity() {
         Log.d("MainActivity", "onResume end")
     }
     
-    override fun onPause() {
-        super.onPause()
-        
-        // Stop notification listener when app is in background
-        notificationHelper.stopListeningForNotifications()
-    }
-    
-    override fun onDestroy() {
-        super.onDestroy()
-        
-        // Ensure notification listener is stopped to prevent memory leaks
-        notificationHelper.stopListeningForNotifications()
-    }
 
     /**
      * Request notification permission for Android 13+
@@ -371,22 +348,34 @@ class MainActivity : AppCompatActivity() {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }
 
+    private var currentWindowInsets: WindowInsetsCompat? = null
+
     private fun setupWindowInsets() {
         val mainLayout = findViewById<View>(R.id.main)
-        mainLayout?.let {
-            ViewCompat.setOnApplyWindowInsetsListener(it) { v, insets ->
-                val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-                v.updatePadding(
-                    left = systemBars.left,
-                    top = systemBars.top,
-                    right = systemBars.right,
-                    bottom = systemBars.bottom
-                )
+        mainLayout?.let { layout ->
+            ViewCompat.setOnApplyWindowInsetsListener(layout) { v, insets ->
+                currentWindowInsets = insets
+                applyPadding(v, insets, navController.currentDestination?.id)
                 insets
             }
         }
+        
+        navController.addOnDestinationChangedListener { _, destination, _ ->
+            mainLayout?.let { layout ->
+                currentWindowInsets?.let { insets ->
+                    applyPadding(layout, insets, destination.id)
+                }
+            }
+        }
+    }
 
-        // Removed obsolete toolbar content handling.
+    private fun applyPadding(v: View, insets: WindowInsetsCompat, destinationId: Int?) {
+        val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+        if (destinationId == R.id.calendarFragment) {
+            v.setPadding(0, 0, 0, systemBars.bottom)
+        } else {
+            v.setPadding(0, systemBars.top, 0, systemBars.bottom)
+        }
     }
 
     private fun loadUserData() {
