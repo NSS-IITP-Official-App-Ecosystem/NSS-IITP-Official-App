@@ -244,6 +244,33 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                 result.fold(
                     onSuccess = { eventId ->
                         Log.d(TAG, "Event created successfully with ID: $eventId")
+                        
+                        // Send Notification for the event
+                        try {
+                            val eventType = if (isMandatory) "Mandatory Event" else "Event"
+                            val title = "$eventType: $name"
+                            val message = "A new ${if (isMandatory) "mandatory " else ""}event '$name' has been scheduled on $dateString from $timeRangeString. Location: $location"
+                            
+                            val targetType = "all" // Always broadcast events to everyone
+                            
+                            val notificationData = hashMapOf<String, Any>(
+                                "title" to title,
+                                "body" to message,
+                                "targetRole" to "all",
+                                "targetWing" to "all",
+                                "targetType" to targetType,
+                                "type" to "EVENT_NOTIFICATION",
+                                "creatorId" to _adminUiState.value.adminId,
+                                "isRead" to false,
+                                "timestamp" to com.google.firebase.Timestamp.now()
+                            )
+                            com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("app_notifications").add(notificationData)
+                                .addOnSuccessListener { Log.d(TAG, "Successfully created app_notification for event broadcast") }
+                                .addOnFailureListener { e -> Log.e(TAG, "Failed to create app_notification for event", e) }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error creating event notification", e)
+                        }
+
                         _adminUiState.value = _adminUiState.value.copy(
                             isCreatingEvent = false,
                             showCreateEventDialog = false,

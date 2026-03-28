@@ -77,6 +77,18 @@ class ChatMessagingService : FirebaseMessagingService() {
         super.onMessageReceived(remoteMessage)
         Log.d(TAG, "Received FCM message: ${remoteMessage.data}")
         
+        // Handle broadcast app notifications (they use the 'notification' payload)
+        if (remoteMessage.notification != null) {
+            Log.d(TAG, "Received broadcast notification: ${remoteMessage.notification?.title}")
+            showAppBroadcastNotification(
+                applicationContext,
+                remoteMessage.notification?.title ?: "Notification",
+                remoteMessage.notification?.body ?: "",
+                remoteMessage.data
+            )
+            return
+        }
+
         // Extract notification data
         val data = remoteMessage.data
         if (data.isNotEmpty()) {
@@ -264,6 +276,58 @@ class ChatMessagingService : FirebaseMessagingService() {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error preparing direct message notification: ${e.message}", e)
+        }
+    }
+    
+    private fun showAppBroadcastNotification(context: Context, title: String, body: String, data: Map<String, String>) {
+        if (!areNotificationsEnabled(context)) return
+
+        try {
+            val sessionManager = SessionManager(context)
+            if (sessionManager.fetchUserType().equals("Admin", ignoreCase = true)) {
+                Log.d(TAG, "User is admin, suppressing broadcast push notification.")
+                return
+            }
+            
+            val isTtw = sessionManager.getLastInterfaceChoice() == "TEACHING_WING"
+            val mainActivityClass = if (isTtw) com.phad.chatapp.MainActivity::class.java else com.phad.chatapp.NssMainActivity::class.java
+
+            val parentIntent = Intent(context, mainActivityClass).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            }
+
+            val intent = Intent(context, com.phad.chatapp.activities.NotificationHistoryActivity::class.java)
+            
+            val pendingIntent = android.app.TaskStackBuilder.create(context).run {
+                addNextIntent(parentIntent)
+                addNextIntent(intent)
+                getPendingIntent(
+                    System.currentTimeMillis().toInt(), 
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                )
+            }
+            
+            createNotificationChannelsIfNeeded(context)
+            val channelId = CHANNEL_ID // Default channel
+            
+            val notificationBuilder = NotificationCompat.Builder(context, channelId)
+                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setContentTitle(title)
+                .setContentText(body)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setContentIntent(pendingIntent)
+                .setAutoCancel(true)
+                .setColorized(true)
+                .setColor(Color.parseColor("#4CAF50")) // Green for system notifications
+            
+            val notificationId = NOTIFICATION_ID_BASE + title.hashCode()
+            
+            NotificationManagerCompat.from(context).notify(notificationId, notificationBuilder.build())
+        } catch (e: SecurityException) {
+            Log.e(TAG, "Failed to show notification: Permission not granted", e)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error showing app broadcast notification: ${e.message}", e)
         }
     }
     

@@ -1346,6 +1346,40 @@ fun EditEventDialog(
                         "Environmental Wing",
                         "Design and Curation Wing"
                     )
+                    
+                    // Select All Checkbox
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = !isUpdating) {
+                                if (selectedWings.size == wings.size) {
+                                    selectedWings = emptyList()
+                                } else {
+                                    selectedWings = wings
+                                }
+                            }
+                            .height(30.dp)
+                    ) {
+                        Checkbox(
+                            checked = selectedWings.size == wings.size,
+                            onCheckedChange = { isChecked ->
+                                if (isChecked) {
+                                    selectedWings = wings
+                                } else {
+                                    selectedWings = emptyList()
+                                }
+                            },
+                            enabled = !isUpdating
+                        )
+                        Text(
+                            text = "Select All",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
+                    }
+
                     wings.forEach { wing ->
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -2675,6 +2709,40 @@ fun CreateEventDialog(
                             "Environmental Wing",
                             "Design and Curation Wing"
                         )
+                        
+                        // Select All Checkbox
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(enabled = !isCreating) {
+                                    if (selectedWings.size == wings.size) {
+                                        selectedWings = emptyList()
+                                    } else {
+                                        selectedWings = wings
+                                    }
+                                }
+                                .height(30.dp)
+                        ) {
+                            Checkbox(
+                                checked = selectedWings.size == wings.size,
+                                onCheckedChange = { isChecked ->
+                                    if (isChecked) {
+                                        selectedWings = wings
+                                    } else {
+                                        selectedWings = emptyList()
+                                    }
+                                },
+                                enabled = !isCreating
+                            )
+                            Text(
+                                text = "Select All",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(start = 8.dp)
+                            )
+                        }
+
                         wings.forEach { wing ->
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,

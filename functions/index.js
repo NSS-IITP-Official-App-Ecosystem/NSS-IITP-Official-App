@@ -701,3 +701,42 @@ exports.sendNotification = onDocumentCreated(
       return null;
     }
   });
+
+/**
+ * Triggered when a new app_notification is created (e.g. for events/updates)
+ * Sends a broadcast message to a specific topic
+ */
+exports.sendAppNotification = onDocumentCreated(
+  { document: 'app_notifications/{notificationId}', region: 'asia-south1' },
+  async (event) => {
+    try {
+      const notificationData = event.data?.data() || {};
+      
+      // Expected: "ttw_user", "nss_user", "all", etc.
+      const topic = notificationData.targetType; 
+      if (!topic) {
+        console.log('No targetType specified, skipping broadcast.');
+        return null;
+      }
+
+      const payload = {
+        notification: {
+          title: notificationData.title || 'New Notification',
+          body: notificationData.message || notificationData.body || '',
+        },
+        data: {
+          type: notificationData.type || 'general',
+          relatedId: notificationData.relatedId || ''
+        },
+        topic: topic
+      };
+
+      await admin.messaging().send(payload);
+      console.log(`Successfully broadcasted app notification to topic: ${topic}`);
+
+      return null;
+    } catch (error) {
+      console.error('Error broadcasting app notification:', error);
+      return null;
+    }
+  });

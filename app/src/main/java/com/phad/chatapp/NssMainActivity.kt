@@ -20,6 +20,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.phad.chatapp.utils.SessionManager
 import com.phad.chatapp.utils.NotificationHelper
 import android.content.Intent
+import android.content.pm.PackageManager
 import com.phad.chatapp.activities.LoginActivity
 
 class NssMainActivity : AppCompatActivity() {
@@ -28,6 +29,9 @@ class NssMainActivity : AppCompatActivity() {
     private lateinit var auth: FirebaseAuth
     private lateinit var notificationHelper: NotificationHelper
     private lateinit var navController: NavController
+
+    private val NOTIFICATION_PERMISSION_REQUEST_CODE = 100
+    private var notificationDialog: androidx.appcompat.app.AlertDialog? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,6 +43,9 @@ class NssMainActivity : AppCompatActivity() {
         sessionManager = SessionManager(this)
         // Initialize notification helper
         notificationHelper = NotificationHelper(this)
+
+        // Request notification permission if needed
+        requestNotificationPermissionIfNeeded()
 
         // Set up NavController for NSS
         val navHostFragment = supportFragmentManager
@@ -62,6 +69,96 @@ class NssMainActivity : AppCompatActivity() {
         
         // Setup Update Popup
         setupUpdatePopup()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        
+        // Restart notification listener when returning to the app
+        val currentUserId = sessionManager.fetchUserId()
+        if (currentUserId.isNotEmpty()) {
+            notificationHelper.startListeningForNotifications(currentUserId)
+        }
+        
+        checkAndEnforceNotificationPermission()
+    }
+    
+    override fun onPause() {
+        super.onPause()
+        notificationHelper.stopListeningForNotifications()
+    }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        notificationHelper.stopListeningForNotifications()
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    android.Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+                    NOTIFICATION_PERMISSION_REQUEST_CODE
+                )
+            }
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == NOTIFICATION_PERMISSION_REQUEST_CODE) {
+            checkAndEnforceNotificationPermission()
+        }
+    }
+
+    private fun checkAndEnforceNotificationPermission() {
+        if (!com.phad.chatapp.utils.ChatMessagingService.areNotificationsEnabled(this)) {
+            if (notificationDialog == null) {
+                notificationDialog = androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle("Notifications Required")
+                    .setMessage("Push notifications are mandatory for this app. Please enable them in your device settings to continue.")
+                    .setCancelable(false)
+                    .setPositiveButton("Open Settings") { _, _ ->
+                        openNotificationSettings()
+                    }
+                    .setNegativeButton("Exit") { _, _ ->
+                        finishAffinity()
+                    }
+                    .create()
+                notificationDialog?.show()
+            } else if (notificationDialog?.isShowing == false) {
+                notificationDialog?.show()
+            }
+        } else {
+            notificationDialog?.dismiss()
+            notificationDialog = null
+        }
+    }
+
+    private fun openNotificationSettings() {
+        val intent = Intent().apply {
+            when {
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.O -> {
+                    action = android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS
+                    putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
+                }
+                else -> {
+                    action = android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+                    addCategory(Intent.CATEGORY_DEFAULT)
+                    data = android.net.Uri.parse("package:$packageName")
+                }
+            }
+        }
+        startActivity(intent)
     }
 
     private fun setupUpdatePopup() {

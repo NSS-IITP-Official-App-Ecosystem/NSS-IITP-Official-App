@@ -53,6 +53,7 @@ class MainActivity : AppCompatActivity() {
     
     // Request code for notification permission
     private val NOTIFICATION_PERMISSION_REQUEST_CODE = 100
+    private var notificationDialog: androidx.appcompat.app.AlertDialog? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         Log.d("MainActivity", "onCreate start")
@@ -125,6 +126,8 @@ class MainActivity : AppCompatActivity() {
             notificationHelper.startListeningForNotifications(currentUserId)
         }
         
+        checkAndEnforceNotificationPermission()
+        
         Log.d("MainActivity", "onResume end")
     }
     
@@ -174,10 +177,54 @@ class MainActivity : AppCompatActivity() {
         if (requestCode == NOTIFICATION_PERMISSION_REQUEST_CODE) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 Log.d(TAG, "Notification permission granted")
+                checkAndEnforceNotificationPermission()
             } else {
                 Log.w(TAG, "Notification permission denied - notifications won't work")
+                checkAndEnforceNotificationPermission()
             }
         }
+    }
+    
+    private fun checkAndEnforceNotificationPermission() {
+        if (!com.phad.chatapp.utils.ChatMessagingService.areNotificationsEnabled(this)) {
+            if (notificationDialog == null) {
+                notificationDialog = androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle("Notifications Required")
+                    .setMessage("Push notifications are mandatory for this app. Please enable them in your device settings to continue.")
+                    .setCancelable(false)
+                    .setPositiveButton("Open Settings") { _, _ ->
+                        openNotificationSettings()
+                    }
+                    .setNegativeButton("Exit") { _, _ ->
+                        finishAffinity()
+                    }
+                    .create()
+                notificationDialog?.show()
+            } else if (notificationDialog?.isShowing == false) {
+                notificationDialog?.show()
+            }
+        } else {
+            notificationDialog?.dismiss()
+            notificationDialog = null
+        }
+    }
+
+    private fun openNotificationSettings() {
+        val intent = Intent().apply {
+            when {
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.O -> {
+                    action = android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS
+                    putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
+                }
+                else -> {
+                    action = android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+                    addCategory(Intent.CATEGORY_DEFAULT)
+                    data = android.net.Uri.parse("package:$packageName")
+                }
+            }
+            // addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) // Not strictly needed when calling from Activity
+        }
+        startActivity(intent)
     }
     
     private fun redirectToLogin() {

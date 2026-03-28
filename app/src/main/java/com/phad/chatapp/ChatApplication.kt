@@ -144,6 +144,32 @@ class ChatApplication : Application() {
     }
     
     /**
+     * Subscribe to user-specific topics based on role and wing
+     */
+    private fun subscribeToUserTopics(sessionManager: SessionManager) {
+        try {
+            val fcm = FirebaseMessaging.getInstance()
+            fcm.subscribeToTopic("all")
+            
+            val userType = sessionManager.fetchUserType()
+            
+            // All users have access to NSS
+            fcm.subscribeToTopic("nss")
+            fcm.subscribeToTopic("nss_${userType}")
+            Log.d(TAG, "Subscribed to topics: all, nss, nss_${userType}")
+            
+            // TTW access check
+            if (sessionManager.getTeachingWing()) {
+                fcm.subscribeToTopic("ttw")
+                fcm.subscribeToTopic("ttw_${userType}")
+                Log.d(TAG, "Subscribed to topics: ttw, ttw_${userType}")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to subscribe to user topics", e)
+        }
+    }
+    
+    /**
      * Save FCM token to the user's Firestore document
      */
     private fun saveTokenToFirestore(token: String) {
@@ -154,6 +180,8 @@ class ChatApplication : Application() {
             Log.d(TAG, "User not logged in yet, token will be saved after login")
             return
         }
+        
+        subscribeToUserTopics(sessionManager)
         
         CoroutineScope(Dispatchers.IO).launch {
             try {

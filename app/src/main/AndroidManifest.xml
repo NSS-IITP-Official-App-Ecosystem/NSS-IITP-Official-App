@@ -164,9 +164,11 @@
             android:exported="false"
             android:theme="@style/Theme.ChatApp" />
 
-
-
-
+        <!-- Notification History Activity -->
+        <activity
+            android:name=".activities.NotificationHistoryActivity"
+            android:exported="false"
+            android:theme="@style/Theme.ChatApp" />
 
         <!-- Add this inside the application tag -->
         <provider

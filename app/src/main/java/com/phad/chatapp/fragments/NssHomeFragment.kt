@@ -150,8 +150,8 @@ class NssHomeFragment : Fragment() {
                 val state by uiState.collectAsState()
                 HomeScreen(
                     state = state,
-                    onChatbotClick = {
-                        val intent = Intent(requireContext(), com.phad.chatapp.features.home.faqs.ui.FaqActivity::class.java)
+                    onNotificationClick = {
+                        val intent = Intent(requireContext(), com.phad.chatapp.activities.NotificationHistoryActivity::class.java)
                         startActivity(intent)
                     },
                     onAddUpdateClick = { showCreateUpdateDialog() }, // Fix naming if needed. The internal function is showCreateUpdateDialog
@@ -1359,142 +1359,38 @@ class NssHomeFragment : Fragment() {
 
 
     private fun sendUpdateNotification(update: Update) {
-        Log.d(TAG, "Preparing to send update notification for update: ${update.id} with updateType: ${update.updateType}")
-
+        android.util.Log.d(TAG, "Preparing update notification for: ${update.id}")
         try {
-            val notificationHelper = NotificationHelper(requireContext())
-            val currentUserId = sessionManager.fetchRollNumber() ?: auth.currentUser?.uid ?: ""
-
-            // Create a descriptive message that includes update info
-            // Create a descriptive message that includes update info
-            val title = update.title ?: "New Update" // Safe default
-            val content = update.content ?: ""
-            val message = "$title: ${content.take(100)}${if (content.length > 100) "..." else ""}"
-
-            // If there's a document, mention it in the notification
-            val fullMessage = if (update.documentUrl != null) {
-                "$message [Contains document]"
-            } else {
-                message
+            val title = update.title ?: "New Update"
+            val contentChunk = update.content ?: ""
+            val message = "$title: ${contentChunk.take(100)}${if (contentChunk.length > 100) "..." else ""}"
+            val fullMessage = if (update.documentUrl != null || !update.documentUrls.isNullOrEmpty()) "$message [Contains document]" else message
+            
+            val targetType = when (update.updateType) {
+                1 -> "ttw"
+                2 -> "nss"
+                3 -> "all"
+                else -> "all"
             }
-
-            Log.d(TAG, "Update notification message: $fullMessage")
-
-            // Get targeted users based on updateType
-            val targetedUserIds = mutableListOf<String>()
-
-            when (update.updateType) {
-                2 -> {
-                    // NSS only updates - notify users with Teaching_wing = false
-                    // Get students from Student collection
-                    db.collection("Student")
-                        .whereEqualTo("Teaching_wing", false)
-                        .get()
-                        .addOnSuccessListener { studentSnapshot ->
-                            val studentIds = studentSnapshot.documents.mapNotNull { doc ->
-                                val rollNo = doc.id
-                                if (rollNo != currentUserId) rollNo else null // Exclude current user
-                            }
-                            targetedUserIds.addAll(studentIds)
-
-                            // Get NSS Admins with Teaching_wing = false
-                            db.collection("NSS_ADMINS")
-                                .whereEqualTo("Teaching_wing", false)
-                                .get()
-                                .addOnSuccessListener { adminSnapshot ->
-                                    val adminIds = adminSnapshot.documents.mapNotNull { doc ->
-                                        val rollNo = doc.getString("Roll_Number") ?: doc.id
-                                        if (rollNo != currentUserId) rollNo else null // Exclude current user
-                                    }
-                                    targetedUserIds.addAll(adminIds)
-
-                                    Log.d(TAG, "Found ${targetedUserIds.size} NSS users to notify about update ${update.id}")
-                                    sendNotificationToUsers(update, title, fullMessage, targetedUserIds, notificationHelper)
-                                }
-                                .addOnFailureListener { e ->
-                                    Log.e(TAG, "Error fetching NSS_ADMINS for notification: ${e.message}", e)
-                                }
-                        }
-                        .addOnFailureListener { e ->
-                            Log.e(TAG, "Error fetching Student collection for NSS notification: ${e.message}", e)
-                        }
-                }
-                3 -> {
-                    // Both interfaces - notify all users
-                    // Get all students
-                    db.collection("Student")
-                        .get()
-                        .addOnSuccessListener { studentSnapshot ->
-                            val studentIds = studentSnapshot.documents.mapNotNull { doc ->
-                                val rollNo = doc.id
-                                if (rollNo != currentUserId) rollNo else null // Exclude current user
-                            }
-                            targetedUserIds.addAll(studentIds)
-
-                            // Get all NSS Admins
-                            db.collection("NSS_ADMINS")
-                                .get()
-                                .addOnSuccessListener { adminSnapshot ->
-                                    val adminIds = adminSnapshot.documents.mapNotNull { doc ->
-                                        val rollNo = doc.getString("Roll_Number") ?: doc.id
-                                        if (rollNo != currentUserId) rollNo else null // Exclude current user
-                                    }
-                                    targetedUserIds.addAll(adminIds)
-
-                                    Log.d(TAG, "Found ${targetedUserIds.size} users (all) to notify about update ${update.id}")
-                                    sendNotificationToUsers(update, title, fullMessage, targetedUserIds, notificationHelper)
-                                }
-                                .addOnFailureListener { e ->
-                                    Log.e(TAG, "Error fetching NSS_ADMINS for all notification: ${e.message}", e)
-                                }
-                        }
-                        .addOnFailureListener { e ->
-                            Log.e(TAG, "Error fetching Student collection for all notification: ${e.message}", e)
-                        }
-                }
-                else -> {
-                    Log.w(TAG, "Unknown updateType: ${update.updateType}")
-                }
-            }
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Error creating update notification: ${e.message}", e)
-            Toast.makeText(
-                requireContext(),
-                "Failed to send notifications: ${e.localizedMessage}",
-                Toast.LENGTH_SHORT
-            ).show()
-        }
-    }
-
-    private fun sendNotificationToUsers(
-        update: Update,
-        title: String,
-        fullMessage: String,
-        targetedUserIds: List<String>,
-        notificationHelper: NotificationHelper
-    ) {
-        if (targetedUserIds.isNotEmpty()) {
-            CoroutineScope(Dispatchers.Main).launch {
-                try {
-                    Log.d(TAG, "Launching coroutine to send update notification to ${targetedUserIds.size} users")
-
-                    notificationHelper.sendUpdateNotification(
-                        updateId = update.id,
-                        updateTitle = title,
-                        updateMessage = fullMessage,
-                        senderRollNumber = update.authorId,
-                        senderName = update.authorName,
-                        allUserIds = targetedUserIds
-                    )
-
-                    Log.d(TAG, "Update notification successfully sent via NotificationHelper")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error in coroutine sending notification: ${e.message}", e)
-                }
-            }
-        } else {
-            Log.w(TAG, "No users found to notify for updateType: ${update.updateType}")
+            
+            val ndata = hashMapOf<String, Any>(
+                "title" to title,
+                "body" to fullMessage,
+                "targetRole" to "all",
+                "targetWing" to "all",
+                "targetType" to targetType,
+                "type" to "UPDATE_NOTIFICATION",
+                "creatorId" to (update.authorId ?: "Admin"),
+                "isRead" to false,
+                "timestamp" to com.google.firebase.Timestamp.now()
+            )
+            
+            com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("app_notifications").add(ndata)
+                .addOnSuccessListener { android.util.Log.d(TAG, "Successfully created app_notification") }
+                .addOnFailureListener { e -> android.util.Log.e(TAG, "Failed creating app_notification", e) }
+                
+        } catch (e: Exception) { 
+            android.util.Log.e(TAG, "Error: ${e.message}", e) 
         }
     }
 
