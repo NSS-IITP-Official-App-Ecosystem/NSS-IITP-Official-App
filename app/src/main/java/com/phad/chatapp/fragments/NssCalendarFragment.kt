@@ -44,9 +44,8 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material3.*
-import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -153,23 +152,28 @@ class NssCalendarFragment : Fragment() {
                 ) { padding ->
                     // Pull to refresh state
                     val pullRefreshState = rememberPullToRefreshState()
-                    
-                    if (pullRefreshState.isRefreshing) {
-                        LaunchedEffect(true) {
+                    val refreshScope = rememberCoroutineScope()
+                    var isRefreshing by remember { mutableStateOf(false) }
+
+                    val onRefresh: () -> Unit = {
+                        isRefreshing = true
+                        refreshScope.launch {
                             isLoading = true
                             val all = repository.getAllEvents(forceRefresh = true)
                             allEvents = all.getOrNull().orEmpty()
                             errorMessage = all.exceptionOrNull()?.message
                             isLoading = false
-                            pullRefreshState.endRefresh()
+                            isRefreshing = false
                         }
                     }
 
-                    Box(
+                    PullToRefreshBox(
+                        isRefreshing = isRefreshing,
+                        onRefresh = onRefresh,
+                        state = pullRefreshState,
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(bottom = padding.calculateBottomPadding())
-                            .nestedScroll(pullRefreshState.nestedScrollConnection)
                     ) {
                         Column(
                             modifier = Modifier
@@ -352,10 +356,6 @@ class NssCalendarFragment : Fragment() {
                         } // End content padding column
                     } // End main column
                     
-                    PullToRefreshContainer(
-                        state = pullRefreshState,
-                        modifier = Modifier.align(Alignment.TopCenter)
-                    )
                     } // End Box
                 } // End Scaffold
 

@@ -2322,11 +2322,7 @@ fun DayCheckbox(
             .padding(horizontal = 2.dp, vertical = 4.dp)
             .width(52.dp)
             .clip(RoundedCornerShape(12.dp))
-            .clickable(
-                // No interaction source to prevent any press feedback animations
-                indication = null,
-                interactionSource = remember { MutableInteractionSource() }
-            ) {
+            .clickable {
                 onSelectionChanged(!isSelected)
             },
         shape = RoundedCornerShape(12.dp),

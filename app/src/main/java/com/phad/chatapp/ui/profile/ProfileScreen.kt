@@ -63,9 +63,8 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.runtime.LaunchedEffect
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -166,21 +165,6 @@ fun ProfileScreen(
     ) {
         val pullRefreshState = rememberPullToRefreshState()
 
-        if (pullRefreshState.isRefreshing) {
-            LaunchedEffect(true) {
-                onRefreshClick()
-            }
-        }
-        
-        // Synch logic: if state.isRefreshing is false, allow stop. 
-        // Note: We don't force startRefresh from state here usually, 
-        // we just ensure it stops when state says so.
-        LaunchedEffect(state.isRefreshing) {
-            if (!state.isRefreshing) {
-                pullRefreshState.endRefresh()
-            }
-        }
-
         // Comprehensive insets handling to avoid conflicts with MainActivity
         val navigationBars = WindowInsets.navigationBars.asPaddingValues()
         
@@ -205,10 +189,11 @@ fun ProfileScreen(
         androidx.compose.runtime.CompositionLocalProvider(
             androidx.compose.foundation.LocalOverscrollConfiguration provides null
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .nestedScroll(pullRefreshState.nestedScrollConnection)
+            PullToRefreshBox(
+                isRefreshing = state.isRefreshing,
+                onRefresh = onRefreshClick,
+                state = pullRefreshState,
+                modifier = Modifier.fillMaxSize()
             ) {
 
                 Image(
@@ -402,10 +387,7 @@ fun ProfileScreen(
                         .clip(RoundedCornerShape(topStart = 40.dp, topEnd = 40.dp))
                         .background(surfaceColor)
                         // Add touch consumer to prevent click-through to buttons behind
-                        .clickable(
-                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                            indication = null
-                        ) {}
+                        .clickable { }
                 ) {
                 Column(
                     modifier = Modifier
@@ -619,13 +601,6 @@ fun ProfileScreen(
 //                    .background(Color.White)
 //            )
         }
-            
-            PullToRefreshContainer(
-                state = pullRefreshState,
-                modifier = Modifier.align(Alignment.TopCenter),
-                containerColor = Color.White,
-                contentColor = Color(0xFF2196F3)
-            )
         }
     }
     }

@@ -313,10 +313,7 @@ fun HomeScreen(
                                 .height(36.dp)
                                 .clip(RoundedCornerShape(18.dp))
                                 .background(Color(0xFFFFF8E1))
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null
-                                ) {
+                                .clickable {
                                     // Toggle between tabs
                                     selectedTab = if (selectedTab == 0) 1 else 0
                                     coroutineScope.launch {
