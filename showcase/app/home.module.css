@@ -155,6 +155,107 @@
   margin-top: 1rem;
 }
 
+/* ====== NEW HERO BUTTONS ====== */
+.btn_explore {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-sans);
+  font-weight: 800;
+  font-size: 1rem;
+  padding: 1rem 2.25rem;
+  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue), var(--accent-purple));
+  background-size: 200% 200%;
+  color: #050510;
+  border-radius: 100px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 0 30px rgba(102, 252, 241, 0.4), inset 0 2px 5px rgba(255, 255, 255, 0.5);
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  z-index: 1;
+  animation: pulse-button-cta 3s infinite alternate, gradient-shift-bg 6s ease infinite;
+}
+
+@keyframes pulse-button-cta {
+  0% { transform: scale(1); box-shadow: 0 0 20px rgba(102, 252, 241, 0.4), inset 0 2px 4px rgba(255, 255, 255, 0.4); }
+  100% { transform: scale(1.05); box-shadow: 0 0 50px rgba(102, 252, 241, 0.8), inset 0 2px 6px rgba(255, 255, 255, 0.6); }
+}
+
+@keyframes gradient-shift-bg {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.btn_explore_icon {
+  transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.btn_explore:hover .btn_explore_icon {
+  transform: translateX(6px);
+}
+
+.btn_explore::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: -1;
+}
+
+.btn_explore::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%;
+  width: 50%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);
+  transform: skewX(-25deg);
+  animation: shine 4s infinite 1s;
+  z-index: -1;
+}
+
+.btn_explore:hover {
+  transform: scale(1.08) translateY(-4px) !important;
+  box-shadow: 0 20px 50px rgba(102, 252, 241, 0.6), inset 0 2px 4px rgba(255, 255, 255, 0.5);
+}
+
+.btn_explore:hover::before {
+  opacity: 1;
+}
+
+@keyframes shine {
+  0% { left: -100%; }
+  15% { left: 200%; }
+  100% { left: 200%; }
+}
+
+.play_store_badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.8rem;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 100px;
+  padding: 0.5rem 1rem;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+}
+
+.play_store_badge:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  color: #fff;
+}
+
 /* ====== HERO TECH STACK ====== */
 .hero_tech {
   display: flex;
@@ -661,10 +762,21 @@
 .team_card {
   padding: 2.5rem;
   border-radius: 24px;
+  position: relative;
+  height: 100%;
+}
+
+.team_card_inner {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
-  position: relative;
+  gap: 2rem;
+  height: 100%;
+}
+
+.team_card_reveal {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .team_card_accent {
@@ -693,7 +805,7 @@
 .team_header {
   display: flex;
   align-items: center;
-  gap: 1.75rem;
+  gap: 2rem;
 }
 
 .avatar {

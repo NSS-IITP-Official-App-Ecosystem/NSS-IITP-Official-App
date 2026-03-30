@@ -5,10 +5,11 @@ import { useRef, useState, ReactNode, MouseEvent } from "react";
 interface Props {
   children: ReactNode;
   className?: string;
+  innerClassName?: string;
   glowColor?: string;
 }
 
-export default function TiltCard({ children, className = "", glowColor = "rgba(102, 252, 241, 0.15)" }: Props) {
+export default function TiltCard({ children, className = "", innerClassName = "", glowColor = "rgba(102, 252, 241, 0.15)" }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [style, setStyle] = useState({
     transform: "perspective(1000px) rotateX(0deg) rotateY(0deg)",
@@ -63,7 +64,7 @@ export default function TiltCard({ children, className = "", glowColor = "rgba(1
           transition: "background 0.15s ease",
         }}
       />
-      <div style={{ position: "relative", zIndex: 2 }}>{children}</div>
+      <div className={innerClassName} style={{ position: "relative", zIndex: 2, height: "100%" }}>{children}</div>
     </div>
   );
 }

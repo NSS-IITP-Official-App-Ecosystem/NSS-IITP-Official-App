@@ -30,7 +30,7 @@ import TiltCard from "./components/TiltCard";
 import SplashVideo from "./components/SplashVideo";
 
 /* ---- animation variants ---- */
-const stagger = {
+const stagger: any = {
   hidden: { opacity: 0 },
   show: {
     opacity: 1,
@@ -38,7 +38,7 @@ const stagger = {
   },
 };
 
-const fadeUp = {
+const fadeUp: any = {
   hidden: { opacity: 0, y: 40, filter: "blur(10px)" },
   show: {
     opacity: 1,
@@ -48,7 +48,7 @@ const fadeUp = {
   },
 };
 
-const scaleIn = {
+const scaleIn: any = {
   hidden: { opacity: 0, scale: 0.9 },
   show: {
     opacity: 1,
@@ -78,12 +78,20 @@ export default function Home() {
               initial="hidden"
               animate="show"
             >
-              <motion.div variants={fadeUp} style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', marginBottom: '0.5rem' }}>
+              <motion.div variants={fadeUp} style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
                 <Image src="/images/app-logo.png" alt="App Logo" width={88} height={88} style={{ borderRadius: '18px', boxShadow: '0 8px 32px rgba(102, 252, 241, 0.15)' }} />
                 <div className={styles.hero_badge} style={{ margin: 0 }}>
                   <span className={styles.hero_badge_dot} />
                   NSS IITP Official App
                 </div>
+                <a
+                  href="https://play.google.com/store/apps/details?id=com.phad.chatapp&hl=en_IN"
+                  className={styles.play_store_badge}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Smartphone style={{ width: 14, height: 14, marginRight: '4px' }} /> Get it on Play Store
+                </a>
               </motion.div>
 
               <motion.h1 variants={fadeUp} className={styles.hero_title}>
@@ -97,17 +105,8 @@ export default function Home() {
               </motion.p>
 
               <motion.div variants={fadeUp} className={styles.hero_cta}>
-                <a
-                  href="https://play.google.com/store/apps/details?id=com.phad.chatapp&hl=en_IN"
-                  className={styles.btn_glow}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <Smartphone style={{ width: 18, height: 18, marginRight: '4px' }} /> 
-                  Get it on Play Store
-                </a>
-                <Link href="#story" className={styles.btn_outline}>
-                  Explore Features <ArrowRight style={{ width: 18, height: 18, marginLeft: '4px' }} />
+                <Link href="/explore" className={styles.btn_explore}>
+                  Explore Features <ArrowRight className={styles.btn_explore_icon} style={{ width: 18, height: 18, marginLeft: '4px' }} />
                 </Link>
               </motion.div>
 
@@ -234,20 +233,7 @@ export default function Home() {
                 From pen-and-paper chaos to an elegant, automated solution —
                 built inside a technology institute that deserved better.
               </p>
-              <div className={styles.story_sticky_stats}>
-                <div className={styles.story_stat}>
-                  <span className={styles.story_stat_number}>2</span>
-                  <span className={styles.story_stat_label}>Developers</span>
-                </div>
-                <div className={styles.story_stat}>
-                  <span className={styles.story_stat_number}>0</span>
-                  <span className={styles.story_stat_label}>Prior Android Experience</span>
-                </div>
-                <div className={styles.story_stat}>
-                  <span className={styles.story_stat_number}>1</span>
-                  <span className={styles.story_stat_label}>Massive Problem</span>
-                </div>
-              </div>
+
             </div>
 
             {/* Right scrolling column */}
@@ -255,16 +241,19 @@ export default function Home() {
               <ScrollReveal delay={0}>
                 <div className={`${styles.story_block} glass-card`}>
                   <div className={styles.story_block_accent} />
-                  <h3 className={styles.story_block_title}>From Paper to Pixels</h3>
+                  <h3 className={styles.story_block_title}>Death by Excel</h3>
                   <p className={styles.story_block_text}>
-                    In our first year at IIT Patna, we found ourselves deep in the heart of NSS — volunteering, coordinating, and noticing a glaring issue. <strong>Attendance was still being taken on paper.</strong> In an institute of technology, proxy was rampant, scheduling was a mess of spreadsheets, and managing 350+ volunteers felt like an impossible task.
+                    As first-year volunteers, we learned quickly that the hardest part of NSS wasn&apos;t the actual social work—it was the spreadsheets. Tracking 350+ students across 100+ events meant horizontally scrolling through a chaotic mess of columns just to verify one person. Hours calculations were constantly breaking, anyone could edit the sheets without a trace, and paper registers meant proxy attendance was rampant. With zero centralized way to even view upcoming events, the system was practically begging to be replaced.
                   </p>
                   <div className={styles.story_block_tags}>
-                    <span className={`${styles.story_tag} ${styles.tag_rose}`}>
-                      <ShieldAlert style={{ width: 14, height: 14 }} /> proxy_issue
-                    </span>
                     <span className={`${styles.story_tag} ${styles.tag_amber}`}>
-                      <Terminal style={{ width: 14, height: 14 }} /> manual_tracking
+                      <Terminal style={{ width: 14, height: 14 }} /> spreadsheet_chaos
+                    </span>
+                    <span className={`${styles.story_tag} ${styles.tag_purple}`}>
+                      <Database style={{ width: 14, height: 14 }} /> data_nightmare
+                    </span>
+                    <span className={`${styles.story_tag} ${styles.tag_rose}`}>
+                      <ShieldAlert style={{ width: 14, height: 14 }} /> rampant_proxy
                     </span>
                   </div>
                 </div>
@@ -277,16 +266,19 @@ export default function Home() {
               <ScrollReveal delay={0.2}>
                 <div className={`${styles.story_block} glass-card`}>
                   <div className={`${styles.story_block_accent} ${styles.story_block_accent_alt}`} />
-                  <h3 className={styles.story_block_title}>The Phad Project</h3>
+                  <h3 className={styles.story_block_title}>Enter &quot;The Phad Project&quot;</h3>
                   <p className={styles.story_block_text}>
-                    <em>We were engineers. We could fix this.</em> Squeezed into a small room in Aryabhatta Hall with zero prior Android development experience, we decided to build a solution from scratch. It was fueled by late nights, sheer stubbornness, and a massive problem to solve. We called it <strong>The Phad Project</strong>.
+                    We squeezed into a dorm room in Aryabhatta Hostel with a clear goal but absolutely no roadmap. We didn&apos;t know how to actually fix the problem, what language to learn first, or even whom to ask for help. We decided to build a full Android app anyway and named it <strong>The Phad Project</strong> (because <em>phatne wali thi ise banane me</em> 😅). We had zero Android experience—just a massive problem, a lot of late nights, and the wildly naive stubbornness to ultimately fix it.
                   </p>
                   <div className={styles.story_block_tags}>
-                    <span className={`${styles.story_tag} ${styles.tag_purple}`}>
-                      <Code2 style={{ width: 14, height: 14 }} /> zero_experience
+                    <span className={`${styles.story_tag} ${styles.tag_amber}`}>
+                      <ArrowRight style={{ width: 14, height: 14 }} /> zero_roadmap
                     </span>
                     <span className={`${styles.story_tag} ${styles.tag_blue}`}>
                       <Users2 style={{ width: 14, height: 14 }} /> late_nights
+                    </span>
+                    <span className={`${styles.story_tag} ${styles.tag_purple}`}>
+                      <Code2 style={{ width: 14, height: 14 }} /> naive_stubbornness
                     </span>
                   </div>
                 </div>
@@ -299,13 +291,19 @@ export default function Home() {
               <ScrollReveal delay={0.4}>
                 <div className={`${styles.story_block} glass-card`}>
                   <div className={`${styles.story_block_accent} ${styles.story_block_accent_success}`} />
-                  <h3 className={styles.story_block_title}>The Result</h3>
+                  <h3 className={styles.story_block_title}>From Prototype to Play Store</h3>
                   <p className={styles.story_block_text}>
-                    That late-night idea evolved into the <strong>NSS IITP Official App</strong>. Now live on the Play Store, it&apos;s used daily by sub-coordinators and hundreds of volunteers, seamlessly handling QR attendance, multi-role calendars, and real-time syncing.
+                    We actually figured it out. That clueless late-night experiment is now the <strong>NSS IITP Official App</strong>. Live on the Play Store, it empowers sub-coordinators to effortlessly manage proxy-proof QR attendance, while giving 350+ volunteers a transparent record of their hours. Packing features like automated teaching schedules, leave approvals, event history, and real-time feeds, it completely modernized how our campus coordinates social service.
                   </p>
                   <div className={styles.story_block_tags}>
+                    <span className={`${styles.story_tag} ${styles.tag_rose}`}>
+                      <ShieldCheck style={{ width: 14, height: 14 }} /> battle_tested
+                    </span>
+                    <span className={`${styles.story_tag} ${styles.tag_blue}`}>
+                      <Smartphone style={{ width: 14, height: 14 }} /> play_store_live
+                    </span>
                     <span className={`${styles.story_tag} ${styles.tag_emerald}`}>
-                      <Zap style={{ width: 14, height: 14 }} /> scalable_architecture
+                      <Zap style={{ width: 14, height: 14 }} /> proxy_proof_qr
                     </span>
                   </div>
                 </div>
@@ -334,8 +332,8 @@ export default function Home() {
 
           <div className={styles.team_grid}>
             {/* Dev 1 */}
-            <ScrollReveal delay={0} direction="left">
-              <TiltCard className={`${styles.team_card} glass-card glass-card-blue`}>
+            <ScrollReveal delay={0} direction="left" className={styles.team_card_reveal}>
+              <TiltCard className={`${styles.team_card} glass-card glass-card-blue`} innerClassName={styles.team_card_inner}>
                 <div className={`${styles.team_card_accent} ${styles.team_card_accent_blue}`} />
                 <div className={styles.team_header}>
                   <div className={styles.avatar}>
@@ -347,9 +345,7 @@ export default function Home() {
                   </div>
                 </div>
                 <p className={styles.team_bio}>
-                  Spearheaded the initial conception and development. Focused on
-                  solving core inefficiencies in the Teaching & Technical Wings,
-                  architecting robust data flow and security.
+                  The mastermind single-handedly responsible for ending the golden era of proxy attendance. Built the QR system, calendar, and event management features that forced volunteers to <em>actually</em> show up. Also engineered the TTW scheduling algorithm—which he remains disturbingly overconfident about. Highly dedicated, overly enthusiastic, and the absolute bane of lazy students.
                 </p>
                 <div className={styles.team_links_row}>
                   <a href="https://github.com/EshanBhaskar" target="_blank" rel="noopener noreferrer" className={styles.team_link_btn}>
@@ -365,12 +361,12 @@ export default function Home() {
             </ScrollReveal>
 
             {/* Dev 2 */}
-            <ScrollReveal delay={0.15} direction="right">
-              <TiltCard className={`${styles.team_card} glass-card glass-card-amber`}>
+            <ScrollReveal delay={0.15} direction="right" className={styles.team_card_reveal}>
+              <TiltCard className={`${styles.team_card} glass-card glass-card-amber`} innerClassName={styles.team_card_inner}>
                 <div className={`${styles.team_card_accent} ${styles.team_card_accent_warm}`} />
                 <div className={styles.team_header}>
                   <div className={styles.avatar}>
-                     <Image src="/images/ankesh-avatar.png" alt="Ankesh Kumar" width={220} height={220} className={styles.avatar_image} />
+                     <Image src="/images/ankesh-avatar-new.jpg" alt="Ankesh Kumar" width={220} height={220} className={styles.avatar_image} />
                   </div>
                   <div className={styles.team_info}>
                     <h3>Ankesh Kumar</h3>
@@ -378,9 +374,7 @@ export default function Home() {
                   </div>
                 </div>
                 <p className={styles.team_bio}>
-                  Partnered in scaling the application to its current robust
-                  architecture. Dedicated to optimizing UX, integrating Jetpack
-                  Compose, and expanding feature sets.
+                  The calm, composed all-rounder who kept the app from spontaneously combusting. Mastered the logic for logins, in-app updates, FAQs, and notifications faster than anyone thought possible. Possesses a terrifying ability to learn new tech overnight and remains completely unfazed whenever the other developers inevitably break something.
                 </p>
                 <div className={styles.team_links_row}>
                   <a href="https://github.com/arbitcoper" target="_blank" rel="noopener noreferrer" className={styles.team_link_btn}>
@@ -401,10 +395,7 @@ export default function Home() {
             <div className={`${styles.ack_card} glass-card`}>
               <h4 className={styles.ack_title}>Acknowledgements</h4>
               <p className={styles.ack_text}>
-                Special thanks to former developers{" "}
-                <strong>Aditya Onam</strong> and{" "}
-                <strong>Aditya Gupta</strong> for their contributions to
-                earlier iterations of the platform.
+                A deep nod of gratitude to the original catalysts of this project. Special thanks to <strong>Aditya Onam</strong>, who sparked the initial idea, assembled the team, and fueled our momentum, and to <strong>Aditya Gupta</strong>, who laid down the foundational database architecture and handled early code integrations. Their contributions to the initial iterations paved the way for the platform we have today.
               </p>
             </div>
           </ScrollReveal>
@@ -413,9 +404,8 @@ export default function Home() {
         {/* ============ FOOTER ============ */}
         <footer className={styles.footer}>
           <p className={styles.footer_text}>
-            Built with precision by{" "}
-            <a href="#">Eshan Bhaskar</a> &{" "}
-            <a href="#">Ankesh Kumar</a> — IIT Patna
+            Built with ☕ and <span style={{ color: 'var(--accent-blue)' }}>{'<'}code{'>'}</span> by{" "}
+            <a href="https://github.com/Eshan-Bhaskar" target="_blank" rel="noopener noreferrer">Eshan Bhaskar</a> — IIT Patna
           </p>
         </footer>
       </div>
