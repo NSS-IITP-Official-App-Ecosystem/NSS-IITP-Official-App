@@ -230,8 +230,16 @@ class SessionManager(context: Context) {
     fun logoutUser() {
         Log.d(TAG, "Logging out user")
         
+        // Purge the FCM Subscriptions so the device stops receiving the old user's pushes
+        Thread {
+            try {
+                com.google.firebase.messaging.FirebaseMessaging.getInstance().deleteToken()
+                Log.d(TAG, "Successfully purged FCM token on logout")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error purging FCM token", e)
+            }
+        }.start()
 
-        
         // Sign out from Firebase Auth
         FirebaseAuth.getInstance().signOut()
         
