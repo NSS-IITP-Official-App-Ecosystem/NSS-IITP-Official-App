@@ -25,8 +25,8 @@ android {
         applicationId = "com.phad.chatapp"
         minSdk = 26
         targetSdk = 35
-        versionCode = 57
-        versionName = "1.1.2"
+        versionCode = 58
+        versionName = "1.1.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
@@ -137,6 +137,7 @@ dependencies {
     implementation(libs.androidx.activity)
     implementation(libs.androidx.constraintlayout)
     implementation("androidx.fragment:fragment-ktx:1.6.2")
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
 
     // Core library desugaring for Java 8+ features on older Android versions
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
@@ -169,6 +170,7 @@ dependencies {
     implementation("com.google.firebase:firebase-analytics")
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-messaging")
+
     implementation("com.google.firebase:firebase-storage")
     implementation("com.google.firebase:firebase-database-ktx")
     implementation("com.google.firebase:firebase-database") {
@@ -211,14 +213,14 @@ dependencies {
 
     // Jetpack Compose dependencies
     implementation("androidx.activity:activity-compose:1.8.2")
-    implementation("androidx.compose.ui:ui:1.6.3")
-    implementation("androidx.compose.ui:ui-graphics:1.6.3")
-    implementation("androidx.compose.ui:ui-tooling-preview:1.6.3")
-    implementation("androidx.compose.material3:material3:1.2.0")
-    implementation("androidx.compose.material:material-icons-extended:1.6.3")
+    implementation("androidx.compose.ui:ui:1.7.0")
+    implementation("androidx.compose.ui:ui-graphics:1.7.0")
+    implementation("androidx.compose.ui:ui-tooling-preview:1.7.0")
+    implementation("androidx.compose.material3:material3:1.3.0")
+    implementation("androidx.compose.material:material-icons-extended:1.7.0")
     implementation("androidx.navigation:navigation-compose:2.7.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
-    debugImplementation("androidx.compose.ui:ui-tooling:1.6.3")
+    debugImplementation("androidx.compose.ui:ui-tooling:1.7.0")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

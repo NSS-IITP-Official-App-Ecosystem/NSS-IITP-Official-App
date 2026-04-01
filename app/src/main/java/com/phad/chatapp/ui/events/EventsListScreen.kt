@@ -11,9 +11,8 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.*
-import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,6 +71,7 @@ fun EventsListScreen(
     var showFileMessage by remember { mutableStateOf<String?>(null) }
     var headerTotal by remember { mutableStateOf<Double?>(null) }
     var refreshKey by remember { mutableStateOf(0) }
+    var isRefreshing by remember { mutableStateOf(false) }
     
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -190,9 +190,11 @@ fun EventsListScreen(
                 when (semester) { 1 -> s1; 2 -> s2; else -> null }
             } else null
             isLoading = false
+            isRefreshing = false
         } catch (e: Exception) {
             error = e.message
             isLoading = false
+            isRefreshing = false
         }
     }
 
@@ -209,19 +211,20 @@ fun EventsListScreen(
         
         // Pull to refresh state
         val pullRefreshState = rememberPullToRefreshState()
-        
-        if (pullRefreshState.isRefreshing) {
-            LaunchedEffect(true) {
-                refreshKey++ // Trigger reload
-                pullRefreshState.endRefresh()
-            }
+
+        // Setup refresh action
+        val onRefresh: () -> Unit = {
+            isRefreshing = true
+            refreshKey++
         }
 
-        Box(
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = onRefresh,
+            state = pullRefreshState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .nestedScroll(pullRefreshState.nestedScrollConnection)
         ) {
         Column(
             modifier = Modifier
@@ -441,10 +444,6 @@ fun EventsListScreen(
                 }
             }
         }
-            PullToRefreshContainer(
-                state = pullRefreshState,
-                modifier = Modifier.align(Alignment.TopCenter)
-            )
         }
         
         // Show PDF message as overlay

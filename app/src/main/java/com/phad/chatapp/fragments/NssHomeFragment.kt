@@ -13,6 +13,8 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.Window
+import android.view.MotionEvent
+import android.webkit.WebChromeClient
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -38,12 +40,13 @@ import com.phad.chatapp.R
 import com.phad.chatapp.utils.CloudinaryHelper
 import com.phad.chatapp.utils.SessionManager
 import com.phad.chatapp.adapters.UpdateCardAdapter
+import com.phad.chatapp.adapters.BatchDeleteAdapter
 import com.phad.chatapp.models.Update
 import java.io.FileNotFoundException
 import java.util.Calendar
 import java.util.UUID
 import com.google.firebase.firestore.FieldValue
-import com.phad.chatapp.utils.NotificationHelper
+
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -147,8 +150,8 @@ class NssHomeFragment : Fragment() {
                 val state by uiState.collectAsState()
                 HomeScreen(
                     state = state,
-                    onChatbotClick = {
-                        val intent = Intent(requireContext(), com.phad.chatapp.features.home.faqs.ui.FaqActivity::class.java)
+                    onNotificationClick = {
+                        val intent = Intent(requireContext(), com.phad.chatapp.activities.NotificationHistoryActivity::class.java)
                         startActivity(intent)
                     },
                     onAddUpdateClick = { showCreateUpdateDialog() }, // Fix naming if needed. The internal function is showCreateUpdateDialog
@@ -444,11 +447,11 @@ class NssHomeFragment : Fragment() {
         }
         
         // Initialize the dialog
-        createUpdateDialog = Dialog(requireContext()).apply {
+        createUpdateDialog = Dialog(requireContext(), R.style.TransparentDialog).apply {
             requestWindowFeature(Window.FEATURE_NO_TITLE)
             setContentView(R.layout.dialog_create_update)
             window?.setLayout(
-                ViewGroup.LayoutParams.MATCH_PARENT,
+                (resources.displayMetrics.widthPixels * 0.90).toInt(),
                 ViewGroup.LayoutParams.WRAP_CONTENT
             )
         }
@@ -498,11 +501,21 @@ class NssHomeFragment : Fragment() {
         // Add checkbox for cross-posting to Teaching Wing
         val crossPostCheckbox = dialog.findViewById<android.widget.CheckBox>(R.id.crossPostCheckbox)
         
-        // Only show for Teaching Wing admins
+        // Checkbox visibility
+        // Only show for Teaching Wing admins (Dual role)
         if (sessionManager.getTeachingWing()) {
             crossPostCheckbox?.visibility = View.VISIBLE
         } else {
             crossPostCheckbox?.visibility = View.GONE
+        }
+        
+        // Enable internal scrolling for content input
+        updateContentInput?.setOnTouchListener { v, event ->
+            v.parent.requestDisallowInterceptTouchEvent(true)
+            if ((event.action and MotionEvent.ACTION_MASK) == MotionEvent.ACTION_UP) {
+                v.parent.requestDisallowInterceptTouchEvent(false)
+            }
+            false
         }
         
         crossPostCheckbox?.text = "Also post to Teaching Wing interface"
@@ -1045,15 +1058,30 @@ class NssHomeFragment : Fragment() {
                             updateCache = null
                             loadUpdates()
 
-                            // Send notification to all users
-                            sendUpdateNotification(update)
+                            // Send notification to all NSS + TTW users
+                            db.collection("app_notifications").add(mapOf(
+                                "title" to (title?.takeIf { it.isNotBlank() } ?: "New Update"),
+                                "body" to (content.takeIf { it.isNotBlank() } ?: "A new post has been published."),
+                                "targetTopics" to listOf("nss_user", "ttw_user"),
+                                "type" to "UPDATE_NOTIFICATION",
+                                "creatorId" to authorName,
+                                "isRead" to false,
+                                "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                            ))
+
+                            // Trigger Vercel FCM Push
+                            lifecycleScope.launch {
+                                val notifTitle = title?.takeIf { it.isNotBlank() } ?: "New NSS & TTW Update"
+                                val notifBody = if (postType == "reel") "🎥 A new Reel has been published: ${title ?: "Check it out!"}" else (content.take(100).takeIf { it.isNotBlank() } ?: "A new post has been published.")
+                                com.phad.chatapp.utils.FcmSender.sendToTopic("nss", notifTitle, notifBody)
+                            }
                         }
                         .addOnFailureListener { e ->
                             Toast.makeText(requireContext(), "Posted to NSS but failed to cross-post to Teaching Wing: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
                             createUpdateDialog?.dismiss()
                             updateCache = null
                             loadUpdates()
-                            sendUpdateNotification(update)
+        
                         }
                 } else {
                     Toast.makeText(requireContext(), "NSS Update posted", Toast.LENGTH_SHORT).show()
@@ -1063,8 +1091,23 @@ class NssHomeFragment : Fragment() {
                     updateCache = null
                     loadUpdates()
 
-                    // Send notification to all users
-                    sendUpdateNotification(update)
+                    // Send notification to NSS users
+                    db.collection("app_notifications").add(mapOf(
+                        "title" to (title?.takeIf { it.isNotBlank() } ?: "New NSS Update"),
+                        "body" to (content.takeIf { it.isNotBlank() } ?: "A new post has been published."),
+                        "targetTopics" to listOf("nss_user"),
+                        "type" to "UPDATE_NOTIFICATION",
+                        "creatorId" to authorName,
+                        "isRead" to false,
+                        "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                    ))
+
+                    // Trigger Vercel FCM Push
+                    lifecycleScope.launch {
+                        val notifTitle = title?.takeIf { it.isNotBlank() } ?: "New NSS Update"
+                        val notifBody = if (postType == "reel") "🎥 A new Reel has been published: ${title ?: "Check it out!"}" else (content.take(100).takeIf { it.isNotBlank() } ?: "A new post has been published.")
+                        com.phad.chatapp.utils.FcmSender.sendToTopic("nss", notifTitle, notifBody)
+                    }
                 }
             }
             .addOnFailureListener { e ->
@@ -1194,14 +1237,37 @@ class NssHomeFragment : Fragment() {
     }
 
     private fun confirmDeletePost(update: Update) {
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Delete Post?")
-            .setMessage("Are you sure you want to delete '${update.title}'? This action cannot be undone.")
-            .setPositiveButton("Delete") { _, _ ->
-                deletePost(update)
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
+        // Create custom dialog for better UX
+        val dialog = Dialog(requireContext(), R.style.TransparentDialog)
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        dialog.setContentView(R.layout.dialog_delete_confirmation)
+        dialog.window?.setLayout(
+            (resources.displayMetrics.widthPixels * 0.85).toInt(),
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        // Theme handles transparency, but safe to keep or remove. Theme is better.
+        
+        // Set up dialog views
+        val titleTextView = dialog.findViewById<TextView>(R.id.deleteDialogTitle)
+        val messageTextView = dialog.findViewById<TextView>(R.id.deleteDialogMessage)
+        val deleteButton = dialog.findViewById<Button>(R.id.deleteConfirmButton)
+        val cancelButton = dialog.findViewById<Button>(R.id.deleteCancelButton)
+        
+        // Set post title in message
+        val postTitle = if (update.title.isNullOrEmpty()) "this post" else "'${update.title}'"
+        messageTextView.text = "Are you sure you want to delete $postTitle? This action cannot be undone."
+        
+        // Button listeners
+        deleteButton.setOnClickListener {
+            dialog.dismiss()
+            deletePost(update)
+        }
+        
+        cancelButton.setOnClickListener {
+            dialog.dismiss()
+        }
+        
+        dialog.show()
     }
 
     private fun deletePost(update: Update) {
@@ -1227,198 +1293,134 @@ class NssHomeFragment : Fragment() {
             return
         }
 
-        val titles: Array<CharSequence> = updates.map { 
-            val time = java.text.SimpleDateFormat("dd MMM", java.util.Locale.getDefault()).format(java.util.Date(it.timestamp))
-            "${it.title ?: "Untitled"} ($time)"
-        }.toTypedArray()
-        
-        val checkedItems = BooleanArray(updates.size)
-        val selectedItems = java.util.ArrayList<Int>()
+        // Initialize custom delete selection dialog
+        val dialog = Dialog(requireContext(), R.style.TransparentDialog)
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        dialog.setContentView(R.layout.dialog_batch_delete)
+        dialog.window?.setLayout(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
 
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Select Posts to Delete")
-            .setMultiChoiceItems(titles, checkedItems) { dialog, which, isChecked ->
-                if (isChecked) {
-                    selectedItems.add(which)
-                } else {
-                    selectedItems.remove(Integer.valueOf(which))
-                }
-            }
-            .setPositiveButton("Delete Selected") { _, _ ->
-                if (selectedItems.isEmpty()) {
-                    Toast.makeText(requireContext(), "No posts selected", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
-                }
+        val recyclerView = dialog.findViewById<RecyclerView>(R.id.batchDeleteRecyclerView)
+        val deleteButton = dialog.findViewById<Button>(R.id.deleteButton)
+        val cancelButton = dialog.findViewById<Button>(R.id.cancelButton)
 
-                MaterialAlertDialogBuilder(requireContext())
-                    .setTitle("Confirm Batch Delete")
-                    .setMessage("Are you sure you want to delete ${selectedItems.size} posts?")
-                    .setPositiveButton("Delete") { _, _ ->
-                        // Loop and delete
-                        var deletedCount = 0
-                        val total = selectedItems.size
-                        
-                        selectedItems.forEach { index ->
-                            if (index < updates.size) {
-                                // Simplified delete for batch to avoid spam
-                                val update = updates[index]
-                                db.collection("nss_updates").document(update.id).delete()
-                                db.collection("updates").document(update.id).delete()
-                            }
+        // Disable delete button initially
+        deleteButton.isEnabled = false
+        deleteButton.alpha = 0.5f
+
+        // Setup Adapter
+        val adapter = com.phad.chatapp.adapters.BatchDeleteAdapter(updates) { count ->
+            deleteButton.isEnabled = count > 0
+            deleteButton.alpha = if (count > 0) 1.0f else 0.5f
+            deleteButton.text = if (count > 0) "Delete ($count)" else "Delete Selected"
+        }
+
+        recyclerView.layoutManager = LinearLayoutManager(requireContext())
+        recyclerView.adapter = adapter
+
+        // Button Listeners
+        cancelButton.setOnClickListener { dialog.dismiss() }
+
+        deleteButton.setOnClickListener {
+            val selectedIndices = adapter.getSelectedItems()
+            if (selectedIndices.isEmpty()) return@setOnClickListener
+
+            // Confirmation Dialog with Custom UI
+            val confirmDialog = Dialog(requireContext(), R.style.TransparentDialog)
+            confirmDialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+            confirmDialog.setContentView(R.layout.dialog_delete_confirmation)
+            confirmDialog.window?.setLayout(
+                (resources.displayMetrics.widthPixels * 0.85).toInt(),
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+
+            val titleTextView = confirmDialog.findViewById<TextView>(R.id.deleteDialogTitle)
+            val messageTextView = confirmDialog.findViewById<TextView>(R.id.deleteDialogMessage)
+            val confirmDeleteButton = confirmDialog.findViewById<Button>(R.id.deleteConfirmButton)
+            val confirmCancelButton = confirmDialog.findViewById<Button>(R.id.deleteCancelButton)
+
+            titleTextView.text = "Confirm Batch Delete"
+            messageTextView.text = "Are you sure you want to delete ${selectedIndices.size} selected posts? This cannot be undone."
+
+            confirmDeleteButton.text = "Delete All"
+            confirmDeleteButton.setOnClickListener {
+                confirmDialog.dismiss()
+                dialog.dismiss() // Close the selection dialog
+                
+                lifecycleScope.launch {
+                    // Proceed with deletion logic (adapted from original NssHomeFragment)
+                    val total = selectedIndices.size
+                    Toast.makeText(requireContext(), "Deleting $total posts...", Toast.LENGTH_SHORT).show()
+                    
+                    selectedIndices.forEach { index ->
+                        if (index < updates.size) {
+                             val update = updates[index]
+                             // Simplified delete logic as per original
+                             db.collection("nss_updates").document(update.id).delete()
+                             db.collection("updates").document(update.id).delete()
+                             
+                             // Try to clean up Cloudinary if possible (best effort)
+                             try {
+                                  update.getAllImages().forEach { url -> cloudinaryHelper.deleteImage(url) }
+                             } catch (e: Exception) {
+                                  Log.e(TAG, "Error cleaning up attachments", e)
+                             }
                         }
-                        
-                        Toast.makeText(requireContext(), "Deleting $total posts...", Toast.LENGTH_SHORT).show()
-                        // Delay reload slightly to allow deletions to propagate
-                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                            updateCache = null
-                            loadUpdates()
-                        }, 1000)
                     }
-                    .setNegativeButton("Cancel", null)
-                    .show()
+                    
+                    // Delay reload slightly to allow deletions to propagate
+                    kotlinx.coroutines.delay(1000)
+                    updateCache = null
+                    loadUpdates()
+                }
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+
+            confirmCancelButton.setOnClickListener {
+                confirmDialog.dismiss()
+            }
+
+            confirmDialog.show()
+        }
+
+        dialog.show()
     }
 
 
     private fun sendUpdateNotification(update: Update) {
-        Log.d(TAG, "Preparing to send update notification for update: ${update.id} with updateType: ${update.updateType}")
-
+        android.util.Log.d(TAG, "Preparing update notification for: ${update.id}")
         try {
-            val notificationHelper = NotificationHelper(requireContext())
-            val currentUserId = sessionManager.fetchRollNumber() ?: auth.currentUser?.uid ?: ""
-
-            // Create a descriptive message that includes update info
-            // Create a descriptive message that includes update info
-            val title = update.title ?: "New Update" // Safe default
-            val content = update.content ?: ""
-            val message = "$title: ${content.take(100)}${if (content.length > 100) "..." else ""}"
-
-            // If there's a document, mention it in the notification
-            val fullMessage = if (update.documentUrl != null) {
-                "$message [Contains document]"
-            } else {
-                message
+            val title = update.title ?: "New Update"
+            val contentChunk = update.content ?: ""
+            val message = "$title: ${contentChunk.take(100)}${if (contentChunk.length > 100) "..." else ""}"
+            val fullMessage = if (update.documentUrl != null || !update.documentUrls.isNullOrEmpty()) "$message [Contains document]" else message
+            
+            val targetType = when (update.updateType) {
+                1 -> "ttw"
+                2 -> "nss"
+                3 -> "all"
+                else -> "all"
             }
-
-            Log.d(TAG, "Update notification message: $fullMessage")
-
-            // Get targeted users based on updateType
-            val targetedUserIds = mutableListOf<String>()
-
-            when (update.updateType) {
-                2 -> {
-                    // NSS only updates - notify users with Teaching_wing = false
-                    // Get students from Student collection
-                    db.collection("Student")
-                        .whereEqualTo("Teaching_wing", false)
-                        .get()
-                        .addOnSuccessListener { studentSnapshot ->
-                            val studentIds = studentSnapshot.documents.mapNotNull { doc ->
-                                val rollNo = doc.id
-                                if (rollNo != currentUserId) rollNo else null // Exclude current user
-                            }
-                            targetedUserIds.addAll(studentIds)
-
-                            // Get NSS Admins with Teaching_wing = false
-                            db.collection("NSS_ADMINS")
-                                .whereEqualTo("Teaching_wing", false)
-                                .get()
-                                .addOnSuccessListener { adminSnapshot ->
-                                    val adminIds = adminSnapshot.documents.mapNotNull { doc ->
-                                        val rollNo = doc.getString("Roll_Number") ?: doc.id
-                                        if (rollNo != currentUserId) rollNo else null // Exclude current user
-                                    }
-                                    targetedUserIds.addAll(adminIds)
-
-                                    Log.d(TAG, "Found ${targetedUserIds.size} NSS users to notify about update ${update.id}")
-                                    sendNotificationToUsers(update, title, fullMessage, targetedUserIds, notificationHelper)
-                                }
-                                .addOnFailureListener { e ->
-                                    Log.e(TAG, "Error fetching NSS_ADMINS for notification: ${e.message}", e)
-                                }
-                        }
-                        .addOnFailureListener { e ->
-                            Log.e(TAG, "Error fetching Student collection for NSS notification: ${e.message}", e)
-                        }
-                }
-                3 -> {
-                    // Both interfaces - notify all users
-                    // Get all students
-                    db.collection("Student")
-                        .get()
-                        .addOnSuccessListener { studentSnapshot ->
-                            val studentIds = studentSnapshot.documents.mapNotNull { doc ->
-                                val rollNo = doc.id
-                                if (rollNo != currentUserId) rollNo else null // Exclude current user
-                            }
-                            targetedUserIds.addAll(studentIds)
-
-                            // Get all NSS Admins
-                            db.collection("NSS_ADMINS")
-                                .get()
-                                .addOnSuccessListener { adminSnapshot ->
-                                    val adminIds = adminSnapshot.documents.mapNotNull { doc ->
-                                        val rollNo = doc.getString("Roll_Number") ?: doc.id
-                                        if (rollNo != currentUserId) rollNo else null // Exclude current user
-                                    }
-                                    targetedUserIds.addAll(adminIds)
-
-                                    Log.d(TAG, "Found ${targetedUserIds.size} users (all) to notify about update ${update.id}")
-                                    sendNotificationToUsers(update, title, fullMessage, targetedUserIds, notificationHelper)
-                                }
-                                .addOnFailureListener { e ->
-                                    Log.e(TAG, "Error fetching NSS_ADMINS for all notification: ${e.message}", e)
-                                }
-                        }
-                        .addOnFailureListener { e ->
-                            Log.e(TAG, "Error fetching Student collection for all notification: ${e.message}", e)
-                        }
-                }
-                else -> {
-                    Log.w(TAG, "Unknown updateType: ${update.updateType}")
-                }
-            }
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Error creating update notification: ${e.message}", e)
-            Toast.makeText(
-                requireContext(),
-                "Failed to send notifications: ${e.localizedMessage}",
-                Toast.LENGTH_SHORT
-            ).show()
-        }
-    }
-
-    private fun sendNotificationToUsers(
-        update: Update,
-        title: String,
-        fullMessage: String,
-        targetedUserIds: List<String>,
-        notificationHelper: NotificationHelper
-    ) {
-        if (targetedUserIds.isNotEmpty()) {
-            CoroutineScope(Dispatchers.Main).launch {
-                try {
-                    Log.d(TAG, "Launching coroutine to send update notification to ${targetedUserIds.size} users")
-
-                    notificationHelper.sendUpdateNotification(
-                        updateId = update.id,
-                        updateTitle = title,
-                        updateMessage = fullMessage,
-                        senderRollNumber = update.authorId,
-                        senderName = update.authorName,
-                        allUserIds = targetedUserIds
-                    )
-
-                    Log.d(TAG, "Update notification successfully sent via NotificationHelper")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error in coroutine sending notification: ${e.message}", e)
-                }
-            }
-        } else {
-            Log.w(TAG, "No users found to notify for updateType: ${update.updateType}")
+            
+            val ndata = hashMapOf<String, Any>(
+                "title" to title,
+                "body" to fullMessage,
+                "targetRole" to "all",
+                "targetWing" to "all",
+                "targetType" to targetType,
+                "type" to "UPDATE_NOTIFICATION",
+                "creatorId" to (update.authorId ?: "Admin"),
+                "isRead" to false,
+                "timestamp" to com.google.firebase.Timestamp.now()
+            )
+            
+            com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("app_notifications").add(ndata)
+                .addOnSuccessListener { android.util.Log.d(TAG, "Successfully created app_notification") }
+                .addOnFailureListener { e -> android.util.Log.e(TAG, "Failed creating app_notification", e) }
+                
+        } catch (e: Exception) { 
+            android.util.Log.e(TAG, "Error: ${e.message}", e) 
         }
     }
 

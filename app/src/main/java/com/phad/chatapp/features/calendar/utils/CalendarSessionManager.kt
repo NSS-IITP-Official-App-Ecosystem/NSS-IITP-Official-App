@@ -42,6 +42,54 @@ class CalendarSessionManager(private val context: Context) {
             ""
         }
     }
+
+    /**
+     * Fetch user's roll number from the app's SessionManager
+     * Returns empty string if not found or error occurs
+     */
+    fun fetchRollNumber(): String {
+        return try {
+            // Use reflection to get the app's SessionManager class
+            val sessionManagerClass = Class.forName("com.phad.chatapp.utils.SessionManager")
+            
+            // Create an instance of SessionManager
+            val constructor = sessionManagerClass.getConstructor(Context::class.java)
+            val sessionManager = constructor.newInstance(context)
+            
+            // Call fetchUserId method which returns the roll number
+            val fetchUserIdMethod = sessionManagerClass.getMethod("fetchUserId")
+            val result = fetchUserIdMethod.invoke(sessionManager) as? String ?: ""
+            
+            Log.d(TAG, "Successfully fetched roll number: $result")
+            result
+        } catch (e: Exception) {
+            Log.e(TAG, "Error accessing app's SessionManager for roll number: ${e.message}")
+            e.printStackTrace()
+            ""
+        }
+    }
+    
+    /**
+     * Fetch user's name from the app's SessionManager
+     * Returns empty string if not found or error occurs
+     */
+    fun fetchUserName(): String {
+        return try {
+            val sessionManagerClass = Class.forName("com.phad.chatapp.utils.SessionManager")
+            val constructor = sessionManagerClass.getConstructor(Context::class.java)
+            val sessionManager = constructor.newInstance(context)
+            
+            val fetchUserNameMethod = sessionManagerClass.getMethod("fetchUserName")
+            val result = fetchUserNameMethod.invoke(sessionManager) as? String ?: ""
+            
+            Log.d(TAG, "Successfully fetched user name: $result")
+            result
+        } catch (e: Exception) {
+            Log.e(TAG, "Error accessing app's SessionManager for user name: ${e.message}")
+            e.printStackTrace()
+            ""
+        }
+    }
     
     /**
      * Set an override user type for testing purposes

@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.Composable
@@ -57,7 +58,7 @@ data class HomeUiState(
 fun HomeScreen(
     modifier: Modifier = Modifier,
     state: HomeUiState,
-    onChatbotClick: () -> Unit,
+    onNotificationClick: () -> Unit,
     onAddUpdateClick: () -> Unit,
     onUpdateClick: (Update) -> Unit,
     onEditPost: (Update) -> Unit = {},
@@ -156,6 +157,15 @@ fun HomeScreen(
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (state.isAdmin) {
+                            // Admin: Notification button
+                            IconButton(onClick = onNotificationClick) {
+                                Icon(
+                                    Icons.Filled.Notifications,
+                                    contentDescription = "Notifications",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(if (isSmallScreen) 20.dp else 24.dp)
+                                )
+                            }
                             // Admin: Plus button with menu
                             Box {
                                 var showMenu by remember { mutableStateOf(false) }
@@ -239,12 +249,12 @@ fun HomeScreen(
                                 }
                             }
                         }
-                    } else {
-                            // Non-admin: FAQ button
-                            IconButton(onClick = onChatbotClick) {
+                        } else {
+                            // Non-admin: Notifications button
+                            IconButton(onClick = onNotificationClick) {
                                 Icon(
-                                    painterResource(id = R.drawable.ic_faq),
-                                    contentDescription = "FAQs",
+                                    Icons.Filled.Notifications,
+                                    contentDescription = "Notifications",
                                     tint = Color.White,
                                     modifier = Modifier.size(if (isSmallScreen) 20.dp else 24.dp)
                                 )
@@ -313,10 +323,7 @@ fun HomeScreen(
                                 .height(36.dp)
                                 .clip(RoundedCornerShape(18.dp))
                                 .background(Color(0xFFFFF8E1))
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null
-                                ) {
+                                .clickable {
                                     // Toggle between tabs
                                     selectedTab = if (selectedTab == 0) 1 else 0
                                     coroutineScope.launch {

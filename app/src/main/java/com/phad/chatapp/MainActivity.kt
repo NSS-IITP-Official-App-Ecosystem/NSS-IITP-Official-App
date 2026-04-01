@@ -1,10 +1,11 @@
 package com.phad.chatapp
 
-import android.Manifest
 import android.content.Intent
 import com.phad.chatapp.activities.LoginActivity
-import android.content.pm.PackageManager
 import android.os.Build
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.app.ActivityCompat
 import android.os.Bundle
 import android.util.Log
 import android.view.Menu
@@ -14,7 +15,7 @@ import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
+
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -30,7 +31,7 @@ import com.google.firebase.firestore.FirebaseFirestoreException
 import com.phad.chatapp.utils.FirestoreSetup
 import com.phad.chatapp.utils.NetworkUtils
 import com.phad.chatapp.utils.SessionManager
-import com.phad.chatapp.utils.NotificationHelper
+
 import com.phad.chatapp.utils.MultiDatabaseHelper
 import com.phad.chatapp.fragments.HomeFragment
 import com.phad.chatapp.features.calendar.ui.CalendarFragment
@@ -38,12 +39,13 @@ import com.phad.chatapp.fragments.ProfileFragment
 
 import com.phad.chatapp.features.scheduling.SchedulingFragment
 import android.widget.ImageButton
+import com.phad.chatapp.activities.NotificationHistoryActivity
 
 class MainActivity : AppCompatActivity() {
     private val TAG = "MainActivity"
     private lateinit var sessionManager: SessionManager
     private lateinit var auth: FirebaseAuth
-    private lateinit var notificationHelper: NotificationHelper
+
     private lateinit var navController: NavController
 
     // User data
@@ -53,6 +55,7 @@ class MainActivity : AppCompatActivity() {
     
     // Request code for notification permission
     private val NOTIFICATION_PERMISSION_REQUEST_CODE = 100
+    private var notificationDialog: androidx.appcompat.app.AlertDialog? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         Log.d("MainActivity", "onCreate start")
@@ -60,18 +63,16 @@ class MainActivity : AppCompatActivity() {
         Log.d("MainActivity", "after super.onCreate")
 
         // Removed enable edge to edge display - handling insets manually
-        
         // Initialize Firebase Auth
         auth = FirebaseAuth.getInstance()
+        
+        // Request notification permission if needed for Android 13+
+        requestNotificationPermissionIfNeeded()
         
         // Initialize session manager
         sessionManager = SessionManager(this)
         
-        // Initialize notification helper
-        notificationHelper = NotificationHelper(this)
-        
-        // Request notification permission if needed
-        requestNotificationPermissionIfNeeded()
+
         
         // Set up window flags for proper status bar handling
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -102,16 +103,37 @@ class MainActivity : AppCompatActivity() {
         loadUserData()
         Log.d("MainActivity", "after loadUserData")
 
-        // Start notification listener for the current user
-        val currentUserId = sessionManager.fetchUserId()
-        if (currentUserId.isNotEmpty()) {
-            notificationHelper.startListeningForNotifications(currentUserId)
-        }
-        Log.d("MainActivity", "after notificationHelper.startListeningForNotifications")
+
 
         // Set up custom navigation buttons
         setupCustomNavigation()
         Log.d("MainActivity", "after setupCustomNavigation")
+
+        // If launched from a push notification tap, open notification history
+        val shouldOpenNotifications = intent.getBooleanExtra("open_notifications", false) || 
+            intent.getStringExtra("type") == "LEAVE_NOTIFICATION" || 
+            intent.extras?.containsKey("relatedId") == true
+            
+        if (shouldOpenNotifications) {
+            val notifIntent = Intent(this, NotificationHistoryActivity::class.java).apply {
+                intent.extras?.let { putExtras(it) }
+            }
+            startActivity(notifIntent)
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val shouldOpenNotifications = intent.getBooleanExtra("open_notifications", false) || 
+            intent.getStringExtra("type") == "LEAVE_NOTIFICATION" || 
+            intent.extras?.containsKey("relatedId") == true
+            
+        if (shouldOpenNotifications) {
+            val notifIntent = Intent(this, NotificationHistoryActivity::class.java).apply {
+                intent.extras?.let { putExtras(it) }
+            }
+            startActivity(notifIntent)
+        }
     }
     
     override fun onResume() {
@@ -119,28 +141,13 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         Log.d("MainActivity", "after super.onResume")
 
-        // Restart notification listener when returning to the app
-        val currentUserId = sessionManager.fetchUserId()
-        if (currentUserId.isNotEmpty()) {
-            notificationHelper.startListeningForNotifications(currentUserId)
-        }
+        // Removed notification helper since we use Cloud Functions
+        
+        checkAndEnforceNotificationPermission()
         
         Log.d("MainActivity", "onResume end")
     }
     
-    override fun onPause() {
-        super.onPause()
-        
-        // Stop notification listener when app is in background
-        notificationHelper.stopListeningForNotifications()
-    }
-    
-    override fun onDestroy() {
-        super.onDestroy()
-        
-        // Ensure notification listener is stopped to prevent memory leaks
-        notificationHelper.stopListeningForNotifications()
-    }
 
     /**
      * Request notification permission for Android 13+
@@ -174,10 +181,54 @@ class MainActivity : AppCompatActivity() {
         if (requestCode == NOTIFICATION_PERMISSION_REQUEST_CODE) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 Log.d(TAG, "Notification permission granted")
+                checkAndEnforceNotificationPermission()
             } else {
                 Log.w(TAG, "Notification permission denied - notifications won't work")
+                checkAndEnforceNotificationPermission()
             }
         }
+    }
+    
+    private fun checkAndEnforceNotificationPermission() {
+        if (!com.phad.chatapp.utils.ChatMessagingService.areNotificationsEnabled(this)) {
+            if (notificationDialog == null) {
+                notificationDialog = androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle("Notifications Required")
+                    .setMessage("Push notifications are mandatory for this app. Please enable them in your device settings to continue.")
+                    .setCancelable(false)
+                    .setPositiveButton("Open Settings") { _, _ ->
+                        openNotificationSettings()
+                    }
+                    .setNegativeButton("Exit") { _, _ ->
+                        finishAffinity()
+                    }
+                    .create()
+                notificationDialog?.show()
+            } else if (notificationDialog?.isShowing == false) {
+                notificationDialog?.show()
+            }
+        } else {
+            notificationDialog?.dismiss()
+            notificationDialog = null
+        }
+    }
+
+    private fun openNotificationSettings() {
+        val intent = Intent().apply {
+            when {
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.O -> {
+                    action = android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS
+                    putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
+                }
+                else -> {
+                    action = android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+                    addCategory(Intent.CATEGORY_DEFAULT)
+                    data = android.net.Uri.parse("package:$packageName")
+                }
+            }
+            // addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) // Not strictly needed when calling from Activity
+        }
+        startActivity(intent)
     }
     
     private fun redirectToLogin() {
@@ -324,22 +375,34 @@ class MainActivity : AppCompatActivity() {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }
 
+    private var currentWindowInsets: WindowInsetsCompat? = null
+
     private fun setupWindowInsets() {
         val mainLayout = findViewById<View>(R.id.main)
-        mainLayout?.let {
-            ViewCompat.setOnApplyWindowInsetsListener(it) { v, insets ->
-                val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-                v.updatePadding(
-                    left = systemBars.left,
-                    top = systemBars.top,
-                    right = systemBars.right,
-                    bottom = systemBars.bottom
-                )
+        mainLayout?.let { layout ->
+            ViewCompat.setOnApplyWindowInsetsListener(layout) { v, insets ->
+                currentWindowInsets = insets
+                applyPadding(v, insets, navController.currentDestination?.id)
                 insets
             }
         }
+        
+        navController.addOnDestinationChangedListener { _, destination, _ ->
+            mainLayout?.let { layout ->
+                currentWindowInsets?.let { insets ->
+                    applyPadding(layout, insets, destination.id)
+                }
+            }
+        }
+    }
 
-        // Removed obsolete toolbar content handling.
+    private fun applyPadding(v: View, insets: WindowInsetsCompat, destinationId: Int?) {
+        val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+        if (destinationId == R.id.calendarFragment) {
+            v.setPadding(0, 0, 0, systemBars.bottom)
+        } else {
+            v.setPadding(0, systemBars.top, 0, systemBars.bottom)
+        }
     }
 
     private fun loadUserData() {
@@ -393,6 +456,9 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+        
+        // Ensure FCM wing/role topic subscriptions are always up to date
+        (application as? ChatApplication)?.subscribeToUserTopics(sessionManager)
         
         // Firebase is already initialized in ChatApplication
         // Now just check if sample data needs to be set up

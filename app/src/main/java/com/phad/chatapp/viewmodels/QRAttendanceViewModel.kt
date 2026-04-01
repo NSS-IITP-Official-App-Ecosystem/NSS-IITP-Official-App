@@ -41,6 +41,10 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.TimeoutCancellationException
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.workDataOf
+import java.util.concurrent.TimeUnit
 
 /**
  * ViewModel for managing QR-based attendance system
@@ -244,6 +248,71 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                 result.fold(
                     onSuccess = { eventId ->
                         Log.d(TAG, "Event created successfully with ID: $eventId")
+                        
+                        // Send Notification for the event
+                        try {
+                            val eventType = if (isMandatory) "Mandatory Event" else "Event"
+                            val title = "$eventType: $name"
+                            val message = "A new ${if (isMandatory) "mandatory " else ""}event '$name' has been scheduled on $dateString from $timeRangeString. Location: $location"
+                            
+                            // An event is "open" (targets all) if wings list covers all wings by SIZE >= 6 or if it's a Design and Curation Wing event
+                            val isOpenEvent = wings.isEmpty() || wings.size >= com.phad.chatapp.models.AttendanceEvent.ALL_WINGS.size || wings.contains("Design and Curation Wing")
+                            val targetTopics = if (isOpenEvent) {
+                                listOf("all")
+                            } else {
+                                wings.map { "wing_" + it.lowercase().replace(" ", "_").replace("&", "and") }
+                            }
+                            
+                            val notificationData = hashMapOf<String, Any>(
+                                "title" to title,
+                                "body" to message,
+                                "targetRole" to "all",
+                                "targetWing" to "all",
+                                "targetTopics" to targetTopics,
+                                "type" to "EVENT_NOTIFICATION",
+                                "creatorId" to _adminUiState.value.adminId,
+                                "isRead" to false,
+                                "timestamp" to com.google.firebase.Timestamp.now()
+                            )
+                            com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("app_notifications").add(notificationData)
+                                .addOnSuccessListener { Log.d(TAG, "Successfully created app_notification for event broadcast") }
+                                .addOnFailureListener { e -> Log.e(TAG, "Failed to create app_notification for event", e) }
+
+                            // Trigger Vercel FCM Push
+                            targetTopics.forEach { topic ->
+                                viewModelScope.launch {
+                                    com.phad.chatapp.utils.FcmSender.sendToTopic(
+                                        topic = topic,
+                                        title = title,
+                                        body = message
+                                    )
+                                }
+                            }
+                            // Schedule 1-hour reminder for mandatory events
+                            if (isMandatory) {
+                                val delayMs = openingTime.time - System.currentTimeMillis() - (60 * 60 * 1000L)
+                                if (delayMs > 0) {
+                                    val reminderTitle = "⏰ Mandatory Event Starting Soon: $name"
+                                    val reminderBody = "The mandatory event '$name' starts in 1 hour at $timeRangeString. Location: $location"
+                                    val reminderWork = OneTimeWorkRequestBuilder<com.phad.chatapp.workers.EventReminderWorker>()
+                                        .setInitialDelay(delayMs, TimeUnit.MILLISECONDS)
+                                        .setInputData(workDataOf(
+                                            "title" to reminderTitle,
+                                            "body" to reminderBody,
+                                            "topics" to targetTopics.joinToString(",")
+                                        ))
+                                        .addTag("event_reminder_$eventId")
+                                        .build()
+                                    WorkManager.getInstance(application).enqueue(reminderWork)
+                                    Log.d(TAG, "Scheduled 1-hr reminder for mandatory event '$name' in ${delayMs / 60000} min")
+                                } else {
+                                    Log.d(TAG, "Skipping reminder: event starts in less than 1 hour")
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error creating event notification or reminder", e)
+                        }
+
                         _adminUiState.value = _adminUiState.value.copy(
                             isCreatingEvent = false,
                             showCreateEventDialog = false,

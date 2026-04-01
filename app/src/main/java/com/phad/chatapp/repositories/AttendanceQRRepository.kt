@@ -17,6 +17,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.launch
 
 /**
  * Repository for managing QR-based attendance in Firebase Firestore
@@ -1484,6 +1485,31 @@ class AttendanceQRRepository {
                                 2 -> userUpdates["sem2Hours"] = FieldValue.increment(-negativeHours as Double)
                             }
                             batch.update(userRef, userUpdates)
+                            
+                            // Send Absentee Notification
+                            val notificationRef = firestore.collection("app_notifications").document()
+                            val eventName = event.getEventName()
+                            val notificationData = mapOf(
+                                "title" to "Mandatory Event Absence",
+                                "body" to "You have had $negativeHours hours deducted due to your absence from '$eventName'.",
+                                "targetRole" to "all",
+                                "targetWing" to "all",
+                                "targetTopics" to listOf("user_$roll"),
+                                "type" to "PENALTY_NOTIFICATION",
+                                "creatorId" to "System",
+                                "isRead" to false,
+                                "timestamp" to FieldValue.serverTimestamp()
+                            )
+                            batch.set(notificationRef, notificationData)
+                            
+                            // Trigger Vercel FCM Push
+                            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                                com.phad.chatapp.utils.FcmSender.sendToUser(
+                                    userId = roll,
+                                    title = "Mandatory Event Absence",
+                                    body = "You have had $negativeHours hours deducted due to your absence from '$eventName'."
+                                )
+                            }
                         }
                         batch.commit().await()
                         Log.d(TAG, "Penalty batch ${idx + 1} committed with ${chunk.size} users")

@@ -145,12 +145,24 @@ class SplashActivity : AppCompatActivity() {
 
 
 	private fun navigateToNextScreen() {
-		val isLoggedIn = /* TODO: Replace with actual login check */ false
-		if (isLoggedIn) {
-			startActivity(Intent(this, NssMainActivity::class.java))
+		val sessionManager = com.phad.chatapp.utils.SessionManager(this)
+		val isLoggedIn = sessionManager.isLoggedIn()
+		
+		val nextIntent = if (isLoggedIn) {
+		    val lastChoice = sessionManager.getLastInterfaceChoice()
+		    if (lastChoice == "TEACHING_WING") {
+		        Intent(this, MainActivity::class.java)
+		    } else {
+			    Intent(this, NssMainActivity::class.java)
+			}
 		} else {
-			startActivity(Intent(this, LoginActivity::class.java))
+			Intent(this, LoginActivity::class.java)
 		}
+		
+		// Forward any extras (e.g. from FCM background push data) so they aren't lost
+		intent.extras?.let { nextIntent.putExtras(it) }
+		
+		startActivity(nextIntent)
 		finish()
 	}
 

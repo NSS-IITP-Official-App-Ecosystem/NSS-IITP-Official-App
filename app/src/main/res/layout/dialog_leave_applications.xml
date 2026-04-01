@@ -5,6 +5,7 @@
     android:orientation="vertical"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:background="@color/cal_surface"
     android:padding="16dp">
 
     <TextView
@@ -12,6 +13,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="No leave applications for this date"
+        android:textColor="@color/cal_text_secondary"
         android:textAlignment="center"
         android:padding="16dp"
         android:visibility="gone"/>

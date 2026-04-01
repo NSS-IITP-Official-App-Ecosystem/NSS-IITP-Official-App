@@ -48,9 +48,8 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import androidx.compose.material3.*
-import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.window.Dialog
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -405,19 +404,24 @@ fun QRAttendanceAdminScreen(
         }
     ) { paddingValues ->
         val pullRefreshState = rememberPullToRefreshState()
-        
-        if (pullRefreshState.isRefreshing) {
-            LaunchedEffect(true) {
+        val refreshScope = rememberCoroutineScope()
+        var isRefreshing by remember { mutableStateOf(false) }
+
+        val onRefresh: () -> Unit = {
+            isRefreshing = true
+            refreshScope.launch {
                 onLoadEvents()
-                pullRefreshState.endRefresh()
+                isRefreshing = false
             }
         }
 
-        Box(
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = onRefresh,
+            state = pullRefreshState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(bottom = paddingValues.calculateBottomPadding())
-                .nestedScroll(pullRefreshState.nestedScrollConnection)
         ) {
             Column(
                 modifier = Modifier
@@ -475,13 +479,6 @@ fun QRAttendanceAdminScreen(
                 }
             }
             
-            // Pull Refresh Indicator (only when not in active session)
-            if (!uiState.isSessionActive) {
-                PullToRefreshContainer(
-                    state = pullRefreshState,
-                    modifier = Modifier.align(Alignment.TopCenter)
-                )
-            }
         }
     }
 
@@ -1346,6 +1343,40 @@ fun EditEventDialog(
                         "Environmental Wing",
                         "Design and Curation Wing"
                     )
+                    
+                    // Select All Checkbox
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = !isUpdating) {
+                                if (selectedWings.size == wings.size) {
+                                    selectedWings = emptyList()
+                                } else {
+                                    selectedWings = wings
+                                }
+                            }
+                            .height(30.dp)
+                    ) {
+                        Checkbox(
+                            checked = selectedWings.size == wings.size,
+                            onCheckedChange = { isChecked ->
+                                if (isChecked) {
+                                    selectedWings = wings
+                                } else {
+                                    selectedWings = emptyList()
+                                }
+                            },
+                            enabled = !isUpdating
+                        )
+                        Text(
+                            text = "Select All",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
+                    }
+
                     wings.forEach { wing ->
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -1604,9 +1635,7 @@ fun EventCard(
                 onLongClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     onLongPress?.invoke(event)
-                },
-                indication = null, // No visual indication for long press
-                interactionSource = remember { MutableInteractionSource() }
+                }
             ),
         colors = CardDefaults.cardColors(containerColor = if (event.isMandatory) Color(0xFFFFFDE7) else Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
@@ -2675,6 +2704,40 @@ fun CreateEventDialog(
                             "Environmental Wing",
                             "Design and Curation Wing"
                         )
+                        
+                        // Select All Checkbox
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(enabled = !isCreating) {
+                                    if (selectedWings.size == wings.size) {
+                                        selectedWings = emptyList()
+                                    } else {
+                                        selectedWings = wings
+                                    }
+                                }
+                                .height(30.dp)
+                        ) {
+                            Checkbox(
+                                checked = selectedWings.size == wings.size,
+                                onCheckedChange = { isChecked ->
+                                    if (isChecked) {
+                                        selectedWings = wings
+                                    } else {
+                                        selectedWings = emptyList()
+                                    }
+                                },
+                                enabled = !isCreating
+                            )
+                            Text(
+                                text = "Select All",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(start = 8.dp)
+                            )
+                        }
+
                         wings.forEach { wing ->
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,

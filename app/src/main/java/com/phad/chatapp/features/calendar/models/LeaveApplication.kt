@@ -20,5 +20,6 @@ data class LeaveApplication(
     val school: String = "",
     val status: EventStatus = EventStatus.PENDING,
     val timestamp: Long = 0,
-    val substitutedByRollNumber: String = ""
+    val substitutedByRollNumber: String = "",
+    val substitutedByName: String = ""
 ) : Parcelable 

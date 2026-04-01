@@ -38,10 +38,7 @@ fun UpdateOverlay(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black.copy(alpha = 0.5f))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ) { /* Consume clicks */ },
+            .clickable { /* Consume clicks */ },
         contentAlignment = Alignment.Center
     ) {
         UpdateDialogCard(updateStatus, onDismissRequest)

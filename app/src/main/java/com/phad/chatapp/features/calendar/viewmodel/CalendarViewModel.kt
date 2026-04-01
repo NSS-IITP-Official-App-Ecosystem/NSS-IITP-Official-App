@@ -14,6 +14,7 @@ import com.phad.chatapp.features.calendar.models.UserRole
 import com.phad.chatapp.features.calendar.repository.CalendarRepository
 import com.phad.chatapp.features.calendar.ui.CalendarTabFragment
 import kotlinx.coroutines.launch
+import com.phad.chatapp.features.scheduling.models.SubjectAssignmentDetails
 import java.util.Date
 import java.util.Calendar
 
@@ -32,6 +33,10 @@ class CalendarViewModel(
     // Leave applications
     val leaveApplications: LiveData<List<LeaveApplication>> = repository.leaveApplications
     
+    // User assignments from generated schedules
+    private val _userAssignments = MutableLiveData<List<SubjectAssignmentDetails>>(emptyList())
+    val userAssignments: LiveData<List<SubjectAssignmentDetails>> = _userAssignments
+    
     // User role state
     private val _currentUserRole = MutableLiveData<UserRole>()
     val currentUserRole: LiveData<UserRole> = _currentUserRole
@@ -40,31 +45,12 @@ class CalendarViewModel(
     private val _selectedDate = MutableLiveData<Date>()
     val selectedDate: LiveData<Date> = _selectedDate
     
-    // Date range selection
-    private val _isRangeSelectionMode = MutableLiveData<Boolean>()
-    val isRangeSelectionMode: LiveData<Boolean> = _isRangeSelectionMode
-    
-    private val _startDate = MutableLiveData<Date?>()
-    val startDate: LiveData<Date?> = _startDate
-    
-    private val _endDate = MutableLiveData<Date?>()
-    val endDate: LiveData<Date?> = _endDate
-    
-    private val _dateRange = MutableLiveData<List<Date>>()
-    val dateRange: LiveData<List<Date>> = _dateRange
-    
     init {
         // Default role is USER
         _currentUserRole.value = UserRole.USER
         
         // Initialize with current date
         _selectedDate.value = Date()
-        
-        // Initialize range selection mode as disabled
-        _isRangeSelectionMode.value = false
-        _startDate.value = null
-        _endDate.value = null
-        _dateRange.value = emptyList()
         
         // Set up observer for repository events
         observeRepositoryEvents()
@@ -101,104 +87,19 @@ class CalendarViewModel(
         // Log the exact date being set
         android.util.Log.d("CalendarViewModel", "Setting EXACT date: ${date.toString()}")
         
-        if (_isRangeSelectionMode.value == true) {
-            handleRangeSelection(date)
-        } else {
-            // Create a clean date with only year, month, day parts to avoid any time issues
-            val cal = Calendar.getInstance().apply { 
-                time = date
-                set(Calendar.HOUR_OF_DAY, 0)
-                set(Calendar.MINUTE, 0)
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
-            }
-            
-            // Format the date for logging
-            val dateFormat = java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault())
-            android.util.Log.d("CalendarViewModel", "EXACT date selected: ${dateFormat.format(cal.time)}")
-            
-            // Set the exact date in the LiveData
-            _selectedDate.value = cal.time
-        }
-    }
-    
-    // Toggle range selection mode
-    fun toggleRangeSelectionMode() {
-        val currentMode = _isRangeSelectionMode.value ?: false
-        _isRangeSelectionMode.value = !currentMode
-        
-        // Reset range if disabling
-        if (!currentMode == false) {
-            clearDateRange()
-        }
-    }
-    
-    // Handle range selection logic
-    private fun handleRangeSelection(date: Date) {
-        when {
-            _startDate.value == null -> {
-                // First date in range
-                _startDate.value = date
-                _endDate.value = null
-                _selectedDate.value = date
-                _dateRange.value = listOf(date)
-            }
-            _endDate.value == null -> {
-                // Second date in range
-                val start = _startDate.value!!
-                if (date.before(start)) {
-                    _endDate.value = start
-                    _startDate.value = date
-                } else {
-                    _endDate.value = date
-                }
-                // Generate date range
-                updateDateRange()
-                _selectedDate.value = date
-            }
-            else -> {
-                // Reset and start new range
-                _startDate.value = date
-                _endDate.value = null
-                _selectedDate.value = date
-                _dateRange.value = listOf(date)
-            }
-        }
-    }
-    
-    // Generate all dates in the range
-    private fun updateDateRange() {
-        val start = _startDate.value ?: return
-        val end = _endDate.value ?: return
-        
-        val range = mutableListOf<Date>()
-        val calendar = java.util.Calendar.getInstance()
-        calendar.time = start
-        
-        // Add all dates from start to end (inclusive)
-        while (!calendar.time.after(end)) {
-            range.add(calendar.time)
-            calendar.add(java.util.Calendar.DAY_OF_MONTH, 1)
+        // Create a clean date with only year, month, day parts to avoid any time issues
+        val cal = Calendar.getInstance().apply {
+            time = date
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
         }
         
-        _dateRange.value = range
-    }
-    
-    // Clear date range
-    fun clearDateRange() {
-        _startDate.value = null
-        _endDate.value = null
-        _dateRange.value = emptyList()
-    }
-    
-    // Get events for the selected date range
-    fun getEventsForDateRange(): List<CalendarEvent> {
-        val range = _dateRange.value ?: return emptyList()
-        return _filteredEvents.value?.filter { event ->
-            range.any { date ->
-                isSameDay(date, event.date)
-            }
-        } ?: emptyList()
+        val dateFormat = java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault())
+        android.util.Log.d("CalendarViewModel", "EXACT date selected: ${dateFormat.format(cal.time)}")
+        
+        _selectedDate.value = cal.time
     }
     
     // Helper to compare dates ignoring time
@@ -279,26 +180,53 @@ class CalendarViewModel(
         
         // Log all leave applications for this date
         Log.d("CalendarViewModel", "Found ${leaves.size} leave applications for date")
-        val approvedCount = leaves.count { it.status == EventStatus.APPROVED }
+        val availableCount = leaves.count { it.status == EventStatus.APPROVED }
         val pendingCount = leaves.count { it.status == EventStatus.PENDING }
-        Log.d("CalendarViewModel", "Leave status breakdown - Approved: $approvedCount, Pending: $pendingCount")
+        Log.d("CalendarViewModel", "Leave status breakdown - Available: $availableCount, Pending: $pendingCount")
         
         return leaves
     }
     
-    // Apply for leave (Updated to include roll number)
-    fun applyForLeave(
-        date: Date,
+    suspend fun applyForLeave(
         userId: String,
         userName: String,
+        rollNumber: String,
+        date: Date,
         slot: String,
         subject: String,
-        school: String,
-        rollNumber: String
-    ) {
-        viewModelScope.launch {
-            repository.applyForLeave(userId, userName, rollNumber, date, slot, subject, school)
+        school: String
+    ): String? {
+        val leaveId = repository.applyForLeave(userId, userName, rollNumber, date, slot, subject, school)
+        
+        if (leaveId != null) {
+            try {
+                // Send notification to TTW Members
+                val notificationData = mapOf(
+                    "relatedId" to leaveId,
+                    "title" to "New Leave Application",
+                    "body" to "$userName ($rollNumber) applied for leave on ${java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault()).format(date)} for $slot.",
+                    "targetRole" to "all",
+                    "targetWing" to "all",
+                    "targetTopics" to listOf("ttw", "ttw_user", "ttw_Admin", "ttw_admin"),
+                    "type" to "LEAVE_NOTIFICATION",
+                    "creatorId" to rollNumber,
+                    "isRead" to false,
+                    "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                )
+                com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("app_notifications").add(notificationData)
+                
+                // Trigger Vercel FCM Push
+                com.phad.chatapp.utils.FcmSender.sendToTopic(
+                    topic = "ttw", 
+                    title = "New Leave Application", 
+                    body = "$userName ($rollNumber) applied for leave on ${java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault()).format(date)} for $slot.",
+                    data = mapOf("relatedId" to leaveId, "type" to "LEAVE_NOTIFICATION")
+                )
+            } catch (e: Exception) {
+                Log.e("CalendarViewModel", "Error sending leave notification: ${e.message}")
+            }
         }
+        return leaveId
     }
     
     // Update leave application status
@@ -306,6 +234,35 @@ class CalendarViewModel(
         viewModelScope.launch {
             try {
                 repository.updateLeaveStatus(leaveId, status)
+                
+                try {
+                    val leave = leaveApplications.value?.find { it.id == leaveId }
+                    if (leave != null) {
+                        val statusStr = if (status == EventStatus.APPROVED) "Approved" else "Rejected/Pending"
+                        val notificationData = mapOf(
+                            "title" to "Leave Status Updated",
+                            "body" to "Your leave application for ${leave.date} has been marked as $statusStr",
+                            "targetRole" to "all",
+                            "targetWing" to "all",
+                            "targetTopics" to listOf("user_${leave.rollNumber}"),
+                            "type" to "LEAVE_NOTIFICATION",
+                            "creatorId" to "Admin",
+                            "isRead" to false,
+                            "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                        )
+                        com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("app_notifications").add(notificationData)
+                        
+                        // Trigger Vercel FCM Push
+                        com.phad.chatapp.utils.FcmSender.sendToUser(
+                            userId = leave.rollNumber,
+                            title = "Leave Status Updated",
+                            body = "Your leave application for ${leave.date} has been marked as $statusStr",
+                            data = mapOf("relatedId" to leaveId, "type" to "LEAVE_NOTIFICATION")
+                        )
+                    }
+                } catch (e: Exception) {
+                    Log.e("CalendarViewModel", "Error sending status update notification: ${e.message}")
+                }
             } catch (e: Exception) {
                 Log.e("CalendarViewModel", "Error updating leave status: ${e.message}")
             }
@@ -319,10 +276,13 @@ class CalendarViewModel(
         }
     }
     
-    // Accept a class with roll number (New method)
-    fun acceptClass(eventId: String, rollNumber: String) {
-        viewModelScope.launch {
-            repository.acceptClass(eventId, rollNumber)
+    // Accept a class with roll number and name (Updated method)
+    suspend fun acceptClass(eventId: String, rollNumber: String, substituteName: String): Boolean {
+        return try {
+            repository.acceptClass(eventId, rollNumber, substituteName)
+        } catch (e: Exception) {
+            Log.e("CalendarViewModel", "Error accepting class: ${e.message}", e)
+            false
         }
     }
     
@@ -342,14 +302,61 @@ class CalendarViewModel(
         }
     }
     
-    // Mark a leave as substituted by a student with the given roll number
-    suspend fun markLeaveAsSubstituted(leaveId: String, rollNumber: String) {
-        try {
-            repository.markLeaveAsSubstituted(leaveId, rollNumber)
-            Log.d("CalendarViewModel", "Leave $leaveId marked as substituted by roll number $rollNumber")
+    // Mark a leave as substituted by a student with the given roll number and name
+    suspend fun markLeaveAsSubstituted(leaveId: String, rollNumber: String, substituteName: String): Boolean {
+        return try {
+            val success = repository.markLeaveAsSubstituted(leaveId, rollNumber, substituteName)
+            if (success) {
+                Log.d("CalendarViewModel", "Leave $leaveId marked as substituted by $substituteName ($rollNumber)")
+                
+                try {
+                    val leave = leaveApplications.value?.find { it.id == leaveId }
+                    if (leave != null) {
+                        val notificationData = mapOf(
+                            "title" to "Leave Substitution Accepted",
+                            "body" to "$substituteName ($rollNumber) has accepted to substitute your class on ${leave.date}.",
+                            "targetRole" to "all",
+                            "targetWing" to "all",
+                            "targetTopics" to listOf("user_${leave.rollNumber}"),
+                            "type" to "LEAVE_NOTIFICATION",
+                            "creatorId" to rollNumber,
+                            "isRead" to false,
+                            "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                        )
+                        com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("app_notifications").add(notificationData)
+                        
+                        // Trigger Vercel FCM Push
+                        com.phad.chatapp.utils.FcmSender.sendToUser(
+                            userId = leave.rollNumber,
+                            title = "Leave Substitution Accepted",
+                            body = "$substituteName ($rollNumber) has accepted to substitute your class on ${leave.date}.",
+                            data = mapOf("relatedId" to leaveId, "type" to "LEAVE_NOTIFICATION")
+                        )
+                    }
+                } catch (e: Exception) {
+                    Log.e("CalendarViewModel", "Error sending substitution notification: ${e.message}")
+                }
+            } else {
+                Log.e("CalendarViewModel", "Failed to mark leave as substituted")
+            }
+            success
         } catch (e: Exception) {
             Log.e("CalendarViewModel", "Error marking leave as substituted: ${e.message}", e)
-            throw e
+            false
+        }
+    }
+    
+    // Withdraw a previously accepted substitution
+    suspend fun withdrawSubstitution(leaveId: String): Boolean {
+        return try {
+            val success = repository.withdrawSubstitution(leaveId)
+            if (success) {
+                Log.d("CalendarViewModel", "Successfully withdrew substitution for leave $leaveId")
+            }
+            success
+        } catch (e: Exception) {
+            Log.e("CalendarViewModel", "Error withdrawing substitution: ${e.message}", e)
+            false
         }
     }
     
@@ -362,6 +369,19 @@ class CalendarViewModel(
         } catch (e: Exception) {
             Log.e("CalendarViewModel", "Error deleting leave application: ${e.message}", e)
             false
+        }
+    }
+    
+    // Fetch user teaching assignments
+    fun fetchUserAssignments(rollNumber: String) {
+        viewModelScope.launch {
+            try {
+                val assignments = repository.getUserAssignments(rollNumber)
+                _userAssignments.value = assignments
+                Log.d("CalendarViewModel", "Fetched ${assignments.size} assignments for roll number $rollNumber")
+            } catch (e: Exception) {
+                Log.e("CalendarViewModel", "Error fetching user assignments: ${e.message}", e)
+            }
         }
     }
     

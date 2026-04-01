@@ -6,7 +6,7 @@ import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.phad.chatapp.ui.profile.ProfileUiState
-import com.phad.chatapp.services.TokenRefreshService
+
 import kotlinx.coroutines.*
 import kotlinx.coroutines.tasks.await
 
@@ -48,7 +48,8 @@ class SessionManager(context: Context) {
         const val KEY_TEACHING_WING = "teachingWing" // Add this line
         const val KEY_BYPASS_FIREBASE_AUTH = "bypassFirebaseAuth"
         const val KEY_ATTENDANCE_STATS = "attendanceStats"
-        const val KEY_LAST_INTERFACE = "lastInterfaceChoice" // Add this line
+        const val KEY_LAST_INTERFACE = "lastInterfaceChoice"
+        const val KEY_WINGS = "wings"
     }
     
     /**
@@ -74,8 +75,6 @@ class SessionManager(context: Context) {
         val firebaseUser = FirebaseAuth.getInstance().currentUser
         if (firebaseUser != null) {
             Log.d(TAG, "Firebase user is authenticated: ${firebaseUser.email}")
-            // Start token refresh service for automatic token renewal
-            startTokenRefreshService()
         } else {
             Log.w(TAG, "Firebase user is NOT authenticated!")
         }
@@ -231,9 +230,16 @@ class SessionManager(context: Context) {
     fun logoutUser() {
         Log.d(TAG, "Logging out user")
         
-        // Stop token refresh service
-        stopTokenRefreshService()
-        
+        // Purge the FCM Subscriptions so the device stops receiving the old user's pushes
+        Thread {
+            try {
+                com.google.firebase.messaging.FirebaseMessaging.getInstance().deleteToken()
+                Log.d(TAG, "Successfully purged FCM token on logout")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error purging FCM token", e)
+            }
+        }.start()
+
         // Sign out from Firebase Auth
         FirebaseAuth.getInstance().signOut()
         
@@ -242,29 +248,7 @@ class SessionManager(context: Context) {
         editor.apply()
     }
     
-    /**
-     * Start token refresh service for automatic Firebase token renewal
-     */
-    fun startTokenRefreshService() {
-        try {
-            Log.d(TAG, "Starting token refresh service")
-            TokenRefreshService.startService(context)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to start token refresh service", e)
-        }
-    }
-    
-    /**
-     * Stop token refresh service
-     */
-    fun stopTokenRefreshService() {
-        try {
-            Log.d(TAG, "Stopping token refresh service")
-            TokenRefreshService.stopService(context)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to stop token refresh service", e)
-        }
-    }
+
     
     /**
      * Manually refresh Firebase token (for immediate refresh if needed)
@@ -334,8 +318,9 @@ class SessionManager(context: Context) {
         editor.putString(KEY_TOPIC_2, profile.topic2)
         editor.putString(KEY_TOPIC_3, profile.topic3)
         editor.putBoolean(KEY_IS_STUDENT, profile.isStudent)
-        editor.putString(KEY_USER_TYPE, profile.userType) // Add this line
-        editor.putBoolean(KEY_TEACHING_WING, profile.Teaching_wing) // Add this line
+        editor.putString(KEY_USER_TYPE, profile.userType)
+        editor.putBoolean(KEY_TEACHING_WING, profile.Teaching_wing)
+        editor.putStringSet(KEY_WINGS, profile.wings.toSet())
         editor.apply()
     }
     
@@ -356,8 +341,9 @@ class SessionManager(context: Context) {
             topic2 = pref.getString(KEY_TOPIC_2, "...") ?: "...",
             topic3 = pref.getString(KEY_TOPIC_3, "...") ?: "...",
             isStudent = pref.getBoolean(KEY_IS_STUDENT, true),
-            userType = pref.getString(KEY_USER_TYPE, "Student") ?: "Student", // Add this line
-            Teaching_wing = pref.getBoolean(KEY_TEACHING_WING, false) // Add this line
+            userType = pref.getString(KEY_USER_TYPE, "Student") ?: "Student",
+            Teaching_wing = pref.getBoolean(KEY_TEACHING_WING, false),
+            wings = pref.getStringSet(KEY_WINGS, emptySet())?.toList() ?: emptyList()
         )
     }
 

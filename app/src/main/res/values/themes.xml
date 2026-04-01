@@ -43,4 +43,33 @@
         <item name="android:windowFullscreen">true</item>
     </style>
 
+    <style name="TransparentDialog" parent="Theme.MaterialComponents.Light.Dialog">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
+        <item name="android:backgroundDimEnabled">true</item>
+    </style>
+    <!-- Calendar dark dialog theme (TTW Schedule theme) -->
+    <style name="CalendarDarkDialog" parent="ThemeOverlay.MaterialComponents.Dialog.Alert">
+        <item name="colorPrimary">@color/cal_accent</item>
+        <item name="colorOnSurface">@color/cal_text_primary</item>
+        <item name="android:background">@color/cal_surface</item>
+        <item name="buttonBarPositiveButtonStyle">@style/CalendarDarkDialog.Button</item>
+        <item name="buttonBarNegativeButtonStyle">@style/CalendarDarkDialog.Button.Negative</item>
+        <item name="buttonBarNeutralButtonStyle">@style/CalendarDarkDialog.Button.Negative</item>
+        <item name="android:textColor">@color/cal_text_primary</item>
+        <item name="android:textColorPrimary">@color/cal_text_primary</item>
+        <item name="android:textColorSecondary">@color/cal_text_secondary</item>
+    </style>
+
+    <style name="CalendarDarkDialog.Button" parent="Widget.MaterialComponents.Button.TextButton.Dialog">
+        <item name="android:textColor">@color/cal_accent</item>
+    </style>
+
+    <style name="CalendarDarkDialog.Button.Negative" parent="Widget.MaterialComponents.Button.TextButton.Dialog">
+        <item name="android:textColor">@color/cal_text_secondary</item>
+    </style>
+
 </resources>

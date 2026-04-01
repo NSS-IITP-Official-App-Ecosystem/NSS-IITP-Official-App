@@ -46,7 +46,7 @@ fun DimmedHomeBackground(
         // Home screen background (disabled interactions)
         HomeScreen(
             state = homeState,
-            onChatbotClick = { /* Disabled in background */ },
+            onNotificationClick = { /* Disabled in background */ },
             onAddUpdateClick = { /* Disabled in background */ },
             onUpdateClick = { /* Disabled in background */ }
         )

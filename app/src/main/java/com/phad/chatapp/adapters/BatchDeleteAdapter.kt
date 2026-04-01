@@ -23,6 +23,8 @@ class BatchDeleteAdapter(
         val itemCheckbox: CheckBox = itemView.findViewById(R.id.itemCheckbox)
         val itemTitle: TextView = itemView.findViewById(R.id.itemTitle)
         val itemDate: TextView = itemView.findViewById(R.id.itemDate)
+        val typeIndicator: View = itemView.findViewById(R.id.typeIndicator)
+        val itemType: TextView = itemView.findViewById(R.id.itemType)
 
         fun bind(update: Update, position: Int) {
             itemTitle.text = update.title ?: "Untitled Post"
@@ -30,6 +32,20 @@ class BatchDeleteAdapter(
             val date = Date(update.timestamp)
             val format = SimpleDateFormat("MMM dd • hh:mm a", Locale.getDefault())
             itemDate.text = format.format(date)
+
+            // Set type indicator
+            val isReel = update.postType.equals("reel", ignoreCase = true) || update.isVideo
+            if (isReel) {
+                itemType.text = "REEL"
+                itemType.setTextColor(android.graphics.Color.parseColor("#E91E63")) // Pink
+                itemType.setBackgroundResource(R.drawable.rounded_bg_pink_alpha)
+                typeIndicator.setBackgroundColor(android.graphics.Color.parseColor("#E91E63"))
+            } else {
+                itemType.text = "TEXT"
+                itemType.setTextColor(android.graphics.Color.parseColor("#FFC107")) // Gold
+                itemType.setBackgroundResource(R.drawable.rounded_bg_gold_alpha)
+                typeIndicator.setBackgroundColor(android.graphics.Color.parseColor("#FFC107"))
+            }
 
             // Remove listener to prevent triggering during bind
             itemCheckbox.setOnCheckedChangeListener(null)

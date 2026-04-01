@@ -9,12 +9,14 @@ import com.google.firebase.FirebaseOptions
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreSettings
 import com.google.firebase.messaging.FirebaseMessaging
+
 import com.phad.chatapp.repositories.GroupRepository
 import com.phad.chatapp.utils.SessionManager
 import com.phad.chatapp.utils.MultiDatabaseHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import com.phad.chatapp.utils.Constants
 import com.bumptech.glide.annotation.GlideModule
 import com.bumptech.glide.module.AppGlideModule
@@ -62,14 +64,16 @@ class ChatApplication : Application() {
             // Initialize the secondary Firebase app
             initializeSecondaryFirebase()
             
-            // Initialize FCM
-            initializeFCM()
+
             
             // Test Firestore access permissions
             // Removed test connection diagnostics
             
             // Initialize system announcement group
             initializeAnnouncementGroup()
+            
+            // Admin-only: clean up notifications older than 5 days
+            cleanupOldNotifications()
             
             // Test Firestore initialization
             try {
@@ -82,6 +86,9 @@ class ChatApplication : Application() {
                 db.firestoreSettings = settings
                 
                 Log.d(TAG, "Firestore initialized successfully")
+                
+                // Initialize FCM for push notifications
+                initializeFCM()
                 
                 // Get app version using PackageManager
                 val packageInfo = try {
@@ -144,6 +151,95 @@ class ChatApplication : Application() {
     }
     
     /**
+     * Subscribe to user-specific topics based on role and wing.
+     * 1. Instantly subscribes using cached session wings.
+     * 2. Also fetches wings LIVE from Firestore in background to handle:
+     *    - Users whose doc uses "NSS_gro" (old schema) instead of "wings" array
+     *    - Stale sessions where wings were not yet saved
+     */
+    internal fun subscribeToUserTopics(sessionManager: SessionManager) {
+        try {
+            val fcm = FirebaseMessaging.getInstance()
+            fcm.subscribeToTopic("all")
+
+            val userType = sessionManager.fetchUserType()
+            val userId = sessionManager.fetchUserId()
+            val profile = sessionManager.getProfileFromSession()
+
+            // Subscribe to private individual topic for direct backend messages
+            if (userId.isNotEmpty()) {
+                fcm.subscribeToTopic("user_$userId")
+                Log.d(TAG, "Subscribed to topic: user_$userId")
+            }
+
+            // Instant subscription from session cache (may be empty on first login)
+            val sessionWings = profile.wings.filter { it.isNotEmpty() && it != "..." }
+            subscribeToWingTopics(fcm, sessionWings, "session")
+
+            // All users have access to NSS base topics
+            fcm.subscribeToTopic("nss")
+            fcm.subscribeToTopic("nss_${userType}")
+            Log.d(TAG, "Subscribed to topics: all, nss, nss_${userType}")
+
+            // TTW access check
+            if (sessionManager.getTeachingWing()) {
+                fcm.subscribeToTopic("ttw")
+                fcm.subscribeToTopic("ttw_${userType}")
+                Log.d(TAG, "Subscribed to topics: ttw, ttw_${userType}")
+            }
+
+            // Background: fetch wings LIVE from Firestore to handle stale sessions
+            // and users whose doc uses NSS_gro (old schema) instead of wings array
+            if (userId.isNotEmpty()) {
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        val db = FirebaseFirestore.getInstance()
+                        val doc = db.collection("users").document(userId).get().await()
+
+                        // Primary: read wings array
+                        val firestoreWings = (doc.get("wings") as? List<*>)
+                            ?.mapNotNull { it as? String }
+                            ?.filter { it.isNotEmpty() }
+                            ?: emptyList()
+
+                        // Fallback: read NSS_gro string (older user documents)
+                        val nssGro = doc.getString("NSS_gro") ?: ""
+                        val effectiveWings = if (firestoreWings.isNotEmpty()) firestoreWings
+                                             else if (nssGro.isNotEmpty()) listOf(nssGro)
+                                             else emptyList()
+
+                        if (effectiveWings.isNotEmpty()) {
+                            subscribeToWingTopics(fcm, effectiveWings, "Firestore")
+
+                            // Update session if Firestore has different/more wings
+                            if (effectiveWings.toSet() != sessionWings.toSet()) {
+                                val updated = sessionManager.getProfileFromSession().copy(wings = effectiveWings)
+                                sessionManager.createProfileSession(updated)
+                                Log.d(TAG, "Updated session wings from Firestore: $effectiveWings")
+                            }
+                        } else {
+                            Log.w(TAG, "No wings found in Firestore for user $userId (wings=[] and NSS_gro='')")
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to fetch live wings from Firestore for subscription", e)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to subscribe to user topics", e)
+        }
+    }
+
+    /** Helper: subscribe FCM to formatted wing topics from a list. */
+    private fun subscribeToWingTopics(fcm: com.google.firebase.messaging.FirebaseMessaging, wings: List<String>, source: String) {
+        wings.forEach { wing ->
+            val formattedWing = "wing_" + wing.lowercase().replace(" ", "_").replace("&", "and")
+            fcm.subscribeToTopic(formattedWing)
+            Log.d(TAG, "[$source] Subscribed to wing topic: $formattedWing")
+        }
+    }
+    
+    /**
      * Save FCM token to the user's Firestore document
      */
     private fun saveTokenToFirestore(token: String) {
@@ -154,6 +250,8 @@ class ChatApplication : Application() {
             Log.d(TAG, "User not logged in yet, token will be saved after login")
             return
         }
+        
+        subscribeToUserTopics(sessionManager)
         
         CoroutineScope(Dispatchers.IO).launch {
             try {
@@ -173,6 +271,44 @@ class ChatApplication : Application() {
         }
     }
     
+    /**
+     * Delete app_notifications older than 5 days.
+     * Only runs for Admin users — no Firestore rules change needed.
+     * For events: 5 days after event close. For posts: 5 days after post.
+     * Since all docs use a 'timestamp' field, we use a uniform 5-day cutoff.
+     */
+    private fun cleanupOldNotifications() {
+        val sessionManager = SessionManager(this)
+        val userType = sessionManager.fetchUserType()
+        if (!userType.equals("Admin", ignoreCase = true)) return // Non-admins skip
+
+        val cutoffMs = System.currentTimeMillis() - (5 * 24 * 60 * 60 * 1000L)
+        val cutoffTimestamp = com.google.firebase.Timestamp(cutoffMs / 1000, 0)
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val db = FirebaseFirestore.getInstance()
+                val snap = db.collection("app_notifications")
+                    .whereLessThan("timestamp", cutoffTimestamp)
+                    .limit(50) // batch-delete up to 50 at a time
+                    .get()
+                    .await()
+
+                if (snap.isEmpty) {
+                    Log.d(TAG, "No old notifications to clean up")
+                    return@launch
+                }
+
+                val batch = db.batch()
+                snap.documents.forEach { batch.delete(it.reference) }
+                batch.commit().await()
+                Log.d(TAG, "Cleaned up ${snap.size()} old notifications")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to clean up old notifications", e)
+            }
+        }
+    }
+
     /**
      * Ensure the system Announcement group exists
      */
