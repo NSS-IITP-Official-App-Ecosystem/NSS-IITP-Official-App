@@ -71,20 +71,17 @@ const fadeUp: any = {
 const screenshotVariants: any = {
   initial: (direction: number) => ({
     opacity: 0,
-    x: direction > 0 ? 60 : -60,
-    scale: 0.95,
+    scale: direction > 0 ? 0.92 : 1.08,
   }),
   animate: {
     opacity: 1,
-    x: 0,
     scale: 1,
-    transition: { duration: 0.5, ease: [0.25, 0.4, 0.25, 1] },
+    transition: { duration: 0.4, ease: [0.25, 0.4, 0.25, 1] },
   },
   exit: (direction: number) => ({
     opacity: 0,
-    x: direction > 0 ? -60 : 60,
-    scale: 0.95,
-    transition: { duration: 0.35 },
+    scale: direction > 0 ? 1.08 : 0.92,
+    transition: { duration: 0.3, ease: [0.25, 0.4, 0.25, 1] },
   }),
 };
 
@@ -181,6 +178,10 @@ export default function ExplorePage() {
   const [history, setHistory] = useState<string[]>([START_SCREEN_ID]);
   const [direction, setDirection] = useState(1);
 
+  // --- Laser border single-spinner fade state ---
+  const [displayedLaserTheme, setDisplayedLaserTheme] = useState<string>(screens[START_SCREEN_ID].laserTheme || "mixed");
+  const [laserOpacity, setLaserOpacity] = useState(1);
+
   // --- Calibration state ---
   const [calibMode, setCalibMode] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -227,6 +228,22 @@ export default function ExplorePage() {
       y: r1(((e.clientY - rect.top) / rect.height) * 100),
     };
   };
+
+  // Laser border: fade out → swap theme → fade in (single spinner, no rotation interruption)
+  useEffect(() => {
+    const newTheme = screens[currentScreenId]?.laserTheme || "mixed";
+    if (newTheme === displayedLaserTheme) return;
+    // Phase 1: fade out
+    setLaserOpacity(0);
+    const swapTimer = setTimeout(() => {
+      // Phase 2: swap theme while invisible
+      setDisplayedLaserTheme(newTheme);
+      // Phase 3: fade back in
+      setLaserOpacity(1);
+    }, 180);
+    return () => clearTimeout(swapTimer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentScreenId]);
 
   const navigateTo = useCallback(
     (targetId: string) => {
@@ -355,11 +372,15 @@ export default function ExplorePage() {
               {/* Ambient glow */}
               <div className={styles.phone_glow} />
 
-              {/* Orbiting animated laser border */}
+              {/* Orbiting animated laser border — single spinner, fade-swap on theme change */}
               <div className={styles.phone_animated_border}>
-                <div 
-                  className={styles.phone_animated_border_spinner} 
-                  data-laser-theme={currentScreen.laserTheme || "mixed"}
+                <div
+                  className={styles.phone_animated_border_spinner}
+                  data-laser-theme={displayedLaserTheme}
+                  style={{
+                    opacity: laserOpacity,
+                    transition: "opacity 0.18s ease",
+                  }}
                 />
               </div>
 
@@ -402,13 +423,15 @@ export default function ExplorePage() {
                     if (isDrawing) setIsDrawing(false);
                   }}
                 >
-                  <AnimatePresence>
+                  <AnimatePresence custom={direction}>
                     <motion.div
                       key={currentScreen.id}
+                      custom={direction}
+                      variants={screenshotVariants}
                       initial="initial"
                       animate="animate"
                       exit="exit"
-                      style={{ width: "100%", height: "100%", position: "absolute", top: 0, left: 0 }}
+                      style={{ width: "100%", height: "100%", position: "absolute", top: 0, left: 0, transformOrigin: "center center" }}
                     >
                       <img
                         src={currentScreen.screenshot}
