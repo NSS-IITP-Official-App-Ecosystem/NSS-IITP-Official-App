@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, Pointer } from "lucide-react";
 import Image from "next/image";
@@ -199,6 +199,25 @@ export default function ExplorePage() {
     shapeCount.current = 0;
   };
 
+  // --- Hybrid proportional scaling (Stop shrinking at 1024px) ---
+  const DESIGN_WIDTH = 1760; // px — the exact width of the .explore_layout grid
+  const MOBILE_BREAKPOINT = 1024;
+  const [scaleZoom, setScaleZoom] = useState(1);
+  
+  useEffect(() => {
+    const update = () => {
+      if (window.innerWidth <= MOBILE_BREAKPOINT) {
+        setScaleZoom(1); // Let CSS media queries take over stacking
+      } else {
+        const ratio = window.innerWidth / DESIGN_WIDTH;
+        setScaleZoom(Math.min(1, ratio));
+      }
+    };
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+
   const currentScreen = screens[currentScreenId];
 
   const getPct = (e: React.PointerEvent<HTMLDivElement>): Pt => {
@@ -247,9 +266,13 @@ export default function ExplorePage() {
           Home
         </Link>
 
-        {/* ====== THREE-COLUMN LAYOUT ====== */}
+        {/* ====== THREE-COLUMN LAYOUT (inside zoom scale shim) ====== */}
+        <div
+          className={styles.scale_shim}
+          style={{ zoom: scaleZoom } as React.CSSProperties}
+        >
         <div className={styles.explore_layout}>
-          {/* LEFT PANEL — Feature title + hook */}
+          {/* LEFT PANEL — Page name + description + Tech Stack + Built By */}
           <AnimatePresence mode="wait">
             <motion.div
               key={`left-${currentScreenId}`}
@@ -259,13 +282,52 @@ export default function ExplorePage() {
               animate="animate"
               exit="exit"
             >
-              <h1 className={`${styles.feature_title} text-gradient-multi`}>
-                {currentScreen.featureTitle}
-              </h1>
-              <p className={styles.hook_line}>
-                &ldquo;{currentScreen.hookLine}&rdquo;
-              </p>
-              <div className={styles.hook_accent} />
+
+              {/* Plain page name */}
+              <h1 className={styles.page_name}>{currentScreen.pageName}</h1>
+
+              {/* Description with highlighted phrases */}
+              <p
+                className={styles.page_description}
+                dangerouslySetInnerHTML={{ __html: currentScreen.pageDescription }}
+              />
+
+              <div className={styles.left_divider} />
+
+              {/* Tech Stack */}
+              <motion.div
+                className={styles.tech_section}
+                variants={staggerChildren}
+                initial="initial"
+                animate="animate"
+              >
+                <span className={styles.tech_section_label}>Tech Stack</span>
+                <div className={styles.tech_tags}>
+                  {currentScreen.techTags.map((tag, i) => (
+                    <motion.span
+                      key={i}
+                      className={styles.tech_tag}
+                      variants={fadeUp}
+                      style={tag.color ? { borderColor: `color-mix(in srgb, ${tag.color} 20%, transparent)` } : undefined}
+                    >
+                      <span className={styles.tech_tag_emoji}>{tag.emoji}</span>
+                      {tag.label}
+                    </motion.span>
+                  ))}
+                </div>
+              </motion.div>
+
+              <div className={styles.left_divider} />
+
+              {/* Built By */}
+              <div className={styles.built_by_section}>
+                <span className={styles.built_by_label}>Built By</span>
+                <div className={styles.built_by_badge}>
+                  {currentScreen.builtBy === "Both"
+                    ? "Eshan & Ankesh"
+                    : currentScreen.builtBy}
+                </div>
+              </div>
             </motion.div>
           </AnimatePresence>
 
@@ -277,12 +339,28 @@ export default function ExplorePage() {
             animate="animate"
           >
             <div className={styles.phone_wrapper}>
+              
+              {/* Floating Back Button (Visible if there's history) */}
+              {history.length > 1 && (
+                <button
+                  className={styles.phone_back_btn}
+                  onClick={navigateBack}
+                  aria-label="Previous Screen"
+                  title="Go back"
+                >
+                  <ArrowLeft size={18} strokeWidth={2.5} />
+                </button>
+              )}
+
               {/* Ambient glow */}
               <div className={styles.phone_glow} />
 
               {/* Orbiting animated laser border */}
               <div className={styles.phone_animated_border}>
-                <div className={styles.phone_animated_border_spinner} />
+                <div 
+                  className={styles.phone_animated_border_spinner} 
+                  data-laser-theme={currentScreen.laserTheme || "mixed"}
+                />
               </div>
 
               {/* Phone image container */}
@@ -533,7 +611,7 @@ export default function ExplorePage() {
             )}
           </motion.div>
 
-          {/* RIGHT PANEL — Tech + Built By + Why */}
+          {/* RIGHT PANEL — Feature highlights */}
           <AnimatePresence mode="wait">
             <motion.div
               key={`right-${currentScreenId}`}
@@ -543,45 +621,34 @@ export default function ExplorePage() {
               animate="animate"
               exit="exit"
             >
+              <span className={styles.features_label}>Under the Hood</span>
               <motion.div
-                className={styles.tech_section}
+                className={styles.features_list}
                 variants={staggerChildren}
                 initial="initial"
                 animate="animate"
               >
-                <span className={styles.tech_section_label}>Tech Stack</span>
-                <div className={styles.tech_tags}>
-                  {currentScreen.techTags.map((tag, i) => (
-                    <motion.span
-                      key={i}
-                      className={styles.tech_tag}
-                      variants={fadeUp}
-                      style={tag.color ? { borderColor: `color-mix(in srgb, ${tag.color} 20%, transparent)` } : undefined}
-                    >
-                      <span className={styles.tech_tag_emoji}>{tag.emoji}</span>
-                      {tag.label}
-                    </motion.span>
-                  ))}
+                <div className={styles.features_track_container}>
+                  {currentScreen.features.map((feat, i) => {
+                    const isEven = i % 2 === 0;
+                    const staggerClass = isEven ? styles.feature_card_left : styles.feature_card_right;
+                    
+                    return (
+                      <motion.div key={i} className={`${styles.feature_card} ${staggerClass}`} variants={fadeUp}>
+                        <span className={styles.feature_icon}>{feat.icon}</span>
+                        <div className={styles.feature_body}>
+                          <h3 className={styles.feature_name}>{feat.title}</h3>
+                          <p className={styles.feature_desc}>{feat.description}</p>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
                 </div>
               </motion.div>
-
-              <div className={styles.built_by_section}>
-                <span className={styles.built_by_label}>Built By</span>
-                <div className={styles.built_by_badge}>
-                  <span className={styles.built_by_dot} />
-                  {currentScreen.builtBy === "Both"
-                    ? "Eshan & Ankesh"
-                    : currentScreen.builtBy}
-                </div>
-              </div>
-
-              <div className={styles.why_section}>
-                <span className={styles.why_label}>Why We Built This</span>
-                <p className={styles.why_text}>{currentScreen.whyBuilt}</p>
-              </div>
             </motion.div>
           </AnimatePresence>
-        </div>
+        </div> {/* end explore_layout */}
+        </div> {/* end scale_shim */}
       </div>
     </>
   );

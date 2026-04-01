@@ -24,7 +24,17 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body suppressHydrationWarning>{children}</body>
+      <body suppressHydrationWarning>
+        <div id="orientation-lock">
+          <div className="orientation-lock-content">
+            <div className="orientation-icon">🖥️</div>
+            <h2>Desktop Experience Recommended</h2>
+            <p>This showcase is engineered specifically for PCs and laptops.</p>
+            <p className="orientation-subtext">Please view on a desktop, or rotate your device to landscape mode for the best experience.</p>
+          </div>
+        </div>
+        {children}
+      </body>
     </html>
   );
 }
