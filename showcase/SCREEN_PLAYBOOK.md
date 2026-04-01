@@ -105,6 +105,18 @@ export interface AppScreen {
 - **Floating Back Button (`.phone_back_btn`):** The explore UI incorporates an automatic, natively animated "Previous Screen" button that floats at the top-left edge of the phone frame (`top: 24px`, `left: -75px`). 
 - **Zero Configuration:** When adding a new screen via `screenData.ts`, you do **not** need to manually add a back button to your hotspots. The architecture automatically tracks navigation history (e.g. `history.length > 1`) and renders the glowing cyan-gradient back button instantly. It pops the most recent `targetScreenId` off the stack.
 
+### Phone Screen Transition — Android Material Z-Axis ✅
+The phone screenshot area uses the **Material 3 Shared Z-Axis** transition (the default modern Android/Jetpack Compose page transition). This is **fully automatic** — no per-screen configuration needed.
+
+| Direction | Entering Screen | Exiting Screen |
+|-----------|----------------|----------------|
+| **Forward** (hotspot tap) | Fades in, scales `0.92 → 1.0` | Fades out, scales `1.0 → 1.08` |
+| **Backward** (← button) | Fades in, scales `1.08 → 1.0` | Fades out, scales `1.0 → 0.92` |
+
+- Implemented via `framer-motion` `AnimatePresence` with `custom={direction}` passed down to `screenshotVariants` in `page.tsx`.
+- `direction` is `1` when navigating forward, `-1` when going back — already tracked in state.
+- **Rule:** Do NOT add any `x`, `y`, or slide offsets to this transition. The Z-axis scale+fade is intentional and matches the actual Android app's navigation feel.
+
 ---
 
 ## 🔧 TWO-PHASE WORKFLOW — Adding a New Screen
@@ -276,12 +288,9 @@ nss-home (TODO)
 nss-calendar (TODO)
 └── [...buttons...] → ???
 
-admin-home (Phase 1 Complete)
-├── [Login Button] → ttw-calendar (Assumed target, waiting for hotspots)
-├── [Calendar tab] → ttw-calendar
-├── [Chat tab] → ttw-chat
-├── [Schedule tab] → ttw-schedule
-└── [Profile tab] → ttw-profile
+admin-dashboard (Phase 1 Complete)
+├── [NSS Wing Button] → nss-profile
+└── [Teaching & Tech Wing Button] → teaching-tech-wing
 ```
 
 ---

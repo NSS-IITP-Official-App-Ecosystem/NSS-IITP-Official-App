@@ -254,7 +254,7 @@
   width: 420px;
   height: 880px;
   border-radius: 64px;
-  background: transparent;
+  background: #0a0a12;
   padding: 0;
   border: none;
   overflow: hidden;
@@ -317,9 +317,6 @@
   height: 884px;
   border-radius: 66px; /* slightly larger radius to match 64px rounded edge + 2px */
   overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   z-index: 1;
 }
 
@@ -334,6 +331,9 @@
 .phone_animated_border_spinner {
   width: 1500px; 
   height: 1500px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
   /* Fading tail circling around */
   animation: border-spin 4s linear infinite;
 }
@@ -372,8 +372,8 @@
 }
 
 @keyframes border-spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% { transform: translate(-50%, -50%) rotate(0deg); }
+  100% { transform: translate(-50%, -50%) rotate(360deg); }
 }
 
 /* Glass rim overlay to cover any rough tiny edge pixels */
