@@ -255,8 +255,9 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                             val title = "$eventType: $name"
                             val message = "A new ${if (isMandatory) "mandatory " else ""}event '$name' has been scheduled on $dateString from $timeRangeString. Location: $location"
                             
-                            // An event is "open" (targets all) if wings list covers all wings by SIZE >= 6
-                            val targetTopics = if (wings.isEmpty() || wings.size >= com.phad.chatapp.models.AttendanceEvent.ALL_WINGS.size) {
+                            // An event is "open" (targets all) if wings list covers all wings by SIZE >= 6 or if it's a Design and Curation Wing event
+                            val isOpenEvent = wings.isEmpty() || wings.size >= com.phad.chatapp.models.AttendanceEvent.ALL_WINGS.size || wings.contains("Design and Curation Wing")
+                            val targetTopics = if (isOpenEvent) {
                                 listOf("all")
                             } else {
                                 wings.map { "wing_" + it.lowercase().replace(" ", "_").replace("&", "and") }
