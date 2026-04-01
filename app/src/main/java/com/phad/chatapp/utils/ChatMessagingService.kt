@@ -294,6 +294,7 @@ class ChatMessagingService : FirebaseMessagingService() {
 
             val parentIntent = Intent(context, mainActivityClass).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                putExtra("open_notifications", true)
             }
 
             val intent = Intent(context, com.phad.chatapp.activities.NotificationHistoryActivity::class.java)

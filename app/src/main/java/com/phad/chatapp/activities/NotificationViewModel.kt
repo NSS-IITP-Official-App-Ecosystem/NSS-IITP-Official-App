@@ -42,10 +42,30 @@ class NotificationViewModel(application: Application) : AndroidViewModel(applica
 
     fun fetchNotifications() {
         val userType = sessionManager.fetchUserType()
-        val isTtw = sessionManager.getLastInterfaceChoice() == "TEACHING_WING"
-        val topic = if (isTtw) "ttw" else "nss"
-        
-        val targetTopics = listOf("all", topic, "${topic}_$userType")
+        val userId = sessionManager.fetchUserId()
+
+        // Include both NSS and TTW topics so history works regardless of which
+        // interface the user is currently on.
+        // Also include wing topics from the user's profile.
+        val profile = sessionManager.getProfileFromSession()
+        val wingTopics = profile.wings.map { wing ->
+            "wing_" + wing.lowercase().replace(" ", "_").replace("&", "and")
+        }.toSet()
+
+        val userTopics = setOf(
+            "all",
+            "nss",
+            "ttw",
+            "nss_user",
+            "ttw_user",
+            "nss_$userType",       // e.g. "nss_Admin", "nss_Student"
+            "ttw_$userType",       // e.g. "ttw_Admin", "ttw_Student"
+            "nss_admin",           // lowercase variants
+            "ttw_admin",
+            "user_$userId"         // personal topic for direct messages
+        ) + wingTopics
+
+        Log.d("NotificationViewModel", "Fetching notifications for userId=$userId, userType=$userType, topics=$userTopics")
 
         _isLoading.value = true
         db.collection("app_notifications")
@@ -54,23 +74,35 @@ class NotificationViewModel(application: Application) : AndroidViewModel(applica
             .addSnapshotListener { snapshot, e ->
                 _isLoading.value = false
                 if (e != null) {
-                    Log.w("NotificationViewModel", "Listen failed.", e)
+                    Log.w("NotificationViewModel", "Listen failed: ${e.message}", e)
                     return@addSnapshotListener
                 }
 
                 if (snapshot != null) {
-                    val twoDaysAgoMs = System.currentTimeMillis() - (2 * 24 * 60 * 60 * 1000L)
+                    val fiveDaysAgoMs = System.currentTimeMillis() - (5 * 24 * 60 * 60 * 1000L)
                     val readTopicIds = getReadIds()
-                    
+                    // Pre-compute lowercase set once for efficient comparison
+                    val userTopicsLower = userTopics.map { it.lowercase() }.toSet()
+
+                    Log.d("NotificationViewModel", "Raw docs from Firestore: ${snapshot.size()}")
+                    Log.d("NotificationViewModel", "User topics (lowercase): $userTopicsLower")
+
                     val list = snapshot.documents.mapNotNull { doc ->
-                        doc.toObject(NotificationItem::class.java)?.apply { 
-                            id = doc.id 
+                        doc.toObject(NotificationItem::class.java)?.apply {
+                            id = doc.id
                             isRead = readTopicIds.contains(doc.id)
                         }
                     }.filter { item ->
-                        item.targetType in targetTopics &&
-                        (item.timestamp == null || item.timestamp!!.toDate().time > twoDaysAgoMs)
+                        val timestampOk = item.timestamp == null ||
+                            item.timestamp!!.toDate().time > fiveDaysAgoMs
+                        // Match against targetTopics list OR legacy targetType string
+                        val topicMatch = item.targetTopics.any { it.lowercase() in userTopicsLower }
+                            || (item.targetType != null && item.targetType!!.lowercase() in userTopicsLower)
+                        Log.d("NotificationViewModel", "Doc ${item.id}: targetTopics=${item.targetTopics} targetType=${item.targetType} timestampOk=$timestampOk topicMatch=$topicMatch")
+                        timestampOk && topicMatch
                     }
+
+                    Log.d("NotificationViewModel", "Filtered list size: ${list.size}")
                     _notifications.value = list
                 }
             }

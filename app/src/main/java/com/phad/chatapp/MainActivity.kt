@@ -2,8 +2,10 @@ package com.phad.chatapp
 
 import android.content.Intent
 import com.phad.chatapp.activities.LoginActivity
-
-
+import android.os.Build
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.app.ActivityCompat
 import android.os.Bundle
 import android.util.Log
 import android.view.Menu
@@ -37,6 +39,7 @@ import com.phad.chatapp.fragments.ProfileFragment
 
 import com.phad.chatapp.features.scheduling.SchedulingFragment
 import android.widget.ImageButton
+import com.phad.chatapp.activities.NotificationHistoryActivity
 
 class MainActivity : AppCompatActivity() {
     private val TAG = "MainActivity"
@@ -60,9 +63,11 @@ class MainActivity : AppCompatActivity() {
         Log.d("MainActivity", "after super.onCreate")
 
         // Removed enable edge to edge display - handling insets manually
-        
         // Initialize Firebase Auth
         auth = FirebaseAuth.getInstance()
+        
+        // Request notification permission if needed for Android 13+
+        requestNotificationPermissionIfNeeded()
         
         // Initialize session manager
         sessionManager = SessionManager(this)
@@ -103,6 +108,18 @@ class MainActivity : AppCompatActivity() {
         // Set up custom navigation buttons
         setupCustomNavigation()
         Log.d("MainActivity", "after setupCustomNavigation")
+
+        // If launched from a push notification tap, open notification history
+        if (intent.getBooleanExtra("open_notifications", false)) {
+            startActivity(Intent(this, NotificationHistoryActivity::class.java))
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.getBooleanExtra("open_notifications", false)) {
+            startActivity(Intent(this, NotificationHistoryActivity::class.java))
+        }
     }
     
     override fun onResume() {
@@ -110,11 +127,7 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         Log.d("MainActivity", "after super.onResume")
 
-        // Restart notification listener when returning to the app
-        val currentUserId = sessionManager.fetchUserId()
-        if (currentUserId.isNotEmpty()) {
-            notificationHelper.startListeningForNotifications(currentUserId)
-        }
+        // Removed notification helper since we use Cloud Functions
         
         checkAndEnforceNotificationPermission()
         
@@ -429,6 +442,9 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+        
+        // Ensure FCM wing/role topic subscriptions are always up to date
+        (application as? ChatApplication)?.subscribeToUserTopics(sessionManager)
         
         // Firebase is already initialized in ChatApplication
         // Now just check if sample data needs to be set up

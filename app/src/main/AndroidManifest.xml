@@ -16,6 +16,7 @@
     <!-- Location permissions for attendance -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Storage permissions for PDF generation - using scoped storage -->
 
     <application
@@ -145,6 +146,15 @@
             android:name=".activities.NotificationHistoryActivity"
             android:exported="false"
             android:theme="@style/Theme.ChatApp" />
+
+        <!-- Firebase Cloud Messaging Service -->
+        <service
+            android:name=".utils.ChatMessagingService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
 
         <!-- Add this inside the application tag -->
         <provider

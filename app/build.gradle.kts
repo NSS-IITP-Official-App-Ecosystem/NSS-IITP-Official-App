@@ -137,6 +137,7 @@ dependencies {
     implementation(libs.androidx.activity)
     implementation(libs.androidx.constraintlayout)
     implementation("androidx.fragment:fragment-ktx:1.6.2")
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
 
     // Core library desugaring for Java 8+ features on older Android versions
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
@@ -168,6 +169,7 @@ dependencies {
     implementation("com.google.firebase:firebase-firestore")
     implementation("com.google.firebase:firebase-analytics")
     implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-messaging")
 
     implementation("com.google.firebase:firebase-storage")
     implementation("com.google.firebase:firebase-database-ktx")

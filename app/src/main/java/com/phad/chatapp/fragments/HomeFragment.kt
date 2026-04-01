@@ -1071,8 +1071,23 @@ class HomeFragment : Fragment() {
                             updateCache = null
                             loadUpdates()
 
-                            // Send notification to all users
-        
+                            // Send notification to TTW + NSS users
+                            db.collection("app_notifications").add(mapOf(
+                                "title" to (title?.takeIf { it.isNotBlank() } ?: "New Update"),
+                                "body" to (content.takeIf { it.isNotBlank() } ?: "A new post has been published."),
+                                "targetTopics" to listOf("ttw_user", "nss_user"),
+                                "type" to "UPDATE_NOTIFICATION",
+                                "creatorId" to authorName,
+                                "isRead" to false,
+                                "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                            ))
+
+                            // Trigger Vercel FCM Push
+                            lifecycleScope.launch {
+                                val notifTitle = title?.takeIf { it.isNotBlank() } ?: "New NSS & TTW Update"
+                                val notifBody = if (postType == "reel") "🎥 A new Reel has been published: ${title ?: "Check it out!"}" else (content.take(100).takeIf { it.isNotBlank() } ?: "A new post has been published.")
+                                com.phad.chatapp.utils.FcmSender.sendToTopic("nss", notifTitle, notifBody)
+                            }
                         }
                         .addOnFailureListener { e ->
                             Toast.makeText(requireContext(), "Posted to Teaching Wing but failed to cross-post to NSS: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
@@ -1089,8 +1104,23 @@ class HomeFragment : Fragment() {
                     updateCache = null
                     loadUpdates()
 
-                    // Send notification to all users
+                    // Send notification to TTW users
+                    db.collection("app_notifications").add(mapOf(
+                        "title" to (title?.takeIf { it.isNotBlank() } ?: "New Teaching Wing Update"),
+                        "body" to (content.takeIf { it.isNotBlank() } ?: "A new post has been published."),
+                        "targetTopics" to listOf("ttw_user"),
+                        "type" to "UPDATE_NOTIFICATION",
+                        "creatorId" to authorName,
+                        "isRead" to false,
+                        "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                    ))
 
+                    // Trigger Vercel FCM Push
+                    lifecycleScope.launch {
+                        val notifTitle = title?.takeIf { it.isNotBlank() } ?: "New Teaching Wing Update"
+                        val notifBody = if (postType == "reel") "🎥 A new Reel has been published: ${title ?: "Check it out!"}" else (content.take(100).takeIf { it.isNotBlank() } ?: "A new post has been published.")
+                        com.phad.chatapp.utils.FcmSender.sendToTopic("ttw", notifTitle, notifBody)
+                    }
                 }
             }
             .addOnFailureListener { e ->

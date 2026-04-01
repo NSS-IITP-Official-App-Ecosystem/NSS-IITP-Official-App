@@ -409,9 +409,9 @@ class LoginFormActivity : AppCompatActivity() {
         val doc = db.collection("users").document(rollNumber).get().await()
         val name = doc.getString("name") ?: "Admin"
         val email = doc.getString("instituteOutlookId") ?: ""
-        // Determine Teaching Wing from `wings` array in users doc
         val wings = doc.get("wings") as? List<*> ?: emptyList<Any>()
-        val isTeachingWing = wings.any { (it as? String)?.equals("Teaching and Technical Wing", ignoreCase = true) == true }
+        val wingsList = wings.mapNotNull { it as? String }
+        val isTeachingWing = wingsList.any { it.equals("Teaching and Technical Wing", ignoreCase = true) }
         return ProfileUiState(
             name = name,
             location = "N/A",
@@ -426,7 +426,8 @@ class LoginFormActivity : AppCompatActivity() {
             topic3 = "N/A",
             userType = userType,
             isStudent = false,
-            Teaching_wing = isTeachingWing
+            Teaching_wing = isTeachingWing,
+            wings = wingsList
         )
     }
 
@@ -434,9 +435,9 @@ class LoginFormActivity : AppCompatActivity() {
         val doc = db.collection("users").document(rollNumber).get().await()
         val name = doc.getString("name") ?: "Student"
         val email = doc.getString("instituteOutlookId") ?: ""
-        // Determine Teaching Wing from `wings` array in users doc
         val wings = doc.get("wings") as? List<*> ?: emptyList<Any>()
-        val isTeachingWing = wings.any { (it as? String)?.equals("Teaching and Technical Wing", ignoreCase = true) == true }
+        val wingsList = wings.mapNotNull { it as? String }
+        val isTeachingWing = wingsList.any { it.equals("Teaching and Technical Wing", ignoreCase = true) }
         return ProfileUiState(
             name = name,
             location = "N/A",
@@ -451,7 +452,8 @@ class LoginFormActivity : AppCompatActivity() {
             topic3 = "N/A",
             isStudent = true,
             userType = userType,
-            Teaching_wing = isTeachingWing
+            Teaching_wing = isTeachingWing,
+            wings = wingsList
         )
     }
 

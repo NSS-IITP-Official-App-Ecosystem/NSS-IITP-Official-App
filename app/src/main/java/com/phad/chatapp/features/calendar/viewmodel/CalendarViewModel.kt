@@ -187,7 +187,6 @@ class CalendarViewModel(
         return leaves
     }
     
-    // Apply for leave (Updated to include roll number)
     fun applyForLeave(
         date: Date,
         userId: String,
@@ -199,6 +198,31 @@ class CalendarViewModel(
     ) {
         viewModelScope.launch {
             repository.applyForLeave(userId, userName, rollNumber, date, slot, subject, school)
+            
+            try {
+                // Send notification to TTW Admin
+                val notificationData = mapOf(
+                    "title" to "New Leave Application",
+                    "body" to "$userName ($rollNumber) applied for leave on ${java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault()).format(date)} for $slot.",
+                    "targetRole" to "all",
+                    "targetWing" to "all",
+                    "targetTopics" to listOf("ttw_Admin", "ttw_admin"),
+                    "type" to "LEAVE_NOTIFICATION",
+                    "creatorId" to rollNumber,
+                    "isRead" to false,
+                    "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                )
+                com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("app_notifications").add(notificationData)
+                
+                // Trigger Vercel FCM Push
+                com.phad.chatapp.utils.FcmSender.sendToTopic(
+                    topic = "ttw_Admin", 
+                    title = "New Leave Application", 
+                    body = "$userName ($rollNumber) applied for leave on ${java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault()).format(date)} for $slot."
+                )
+            } catch (e: Exception) {
+                Log.e("CalendarViewModel", "Error sending leave notification: ${e.message}")
+            }
         }
     }
     
@@ -207,6 +231,34 @@ class CalendarViewModel(
         viewModelScope.launch {
             try {
                 repository.updateLeaveStatus(leaveId, status)
+                
+                try {
+                    val leave = leaveApplications.value?.find { it.id == leaveId }
+                    if (leave != null) {
+                        val statusStr = if (status == EventStatus.APPROVED) "Approved" else "Rejected/Pending"
+                        val notificationData = mapOf(
+                            "title" to "Leave Status Updated",
+                            "body" to "Your leave application for ${leave.date} has been marked as $statusStr",
+                            "targetRole" to "all",
+                            "targetWing" to "all",
+                            "targetTopics" to listOf("user_${leave.rollNumber}"),
+                            "type" to "LEAVE_NOTIFICATION",
+                            "creatorId" to "Admin",
+                            "isRead" to false,
+                            "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                        )
+                        com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("app_notifications").add(notificationData)
+                        
+                        // Trigger Vercel FCM Push
+                        com.phad.chatapp.utils.FcmSender.sendToUser(
+                            userId = leave.rollNumber,
+                            title = "Leave Status Updated",
+                            body = "Your leave application for ${leave.date} has been marked as $statusStr"
+                        )
+                    }
+                } catch (e: Exception) {
+                    Log.e("CalendarViewModel", "Error sending status update notification: ${e.message}")
+                }
             } catch (e: Exception) {
                 Log.e("CalendarViewModel", "Error updating leave status: ${e.message}")
             }
@@ -252,6 +304,33 @@ class CalendarViewModel(
             val success = repository.markLeaveAsSubstituted(leaveId, rollNumber, substituteName)
             if (success) {
                 Log.d("CalendarViewModel", "Leave $leaveId marked as substituted by $substituteName ($rollNumber)")
+                
+                try {
+                    val leave = leaveApplications.value?.find { it.id == leaveId }
+                    if (leave != null) {
+                        val notificationData = mapOf(
+                            "title" to "Leave Substitution Accepted",
+                            "body" to "$substituteName ($rollNumber) has accepted to substitute your class on ${leave.date}.",
+                            "targetRole" to "all",
+                            "targetWing" to "all",
+                            "targetTopics" to listOf("user_${leave.rollNumber}"),
+                            "type" to "LEAVE_NOTIFICATION",
+                            "creatorId" to rollNumber,
+                            "isRead" to false,
+                            "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                        )
+                        com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("app_notifications").add(notificationData)
+                        
+                        // Trigger Vercel FCM Push
+                        com.phad.chatapp.utils.FcmSender.sendToUser(
+                            userId = leave.rollNumber,
+                            title = "Leave Substitution Accepted",
+                            body = "$substituteName ($rollNumber) has accepted to substitute your class on ${leave.date}."
+                        )
+                    }
+                } catch (e: Exception) {
+                    Log.e("CalendarViewModel", "Error sending substitution notification: ${e.message}")
+                }
             } else {
                 Log.e("CalendarViewModel", "Failed to mark leave as substituted")
             }

@@ -48,7 +48,8 @@ class SessionManager(context: Context) {
         const val KEY_TEACHING_WING = "teachingWing" // Add this line
         const val KEY_BYPASS_FIREBASE_AUTH = "bypassFirebaseAuth"
         const val KEY_ATTENDANCE_STATS = "attendanceStats"
-        const val KEY_LAST_INTERFACE = "lastInterfaceChoice" // Add this line
+        const val KEY_LAST_INTERFACE = "lastInterfaceChoice"
+        const val KEY_WINGS = "wings"
     }
     
     /**
@@ -309,8 +310,9 @@ class SessionManager(context: Context) {
         editor.putString(KEY_TOPIC_2, profile.topic2)
         editor.putString(KEY_TOPIC_3, profile.topic3)
         editor.putBoolean(KEY_IS_STUDENT, profile.isStudent)
-        editor.putString(KEY_USER_TYPE, profile.userType) // Add this line
-        editor.putBoolean(KEY_TEACHING_WING, profile.Teaching_wing) // Add this line
+        editor.putString(KEY_USER_TYPE, profile.userType)
+        editor.putBoolean(KEY_TEACHING_WING, profile.Teaching_wing)
+        editor.putStringSet(KEY_WINGS, profile.wings.toSet())
         editor.apply()
     }
     
@@ -331,8 +333,9 @@ class SessionManager(context: Context) {
             topic2 = pref.getString(KEY_TOPIC_2, "...") ?: "...",
             topic3 = pref.getString(KEY_TOPIC_3, "...") ?: "...",
             isStudent = pref.getBoolean(KEY_IS_STUDENT, true),
-            userType = pref.getString(KEY_USER_TYPE, "Student") ?: "Student", // Add this line
-            Teaching_wing = pref.getBoolean(KEY_TEACHING_WING, false) // Add this line
+            userType = pref.getString(KEY_USER_TYPE, "Student") ?: "Student",
+            Teaching_wing = pref.getBoolean(KEY_TEACHING_WING, false),
+            wings = pref.getStringSet(KEY_WINGS, emptySet())?.toList() ?: emptyList()
         )
     }
 

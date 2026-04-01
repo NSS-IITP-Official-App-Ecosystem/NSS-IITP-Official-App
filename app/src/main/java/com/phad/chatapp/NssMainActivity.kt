@@ -21,6 +21,7 @@ import com.phad.chatapp.utils.SessionManager
 
 import android.content.Intent
 import android.content.pm.PackageManager
+import com.phad.chatapp.activities.NotificationHistoryActivity
 import com.phad.chatapp.activities.LoginActivity
 
 class NssMainActivity : AppCompatActivity() {
@@ -62,6 +63,18 @@ class NssMainActivity : AppCompatActivity() {
         
         // Setup Update Popup
         setupUpdatePopup()
+
+        // If launched from a push notification tap, open notification history
+        if (intent.getBooleanExtra("open_notifications", false)) {
+            startActivity(Intent(this, NotificationHistoryActivity::class.java))
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.getBooleanExtra("open_notifications", false)) {
+            startActivity(Intent(this, NotificationHistoryActivity::class.java))
+        }
     }
 
     override fun onResume() {
@@ -69,21 +82,17 @@ class NssMainActivity : AppCompatActivity() {
         
         // Restart notification listener when returning to the app
         val currentUserId = sessionManager.fetchUserId()
-        if (currentUserId.isNotEmpty()) {
-            notificationHelper.startListeningForNotifications(currentUserId)
-        }
+        // notificationHelper removed, FCM handles all pushes
         
         checkAndEnforceNotificationPermission()
     }
     
     override fun onPause() {
         super.onPause()
-        notificationHelper.stopListeningForNotifications()
     }
     
     override fun onDestroy() {
         super.onDestroy()
-        notificationHelper.stopListeningForNotifications()
     }
 
     private fun requestNotificationPermissionIfNeeded() {
@@ -241,6 +250,9 @@ class NssMainActivity : AppCompatActivity() {
             val userData = sessionManager.getUserDetails()
             // Set up the UI immediately to show home screen first
             setupNavigation()
+
+            // Ensure FCM wing/role topic subscriptions are always up to date
+            (application as? ChatApplication)?.subscribeToUserTopics(sessionManager)
         }
     }
 
