@@ -272,7 +272,7 @@ class CalendarRepository {
         slot: String,
         subject: String,
         school: String
-    ): Boolean {
+    ): String? {
         try {
             val leaveId = UUID.randomUUID().toString()
             val timestamp = System.currentTimeMillis()
@@ -301,9 +301,9 @@ class CalendarRepository {
             currentApplications.add(leaveApplication)
             _leaveApplications.postValue(currentApplications)
             
-            return true
+            return leaveId
         } catch (e: Exception) {
-            return false
+            return null
         }
     }
     

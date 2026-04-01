@@ -37,15 +37,24 @@ class NotificationHistoryActivity : ComponentActivity() {
         setContent {
             val notifications by viewModel.notifications.collectAsState()
             val isLoading by viewModel.isLoading.collectAsState()
+            val leaveActionState by viewModel.leaveActionState.collectAsState()
 
             MaterialTheme {
                 NotificationHistoryScreen(
                     notifications = notifications,
                     isLoading = isLoading,
                     isAdmin = viewModel.isAdmin,
+                    leaveActionState = leaveActionState,
                     onBackClick = { finish() },
-                    onNotificationClick = { viewModel.markAsRead(it.id) },
-                    onDeleteClick = { viewModel.deleteNotification(it) }
+                    onNotificationClick = { notification -> 
+                        viewModel.markAsRead(notification.id)
+                        if (notification.type == "LEAVE_NOTIFICATION" && !notification.relatedId.isNullOrEmpty()) {
+                            viewModel.fetchLeaveStatusAndHandleClick(notification.relatedId!!)
+                        }
+                    },
+                    onDeleteClick = { viewModel.deleteNotification(it) },
+                    onAcceptLeave = { leaveId -> viewModel.acceptLeave(leaveId) },
+                    onDismissLeaveDialog = { viewModel.dismissLeaveDialog() }
                 )
             }
         }
@@ -58,9 +67,12 @@ fun NotificationHistoryScreen(
     notifications: List<NotificationItem>,
     isLoading: Boolean,
     isAdmin: Boolean,
+    leaveActionState: LeaveDialogState?,
     onBackClick: () -> Unit,
     onNotificationClick: (NotificationItem) -> Unit,
-    onDeleteClick: (String) -> Unit
+    onDeleteClick: (String) -> Unit,
+    onAcceptLeave: (String) -> Unit,
+    onDismissLeaveDialog: () -> Unit
 ) {
     var showDeleteDialog by remember { mutableStateOf<String?>(null) }
 
@@ -79,6 +91,70 @@ fun NotificationHistoryScreen(
                 TextButton(onClick = { showDeleteDialog = null }) { Text("Cancel") }
             }
         )
+    }
+
+    if (leaveActionState != null) {
+        when (leaveActionState) {
+            is LeaveDialogState.Loading -> {
+                AlertDialog(
+                    onDismissRequest = { },
+                    title = { Text("Checking Leave Status") },
+                    text = { 
+                        Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
+                        }
+                    },
+                    confirmButton = { }
+                )
+            }
+            is LeaveDialogState.AlreadyAccepted -> {
+                AlertDialog(
+                    onDismissRequest = onDismissLeaveDialog,
+                    title = { Text("Leave Taken") },
+                    text = { Text("This leave was already gracefully accepted by ${(leaveActionState as LeaveDialogState.AlreadyAccepted).substitutedByName}.") },
+                    confirmButton = {
+                        TextButton(onClick = onDismissLeaveDialog) { Text("OK") }
+                    }
+                )
+            }
+            is LeaveDialogState.Pending -> {
+                val state = leaveActionState as LeaveDialogState.Pending
+                if (isAdmin) {
+                    AlertDialog(
+                        onDismissRequest = onDismissLeaveDialog,
+                        title = { Text("Pending Leave") },
+                        text = { Text("This leave application by ${state.studentName} for ${state.dateStr} (${state.slot}) is currently waiting for a substitute.") },
+                        confirmButton = {
+                            TextButton(onClick = onDismissLeaveDialog) { Text("OK") }
+                        }
+                    )
+                } else {
+                    AlertDialog(
+                        onDismissRequest = onDismissLeaveDialog,
+                        title = { Text("Accept Substitute Class") },
+                        text = { 
+                            Text("Would you like to accept the class for ${state.studentName}?\n\nSubject: ${state.subject}\nDate: ${state.dateStr}\nSlot: ${state.slot}")
+                        },
+                        confirmButton = {
+                            Button(onClick = { onAcceptLeave(state.leaveId) }) { Text("Accept") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = onDismissLeaveDialog) { Text("Ignore") }
+                        }
+                    )
+                }
+            }
+            is LeaveDialogState.Error -> {
+                AlertDialog(
+                    onDismissRequest = onDismissLeaveDialog,
+                    title = { Text("Error") },
+                    text = { Text((leaveActionState as LeaveDialogState.Error).message) },
+                    confirmButton = {
+                        TextButton(onClick = onDismissLeaveDialog) { Text("OK") }
+                    }
+                )
+            }
+        }
     }
 
     Scaffold(

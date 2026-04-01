@@ -197,31 +197,34 @@ class CalendarViewModel(
         rollNumber: String
     ) {
         viewModelScope.launch {
-            repository.applyForLeave(userId, userName, rollNumber, date, slot, subject, school)
+            val leaveId = repository.applyForLeave(userId, userName, rollNumber, date, slot, subject, school)
             
-            try {
-                // Send notification to TTW Admin
-                val notificationData = mapOf(
-                    "title" to "New Leave Application",
-                    "body" to "$userName ($rollNumber) applied for leave on ${java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault()).format(date)} for $slot.",
-                    "targetRole" to "all",
-                    "targetWing" to "all",
-                    "targetTopics" to listOf("ttw_Admin", "ttw_admin"),
-                    "type" to "LEAVE_NOTIFICATION",
-                    "creatorId" to rollNumber,
-                    "isRead" to false,
-                    "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
-                )
-                com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("app_notifications").add(notificationData)
-                
-                // Trigger Vercel FCM Push
-                com.phad.chatapp.utils.FcmSender.sendToTopic(
-                    topic = "ttw_Admin", 
-                    title = "New Leave Application", 
-                    body = "$userName ($rollNumber) applied for leave on ${java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault()).format(date)} for $slot."
-                )
-            } catch (e: Exception) {
-                Log.e("CalendarViewModel", "Error sending leave notification: ${e.message}")
+            if (leaveId != null) {
+                try {
+                    // Send notification to TTW Members
+                    val notificationData = mapOf(
+                        "relatedId" to leaveId,
+                        "title" to "New Leave Application",
+                        "body" to "$userName ($rollNumber) applied for leave on ${java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault()).format(date)} for $slot.",
+                        "targetRole" to "all",
+                        "targetWing" to "all",
+                        "targetTopics" to listOf("ttw", "ttw_user", "ttw_Admin", "ttw_admin"),
+                        "type" to "LEAVE_NOTIFICATION",
+                        "creatorId" to rollNumber,
+                        "isRead" to false,
+                        "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                    )
+                    com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("app_notifications").add(notificationData)
+                    
+                    // Trigger Vercel FCM Push
+                    com.phad.chatapp.utils.FcmSender.sendToTopic(
+                        topic = "ttw", 
+                        title = "New Leave Application", 
+                        body = "$userName ($rollNumber) applied for leave on ${java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault()).format(date)} for $slot."
+                    )
+                } catch (e: Exception) {
+                    Log.e("CalendarViewModel", "Error sending leave notification: ${e.message}")
+                }
             }
         }
     }

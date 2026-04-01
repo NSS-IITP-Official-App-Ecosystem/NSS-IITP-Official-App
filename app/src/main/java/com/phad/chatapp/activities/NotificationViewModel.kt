@@ -10,6 +10,20 @@ import com.phad.chatapp.models.NotificationItem
 import com.phad.chatapp.utils.SessionManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import androidx.lifecycle.viewModelScope
+import com.phad.chatapp.features.calendar.repository.CalendarRepository
+import com.phad.chatapp.features.calendar.models.EventStatus
+import com.phad.chatapp.features.calendar.models.LeaveApplication
+import java.text.SimpleDateFormat
+import java.util.Locale
+
+sealed class LeaveDialogState {
+    object Loading : LeaveDialogState()
+    data class AlreadyAccepted(val substitutedByName: String) : LeaveDialogState()
+    data class Pending(val leaveId: String, val studentName: String, val dateStr: String, val slot: String, val subject: String) : LeaveDialogState()
+    data class Error(val message: String) : LeaveDialogState()
+}
 
 class NotificationViewModel(application: Application) : AndroidViewModel(application) {
     private val db = FirebaseFirestore.getInstance()
@@ -35,6 +49,12 @@ class NotificationViewModel(application: Application) : AndroidViewModel(applica
 
     private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading
+    
+    // UI State for the click-to-accept leave flow
+    private val _leaveActionState = MutableStateFlow<LeaveDialogState?>(null)
+    val leaveActionState: StateFlow<LeaveDialogState?> = _leaveActionState
+    
+    private val calendarRepository = CalendarRepository()
 
     init {
         fetchNotifications()
@@ -137,5 +157,65 @@ class NotificationViewModel(application: Application) : AndroidViewModel(applica
             .addOnFailureListener { e ->
                 Log.e("NotificationViewModel", "Failed to delete notification", e)
             }
+    }
+    
+    fun dismissLeaveDialog() {
+        _leaveActionState.value = null
+    }
+
+    fun fetchLeaveStatusAndHandleClick(leaveId: String) {
+        _leaveActionState.value = LeaveDialogState.Loading
+        
+        db.collection("leave_applications").document(leaveId).get()
+            .addOnSuccessListener { doc ->
+                if (doc.exists()) {
+                    val status = doc.getString("status")
+                    val substitutedByName = doc.getString("substitutedByName") ?: ""
+                    
+                    if (status == EventStatus.ACCEPTED.toString() || substitutedByName.isNotEmpty()) {
+                        _leaveActionState.value = LeaveDialogState.AlreadyAccepted(substitutedByName)
+                    } else {
+                        // Pending
+                        val studentName = doc.getString("userName") ?: "Unknown"
+                        val subject = doc.getString("subject") ?: ""
+                        val slot = doc.getString("slot") ?: ""
+                        
+                        val dateTimestamp = doc.get("date") as? com.google.firebase.Timestamp
+                        val dateStr = if (dateTimestamp != null) {
+                            SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(dateTimestamp.toDate())
+                        } else {
+                            "Unknown Date"
+                        }
+                        
+                        _leaveActionState.value = LeaveDialogState.Pending(leaveId, studentName, dateStr, slot, subject)
+                    }
+                } else {
+                    _leaveActionState.value = LeaveDialogState.Error("Leave application no longer exists.")
+                }
+            }
+            .addOnFailureListener { e ->
+                _leaveActionState.value = LeaveDialogState.Error("Failed to fetch leave status: ${e.message}")
+            }
+    }
+    
+    fun acceptLeave(leaveId: String) {
+        val rollNum = sessionManager.fetchRollNumber() ?: ""
+        val userName = sessionManager.fetchUserName() ?: ""
+        
+        if (rollNum.isEmpty()) {
+            _leaveActionState.value = LeaveDialogState.Error("Your profile is incomplete. Cannot accept leave.")
+            return
+        }
+        
+        _leaveActionState.value = LeaveDialogState.Loading
+        viewModelScope.launch {
+            val success = calendarRepository.markLeaveAsSubstituted(leaveId, rollNum, userName)
+            if (success) {
+                // Done, close dialog
+                _leaveActionState.value = null
+            } else {
+                _leaveActionState.value = LeaveDialogState.Error("Failed to substitute class. It may have just been taken by someone else.")
+            }
+        }
     }
 }

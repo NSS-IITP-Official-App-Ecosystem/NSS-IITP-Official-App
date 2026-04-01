@@ -979,9 +979,9 @@ class CalendarTabFragment : Fragment() {
         
         lifecycleScope.launch {
             val repository = (viewModel as CalendarViewModel).getCalendarRepository()
-            val success = repository.applyForLeave(userId, displayName, rollNumber, date, slot, subject, school)
+            val leaveId = repository.applyForLeave(userId, displayName, rollNumber, date, slot, subject, school)
             
-            if (success) {
+            if (leaveId != null) {
                 Toast.makeText(requireContext(), "Leave application submitted!", Toast.LENGTH_SHORT).show()
                 (parentFragment as? CalendarFragment)?.notifyLeaveApplicationSubmitted()
             } else {
@@ -1045,9 +1045,9 @@ class CalendarTabFragment : Fragment() {
                 
                 lifecycleScope.launch {
                     val repository = (viewModel as CalendarViewModel).getCalendarRepository()
-                    val success = repository.applyForLeave(userId, displayName, rollNumber, date, slot, subject, school)
+                    val leaveId = repository.applyForLeave(userId, displayName, rollNumber, date, slot, subject, school)
                     
-                    if (success) {
+                    if (leaveId != null) {
                         Toast.makeText(requireContext(), "Leave application submitted!", Toast.LENGTH_SHORT).show()
                         (parentFragment as? CalendarFragment)?.notifyLeaveApplicationSubmitted()
                     } else {
@@ -1268,7 +1268,7 @@ class CalendarTabFragment : Fragment() {
         
         lifecycleScope.launch {
             val repository = (viewModel as CalendarViewModel).getCalendarRepository()
-            val success = repository.applyForLeave(
+            val leaveId = repository.applyForLeave(
                 userId = userId, 
                 userName = displayName, 
                 rollNumber = rollNum, 
@@ -1278,7 +1278,7 @@ class CalendarTabFragment : Fragment() {
                 school = originalLeave.school
             )
             
-            if (success) {
+            if (leaveId != null) {
                 Toast.makeText(requireContext(), "Leave application submitted!", Toast.LENGTH_SHORT).show()
                 (parentFragment as? CalendarFragment)?.notifyLeaveApplicationSubmitted()
             } else {
