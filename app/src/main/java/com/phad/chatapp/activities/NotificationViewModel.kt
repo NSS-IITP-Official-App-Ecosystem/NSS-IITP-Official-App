@@ -52,18 +52,27 @@ class NotificationViewModel(application: Application) : AndroidViewModel(applica
             "wing_" + wing.lowercase().replace(" ", "_").replace("&", "and")
         }.toSet()
 
-        val userTopics = setOf(
+        val baseTopics = mutableSetOf(
             "all",
             "nss",
-            "ttw",
             "nss_user",
-            "ttw_user",
             "nss_$userType",       // e.g. "nss_Admin", "nss_Student"
-            "ttw_$userType",       // e.g. "ttw_Admin", "ttw_Student"
             "nss_admin",           // lowercase variants
-            "ttw_admin",
             "user_$userId"         // personal topic for direct messages
-        ) + wingTopics
+        )
+        baseTopics.addAll(wingTopics)
+
+        // Only include Teaching Wing topics if the user is a TTW member or an Admin
+        if (sessionManager.getTeachingWing() || isAdmin) {
+            baseTopics.addAll(setOf(
+                "ttw",
+                "ttw_user",
+                "ttw_$userType",
+                "ttw_admin"
+            ))
+        }
+
+        val userTopics = baseTopics.toSet()
 
         Log.d("NotificationViewModel", "Fetching notifications for userId=$userId, userType=$userType, topics=$userTopics")
 
