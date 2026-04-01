@@ -121,23 +121,18 @@ class LoginActivity : AppCompatActivity() {
         // Check if user is already logged in
         if (sessionManager.isLoggedIn()) {
             val lastChoice = sessionManager.getLastInterfaceChoice()
-            if (lastChoice == "NSS") {
-                val intent = Intent(this, NssMainActivity::class.java)
-                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                startActivity(intent)
-                finish()
-                return
+            val nextIntent = if (lastChoice == "NSS") {
+                Intent(this, NssMainActivity::class.java)
             } else if (lastChoice == "TEACHING_WING") {
-                val intent = Intent(this, MainActivity::class.java)
-                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                startActivity(intent)
-                finish()
-                return
+                Intent(this, MainActivity::class.java)
             } else {
-                // Default fallback: MainActivity (or show choice screen if you want)
-                navigateToMainActivity()
-                return
+                Intent(this, MainActivity::class.java)
             }
+            nextIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            intent.extras?.let { nextIntent.putExtras(it) }
+            startActivity(nextIntent)
+            finish()
+            return
         }
         
         // DEBUG OPTION - Only available in debug builds

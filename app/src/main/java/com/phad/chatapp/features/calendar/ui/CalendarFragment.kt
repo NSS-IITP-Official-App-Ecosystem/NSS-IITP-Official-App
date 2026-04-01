@@ -1036,18 +1036,20 @@ class CalendarFragment : Fragment() {
             val userName = currentUser?.displayName ?: "Unknown"
             
             // Apply for leave
-            sharedViewModel.applyForLeave(
-                date = date,
-                userId = userId,
-                userName = userName,
-                slot = timeSlot,
-                subject = subject,
-                school = school,
-                rollNumber = rollNumber
-            )
-            
-            Toast.makeText(requireContext(), "Leave application submitted", Toast.LENGTH_SHORT).show()
-            dialog.dismiss()
+            lifecycleScope.launch {
+                sharedViewModel.applyForLeave(
+                    date = date,
+                    userId = userId,
+                    userName = userName,
+                    slot = timeSlot,
+                    subject = subject,
+                    school = school,
+                    rollNumber = rollNumber
+                )
+                
+                Toast.makeText(requireContext(), "Leave application submitted", Toast.LENGTH_SHORT).show()
+                dialog.dismiss()
+            }
         }
     }
 

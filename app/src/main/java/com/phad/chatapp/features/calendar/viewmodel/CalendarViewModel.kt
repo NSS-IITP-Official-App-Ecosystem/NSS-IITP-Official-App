@@ -187,46 +187,46 @@ class CalendarViewModel(
         return leaves
     }
     
-    fun applyForLeave(
-        date: Date,
+    suspend fun applyForLeave(
         userId: String,
         userName: String,
+        rollNumber: String,
+        date: Date,
         slot: String,
         subject: String,
-        school: String,
-        rollNumber: String
-    ) {
-        viewModelScope.launch {
-            val leaveId = repository.applyForLeave(userId, userName, rollNumber, date, slot, subject, school)
-            
-            if (leaveId != null) {
-                try {
-                    // Send notification to TTW Members
-                    val notificationData = mapOf(
-                        "relatedId" to leaveId,
-                        "title" to "New Leave Application",
-                        "body" to "$userName ($rollNumber) applied for leave on ${java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault()).format(date)} for $slot.",
-                        "targetRole" to "all",
-                        "targetWing" to "all",
-                        "targetTopics" to listOf("ttw", "ttw_user", "ttw_Admin", "ttw_admin"),
-                        "type" to "LEAVE_NOTIFICATION",
-                        "creatorId" to rollNumber,
-                        "isRead" to false,
-                        "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
-                    )
-                    com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("app_notifications").add(notificationData)
-                    
-                    // Trigger Vercel FCM Push
-                    com.phad.chatapp.utils.FcmSender.sendToTopic(
-                        topic = "ttw", 
-                        title = "New Leave Application", 
-                        body = "$userName ($rollNumber) applied for leave on ${java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault()).format(date)} for $slot."
-                    )
-                } catch (e: Exception) {
-                    Log.e("CalendarViewModel", "Error sending leave notification: ${e.message}")
-                }
+        school: String
+    ): String? {
+        val leaveId = repository.applyForLeave(userId, userName, rollNumber, date, slot, subject, school)
+        
+        if (leaveId != null) {
+            try {
+                // Send notification to TTW Members
+                val notificationData = mapOf(
+                    "relatedId" to leaveId,
+                    "title" to "New Leave Application",
+                    "body" to "$userName ($rollNumber) applied for leave on ${java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault()).format(date)} for $slot.",
+                    "targetRole" to "all",
+                    "targetWing" to "all",
+                    "targetTopics" to listOf("ttw", "ttw_user", "ttw_Admin", "ttw_admin"),
+                    "type" to "LEAVE_NOTIFICATION",
+                    "creatorId" to rollNumber,
+                    "isRead" to false,
+                    "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                )
+                com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("app_notifications").add(notificationData)
+                
+                // Trigger Vercel FCM Push
+                com.phad.chatapp.utils.FcmSender.sendToTopic(
+                    topic = "ttw", 
+                    title = "New Leave Application", 
+                    body = "$userName ($rollNumber) applied for leave on ${java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault()).format(date)} for $slot.",
+                    data = mapOf("relatedId" to leaveId, "type" to "LEAVE_NOTIFICATION")
+                )
+            } catch (e: Exception) {
+                Log.e("CalendarViewModel", "Error sending leave notification: ${e.message}")
             }
         }
+        return leaveId
     }
     
     // Update leave application status
@@ -256,7 +256,8 @@ class CalendarViewModel(
                         com.phad.chatapp.utils.FcmSender.sendToUser(
                             userId = leave.rollNumber,
                             title = "Leave Status Updated",
-                            body = "Your leave application for ${leave.date} has been marked as $statusStr"
+                            body = "Your leave application for ${leave.date} has been marked as $statusStr",
+                            data = mapOf("relatedId" to leaveId, "type" to "LEAVE_NOTIFICATION")
                         )
                     }
                 } catch (e: Exception) {
@@ -328,7 +329,8 @@ class CalendarViewModel(
                         com.phad.chatapp.utils.FcmSender.sendToUser(
                             userId = leave.rollNumber,
                             title = "Leave Substitution Accepted",
-                            body = "$substituteName ($rollNumber) has accepted to substitute your class on ${leave.date}."
+                            body = "$substituteName ($rollNumber) has accepted to substitute your class on ${leave.date}.",
+                            data = mapOf("relatedId" to leaveId, "type" to "LEAVE_NOTIFICATION")
                         )
                     }
                 } catch (e: Exception) {

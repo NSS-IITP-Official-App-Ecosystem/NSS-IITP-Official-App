@@ -34,6 +34,18 @@ class NotificationHistoryActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
+        // Handle auto-opening of notification dialogs if launched via FCM data payload
+        val autoOpenRelatedId = intent.getStringExtra("AUTO_OPEN_RELATED_ID") ?: intent.getStringExtra("relatedId")
+        val autoOpenType = intent.getStringExtra("AUTO_OPEN_TYPE") ?: intent.getStringExtra("type")
+        
+        android.util.Log.d("NotificationHistory", "onCreate intent extras: ${intent.extras?.keySet()?.joinToString()}")
+        android.util.Log.d("NotificationHistory", "Extracted autoOpenType: $autoOpenType, relatedId: $autoOpenRelatedId")
+        
+        if (autoOpenType == "LEAVE_NOTIFICATION" && !autoOpenRelatedId.isNullOrEmpty()) {
+            android.util.Log.d("NotificationHistory", "Auto-opening leave dialog for ID $autoOpenRelatedId")
+            viewModel.fetchLeaveStatusAndHandleClick(autoOpenRelatedId)
+        }
+        
         setContent {
             val notifications by viewModel.notifications.collectAsState()
             val isLoading by viewModel.isLoading.collectAsState()
@@ -111,7 +123,7 @@ fun NotificationHistoryScreen(
                 AlertDialog(
                     onDismissRequest = onDismissLeaveDialog,
                     title = { Text("Leave Taken") },
-                    text = { Text("This leave was already gracefully accepted by ${(leaveActionState as LeaveDialogState.AlreadyAccepted).substitutedByName}.") },
+                    text = { Text("This leave was already accepted by ${(leaveActionState as LeaveDialogState.AlreadyAccepted).substitutedByName}.") },
                     confirmButton = {
                         TextButton(onClick = onDismissLeaveDialog) { Text("OK") }
                     }

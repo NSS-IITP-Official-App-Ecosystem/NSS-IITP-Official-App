@@ -285,8 +285,10 @@ class ChatMessagingService : FirebaseMessagingService() {
         try {
             val sessionManager = SessionManager(context)
             if (sessionManager.fetchUserType().equals("Admin", ignoreCase = true)) {
-                Log.d(TAG, "User is admin, suppressing broadcast push notification.")
-                return
+                if (data["type"] != "LEAVE_NOTIFICATION") {
+                    Log.d(TAG, "User is admin, suppressing generic broadcast push notification.")
+                    return
+                }
             }
             
             val isTtw = sessionManager.getLastInterfaceChoice() == "TEACHING_WING"
@@ -295,9 +297,18 @@ class ChatMessagingService : FirebaseMessagingService() {
             val parentIntent = Intent(context, mainActivityClass).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
                 putExtra("open_notifications", true)
+                if (data.containsKey("relatedId")) {
+                    putExtra("AUTO_OPEN_RELATED_ID", data["relatedId"])
+                    putExtra("AUTO_OPEN_TYPE", data["type"])
+                }
             }
 
-            val intent = Intent(context, com.phad.chatapp.activities.NotificationHistoryActivity::class.java)
+            val intent = Intent(context, com.phad.chatapp.activities.NotificationHistoryActivity::class.java).apply {
+                if (data.containsKey("relatedId")) {
+                    putExtra("AUTO_OPEN_RELATED_ID", data["relatedId"])
+                    putExtra("AUTO_OPEN_TYPE", data["type"])
+                }
+            }
             
             val pendingIntent = android.app.TaskStackBuilder.create(context).run {
                 addNextIntent(parentIntent)

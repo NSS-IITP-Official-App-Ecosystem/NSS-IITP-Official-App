@@ -110,15 +110,29 @@ class MainActivity : AppCompatActivity() {
         Log.d("MainActivity", "after setupCustomNavigation")
 
         // If launched from a push notification tap, open notification history
-        if (intent.getBooleanExtra("open_notifications", false)) {
-            startActivity(Intent(this, NotificationHistoryActivity::class.java))
+        val shouldOpenNotifications = intent.getBooleanExtra("open_notifications", false) || 
+            intent.getStringExtra("type") == "LEAVE_NOTIFICATION" || 
+            intent.extras?.containsKey("relatedId") == true
+            
+        if (shouldOpenNotifications) {
+            val notifIntent = Intent(this, NotificationHistoryActivity::class.java).apply {
+                intent.extras?.let { putExtras(it) }
+            }
+            startActivity(notifIntent)
         }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (intent.getBooleanExtra("open_notifications", false)) {
-            startActivity(Intent(this, NotificationHistoryActivity::class.java))
+        val shouldOpenNotifications = intent.getBooleanExtra("open_notifications", false) || 
+            intent.getStringExtra("type") == "LEAVE_NOTIFICATION" || 
+            intent.extras?.containsKey("relatedId") == true
+            
+        if (shouldOpenNotifications) {
+            val notifIntent = Intent(this, NotificationHistoryActivity::class.java).apply {
+                intent.extras?.let { putExtras(it) }
+            }
+            startActivity(notifIntent)
         }
     }
     

@@ -978,8 +978,7 @@ class CalendarTabFragment : Fragment() {
         updateCalendarWithLeaves(availableLeaves)
         
         lifecycleScope.launch {
-            val repository = (viewModel as CalendarViewModel).getCalendarRepository()
-            val leaveId = repository.applyForLeave(userId, displayName, rollNumber, date, slot, subject, school)
+            val leaveId = (viewModel as CalendarViewModel).applyForLeave(userId, displayName, rollNumber, date, slot, subject, school)
             
             if (leaveId != null) {
                 Toast.makeText(requireContext(), "Leave application submitted!", Toast.LENGTH_SHORT).show()
@@ -1044,8 +1043,7 @@ class CalendarTabFragment : Fragment() {
                 updateCalendarWithLeaves(availableLeaves)
                 
                 lifecycleScope.launch {
-                    val repository = (viewModel as CalendarViewModel).getCalendarRepository()
-                    val leaveId = repository.applyForLeave(userId, displayName, rollNumber, date, slot, subject, school)
+                    val leaveId = (viewModel as CalendarViewModel).applyForLeave(userId, displayName, rollNumber, date, slot, subject, school)
                     
                     if (leaveId != null) {
                         Toast.makeText(requireContext(), "Leave application submitted!", Toast.LENGTH_SHORT).show()
@@ -1267,8 +1265,7 @@ class CalendarTabFragment : Fragment() {
         updateEventsForDate(originalLeave.date)
         
         lifecycleScope.launch {
-            val repository = (viewModel as CalendarViewModel).getCalendarRepository()
-            val leaveId = repository.applyForLeave(
+            val leaveId = (viewModel as CalendarViewModel).applyForLeave(
                 userId = userId, 
                 userName = displayName, 
                 rollNumber = rollNum, 
