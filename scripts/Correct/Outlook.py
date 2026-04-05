@@ -55,6 +55,32 @@ def update_student_email(roll_number, new_email, service_account_path):
     except auth.EmailAlreadyExistsError:
         print(f"❌ Error: The email '{new_email}' is already being used by another account.")
         return
+    except auth.UserNotFoundError:
+        print(f"  ⚠️ User not found in Auth. Creating a new Auth record to preserve data...")
+        try:
+            # Preserve the existing UID so any other collections relying on it won't break
+            auth.create_user(
+                uid=auth_uid,
+                email=new_email,
+                email_verified=True,
+                password=roll_number # Default password so they can log in
+            )
+            print(f"  ✅ Created new Auth record with existing UID: {auth_uid}.")
+        except auth.EmailAlreadyExistsError:
+            try:
+                conflicting_user = auth.get_user_by_email(new_email)
+                print(f"❌ Error: Cannot recreate user. The email '{new_email}' is registered to a DIFFERENT UID.")
+                print(f"  > This Firestore Document's UID: {auth_uid}")
+                print(f"  > The Existing Auth Record's UID: {conflicting_user.uid}")
+                print(f"\n💡 How to resolve this:")
+                print(f"   Option A: If {conflicting_user.uid} is the correct new UID, update the Firestore 'uid' field to {conflicting_user.uid}.")
+                print(f"   Option B: If {auth_uid} is the correct UID (and you want to keep old data), delete the user {conflicting_user.uid} from Firebase Auth manually and run this script again.")
+            except Exception as fetch_error:
+                print(f"❌ Error: The email already exists, but could not fetch details: {fetch_error}")
+            return
+        except Exception as create_error:
+            print(f"❌ Error creating new Auth record: {create_error}")
+            return
     except Exception as e:
         print(f"❌ Error updating Auth: {e}")
         return
@@ -76,7 +102,7 @@ def update_student_email(roll_number, new_email, service_account_path):
     print("\n✨ SUCCESS! Email updated in both systems.")
     print(f"User {roll_number} can now login with:")
     print(f"  Email: {new_email} (Internal check)")
-    print(f"  Pass:  [Their existing password]")
+    print(f"  Pass:  [Their existing password, or '{roll_number}' if newly created]")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Update user email in Firebase Auth and Firestore.')

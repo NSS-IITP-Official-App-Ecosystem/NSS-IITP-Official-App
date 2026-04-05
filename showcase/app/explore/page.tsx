@@ -258,10 +258,51 @@ export default function ExplorePage() {
   const navigateBack = useCallback(() => {
     if (history.length <= 1) return;
     setDirection(-1);
+
+    const tabs = ["nss-home", "nss-calendar", "nss-qr-scan", "nss-profile"];
+    if (tabs.includes(currentScreenId)) {
+      const idx = history.lastIndexOf("admin-dashboard");
+      if (idx !== -1) {
+        const newHistory = history.slice(0, idx + 1);
+        setHistory(newHistory);
+        setCurrentScreenId("admin-dashboard");
+        return;
+      } else {
+        setHistory([START_SCREEN_ID, "admin-dashboard"]);
+        setCurrentScreenId("admin-dashboard");
+        return;
+      }
+    }
+
+    const ttwScreens = [
+      "ttw-updates", "ttw-profile", "ttw-calender", "ttw-scheduling",
+      "class-groups", "ttw-options", "manage-students",
+      "teaching-slots", "teaching-slots-preset", "volunteers-preset",
+      "generate-schedule", "view-schedule", "edit-slots",
+      "add-free-groups", "day", "create-schedule",
+      "add-volunteers", "assignment-log", "assigned-volunteer", "unassigned-slot",
+    ];
+    const volScreens = [
+      "vol-updates", "vol-calender", "vol-QR", "vol-profile", "vol-day", "vol-ttw-home",
+      "vol-ttw-grp", "vol-ttw-cal", "vol-ttw-pro"
+    ];
+    
+    if (ttwScreens.includes(currentScreenId)) {
+      setHistory([START_SCREEN_ID, "admin-dashboard"]);
+      setCurrentScreenId("admin-dashboard");
+      return;
+    }
+    
+    if (volScreens.includes(currentScreenId)) {
+      setHistory([START_SCREEN_ID, "vol-log-in", "vol-dashboard"]);
+      setCurrentScreenId("vol-dashboard");
+      return;
+    }
+
     const newHistory = history.slice(0, -1);
     setHistory(newHistory);
     setCurrentScreenId(newHistory[newHistory.length - 1]);
-  }, [history]);
+  }, [history, currentScreenId]);
 
   if (!currentScreen) return null;
 
