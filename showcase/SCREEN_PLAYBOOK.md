@@ -273,21 +273,6 @@ If the PREVIOUS screen's hotspot was pointing to a placeholder ID, verify it now
 
 ## 📋 SCREEN NAVIGATION GRAPH
 
-This tracks which screens connect to which. Update as screens are added.
-
-```
-first-screen ✅
-├── [Log In As User] → nss-home
-└── [Log In As Admin] → admin-home
-
-nss-home (TODO)
-├── [Calendar tab] → nss-calendar
-├── [QR tab] → nss-qr-scan
-└── [Profile tab] → nss-profile
-
-nss-calendar (TODO)
-└── [...buttons...] → ???
-
 admin-dashboard (Phase 1 Complete)
 ├── [NSS Wing Button] → nss-profile
 └── [Teaching & Tech Wing Button] → teaching-tech-wing
