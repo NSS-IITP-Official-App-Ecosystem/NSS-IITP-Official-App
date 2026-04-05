@@ -293,6 +293,12 @@ export default function ExplorePage() {
       return;
     }
     
+    if (currentScreenId === "vol-day") {
+      setHistory([START_SCREEN_ID, "vol-log-in", "vol-dashboard", "vol-calender"]);
+      setCurrentScreenId("vol-calender");
+      return;
+    }
+
     if (volScreens.includes(currentScreenId)) {
       setHistory([START_SCREEN_ID, "vol-log-in", "vol-dashboard"]);
       setCurrentScreenId("vol-dashboard");

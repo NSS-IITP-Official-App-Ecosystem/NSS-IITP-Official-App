@@ -39,46 +39,46 @@ export const screens: Record<string, AppScreen> = {
     screenshot: "/screenshots/first-screen.jpg",
     pageName: "Role Selection Screen",
     pageDescription:
-      'The entry gateway offering dedicated pathways for <span class="highlight_text">NSS volunteers</span> and <span class="highlight_text">admins</span>. Each route triggers completely separate <span class="highlight_text">validation schemes</span> and interface flows.',
+      'The entry gateway offering dedicated pathways for <span class="highlight_text">volunteers</span> and <span class="highlight_text">admins</span>. The screen automatically bypasses itself for returning users by reading the <span class="highlight_text">cached interface choice</span> from local memory.',
     featureTitle: "Welcome Gate",
     hookLine: "Two doors. Two worlds. One mission.",
     techTags: [
-      { emoji: "🔐", label: "Firebase Auth", color: "var(--accent-amber)" },
-      { emoji: "🗄️", label: "Cloud Firestore", color: "var(--accent-cyan)" },
-      { emoji: "🎨", label: "Jetpack Compose", color: "var(--accent-blue)" },
-      { emoji: "👤", label: "Role-Based Access", color: "var(--accent-purple)" },
+      { emoji: "📦", label: "ViewBinding", color: "var(--accent-purple)" },
+      { emoji: "💾", label: "SharedPreferences", color: "var(--accent-amber)" },
+      { emoji: "🔀", label: "Android Intents", color: "var(--accent-cyan)" },
+      { emoji: "🎬", label: "XML Animations", color: "var(--accent-rose)" },
     ],
     builtBy: "Ankesh",
     features: [
       {
-        icon: "🔤",
-        title: "Case-Insensitive Roll Lookup",
-        description:
-          "Checks all 4 department case permutations (e.g. CS/Cs/cS/cs) against Firestore, preventing lockouts due to database typos.",
-      },
-      {
-        icon: "🛡️",
-        title: "3-Layer Authentication",
-        description:
-          "Validates roll number and institute email before hitting Firebase Auth, stopping partially-guessed credential attacks.",
-      },
-      {
-        icon: "🚦",
-        title: "Role Gate Enforcement",
-        description:
-          "Verifies Firestore `userType` against the selected path. Mismatched roles are blocked instantly before token issuance.",
-      },
-      {
         icon: "💾",
-        title: "Persistent Role Memory",
+        title: "Skip the Gate",
         description:
-          "Caches the chosen role locally so returning users skip this gateway and land directly on their dashboard.",
+          "Once logged in, the app remembers your role. The next time you open the app, you skip this screen entirely and land right on your dashboard.",
       },
       {
-        icon: "🔗",
-        title: "Silent Device Binding",
+        icon: "🕵️",
+        title: "Secret Debug Menu",
         description:
-          "Generates an RSA key in Android Keystore post-login to silently bind the physical device to the user's account.",
+          "A hidden long-press gesture on the background opens a developer bypass mode, allowing QA testers to skip Firebase Auth when testing offline.",
+      },
+      {
+        icon: "🎭",
+        title: "Dynamic Form Injection",
+        description:
+          "Both buttons launch the exact same LoginFormActivity class, passing a LOGIN_TYPE Intent extra that dynamically reconfigures the next screen's validation logic.",
+      },
+      {
+        icon: "🧱",
+        title: "Module Isolation Routing",
+        description:
+          "Returning users are routed to entirely separate host activities (NssMainActivity vs MainActivity) based on their token, enforcing a hard context boundary.",
+      },
+      {
+        icon: "🎬",
+        title: "Custom Activity Transitions",
+        description:
+          "Replaces the default Android screen switch with an overridePendingTransition sequence, stacking a custom XML slide-up animation over a system fade-out.",
       },
     ],
     hotspots: [
@@ -162,22 +162,48 @@ export const screens: Record<string, AppScreen> = {
   "vol-log-in": {
     id: "vol-log-in",
     screenshot: "/screenshots/vol-log-in.jpg",
-    pageName: "Volunteer Login Screen",
+    pageName: "Volunteer Form",
     pageDescription:
-      'The dedicated sign-in form for <span class="highlight_text">NSS volunteers</span>. Enforces authentication and checks the volunteer role before granting access.',
+      'The primary authentication interface for students, featuring a <span class="highlight_text">dynamic bottom-curve UI</span> that seamlessly shifts to accommodate the system keyboard. Validation enforces strict role boundaries against a unified <span class="highlight_text">Firestore architecture</span> before issuing secure tokens.',
     featureTitle: "Volunteer Gate",
     hookLine: "Verify identity. Access your dashboard.",
     techTags: [
       { emoji: "🔐", label: "Firebase Auth", color: "var(--accent-amber)" },
       { emoji: "🗄️", label: "Cloud Firestore", color: "var(--accent-cyan)" },
+      { emoji: "⌨️", label: "ViewTreeObserver", color: "var(--accent-purple)" },
+      { emoji: "🔑", label: "Android Keystore", color: "var(--accent-emerald)" },
     ],
-    builtBy: "Both",
+    builtBy: "Ankesh",
     features: [
       {
-        icon: "🚦",
-        title: "Role Gate",
+        icon: "🌊",
+        title: "Liquid Keyboard Shift",
         description:
-          "Verifies user roles before allowing entry into the volunteer-specific module.",
+          "A custom ViewTreeObserver listener watches the system keyboard. When the keyboard deploys, the bottom curved container gracefully animates upward to ensure the login button is never fully obscured.",
+      },
+      {
+        icon: "✉️",
+        title: "Inbox-Free Password Reset",
+        description:
+          "Forget trying to remember your exact institute email. Enter your roll number, and the backend silently maps it to your hidden Outlook address to trigger a secure Firebase password reset.",
+      },
+      {
+        icon: "🔤",
+        title: "Fault-Tolerant Lookup",
+        description:
+          "Programmatically generates all 4 string case permutations of a user's department code (e.g. CS/Cs/cS/cs), avoiding silent Firestore lookup failures due to user input typos.",
+      },
+      {
+        icon: "🚦",
+        title: "Pre-Flight Permission Gates",
+        description:
+          "Validates the incoming user token against a unified Firestore user document before calling Firebase Auth, physically isolating the admin interface from curious volunteers.",
+      },
+      {
+        icon: "🔗",
+        title: "Device Context Binding",
+        description:
+          "Completes a cryptographic backend nonce challenge using the Android Keystore during the login sequence, securely binding the user's physical hardware signature to their profile.",
       },
     ],
     hotspots: [
@@ -197,36 +223,48 @@ export const screens: Record<string, AppScreen> = {
   "admin-dashboard": {
     id: "admin-dashboard",
     screenshot: "/screenshots/logged-in-as-admin.jpg",
-    pageName: "Admin Dashboard",
+    pageName: "Routing Gateway",
     pageDescription:
-      'The unified command center for <span class="highlight_text">administrative tasks</span>. It features a robust caching system for updates and provides tools to <span class="highlight_text">create, edit, and batch-manage</span> announcements efficiently.',
-    featureTitle: "Command Center",
-    hookLine: "Complete control. Optimized delivery.",
+      'A conditional interceptor screen that only appears if the user has overlapping roles. It acts as a <span class="highlight_text">dynamic router</span>, letting dual-role members choose their active workspace while strictly enforcing <span class="highlight_text">state clearance</span>.',
+    featureTitle: "Path Selector",
+    hookLine: "Dual access. Zero confusion.",
     techTags: [
-      { emoji: "🗄️", label: "Cloud Firestore", color: "var(--accent-cyan)" },
-      { emoji: "📎", label: "Media Sharing", color: "var(--accent-blue)" },
-      { emoji: "🔄", label: "Kotlin Coroutines", color: "var(--accent-emerald)" },
-      { emoji: "🎨", label: "Jetpack Compose", color: "var(--accent-blue)" },
+      { emoji: "🔀", label: "Android Intents", color: "var(--accent-cyan)" },
+      { emoji: "📦", label: "ViewBinding", color: "var(--accent-purple)" },
+      { emoji: "💾", label: "SessionManager", color: "var(--accent-amber)" },
+      { emoji: "🏁", label: "Intent Flags", color: "var(--accent-rose)" },
     ],
     builtBy: "Ankesh",
     features: [
       {
-        icon: "💾",
-        title: "Post Caching System",
+        icon: "🧬",
+        title: "Conditional Injection",
         description:
-          "Implements a local caching mechanism with a discrete TTL to reduce unnecessary Firestore reads upon app initialization.",
+          "This screen isn't hardcoded into the standard login flow. It is dynamically injected only if the Firestore profile reveals the user possesses dual-wing privileges.",
       },
       {
-        icon: "⚡",
-        title: "Concurrent Media Upload",
+        icon: "🧹",
+        title: "Task Stack Clearing",
         description:
-          "Leverages Kotlin Coroutines to dispatch asynchronous background jobs, ensuring images and documents upload simultaneously.",
+          "Uses FLAG_ACTIVITY_CLEAR_TASK flags upon selection to completely wipe the Android backstack, mathematically ensuring users cannot 'swipe back' into the wrong module.",
+      },
+      {
+        icon: "💾",
+        title: "Persistent Choice Memory",
+        description:
+          "Whichever wing you select is instantly logged into local memory. The next time you open the application, this choice automatically fast-tracks you into your preferred environment.",
       },
       {
         icon: "🎛️",
-        title: "Conditional Post Layouts",
+        title: "Dynamic View Culling",
         description:
-          "Dynamically toggles input fields depending on post type (Text vs Reel) and enforces rigorous pre-flight validation.",
+          "If a user somehow navigates here without explicit Teaching credentials, the layout automatically self-censors by hiding restricted pathways before the screen is even rendered.",
+      },
+      {
+        icon: "🚀",
+        title: "Native Inflation Speed",
+        description:
+          "Intentionally bypasses Jetpack Compose in favor of legacy XML Android ViewBinding, shaving off inflation milliseconds for this critical transition gateway.",
       },
     ],
     hotspots: [
@@ -237,7 +275,7 @@ export const screens: Record<string, AppScreen> = {
         width: 87,
         height: 7.6,
         targetScreenId: "nss-home",
-        label: "NSS Wing",
+        label: "NSS",
       },
       {
         shape: "rect",
@@ -256,21 +294,48 @@ export const screens: Record<string, AppScreen> = {
   "vol-dashboard": {
     id: "vol-dashboard",
     screenshot: "/screenshots/logged-in-as-admin.jpg",
-    pageName: "Interface Selection",
+    pageName: "Routing Gateway",
     pageDescription:
-      'The unified interface selection screen for <span class="highlight_text">users</span>. Volunteers pick which wing they wish to participate in.',
-    featureTitle: "Wing Selection",
-    hookLine: "Choose your focus. Make an impact.",
+      'A conditional interceptor screen that only appears if the user has overlapping roles. It acts as a <span class="highlight_text">dynamic router</span>, letting dual-role members choose their active workspace while strictly enforcing <span class="highlight_text">state clearance</span>.',
+    featureTitle: "Path Selector",
+    hookLine: "Dual access. Zero confusion.",
     techTags: [
-      { emoji: "🗄️", label: "Cloud Firestore", color: "var(--accent-cyan)" },
-      { emoji: "🎨", label: "Jetpack Compose", color: "var(--accent-blue)" },
+      { emoji: "🔀", label: "Android Intents", color: "var(--accent-cyan)" },
+      { emoji: "📦", label: "ViewBinding", color: "var(--accent-purple)" },
+      { emoji: "💾", label: "SessionManager", color: "var(--accent-amber)" },
+      { emoji: "🏁", label: "Intent Flags", color: "var(--accent-rose)" },
     ],
     builtBy: "Ankesh",
     features: [
       {
-        icon: "🔌",
-        title: "Dynamic Navigation",
-        description: "Routes users to specialized environments based on their selection.",
+        icon: "🧬",
+        title: "Conditional Injection",
+        description:
+          "This screen isn't hardcoded into the standard login flow. It is dynamically injected only if the Firestore profile reveals the user possesses dual-wing privileges.",
+      },
+      {
+        icon: "🧹",
+        title: "Task Stack Clearing",
+        description:
+          "Uses FLAG_ACTIVITY_CLEAR_TASK flags upon selection to completely wipe the Android backstack, mathematically ensuring users cannot 'swipe back' into the wrong module.",
+      },
+      {
+        icon: "💾",
+        title: "Persistent Choice Memory",
+        description:
+          "Whichever wing you select is instantly logged into local memory. The next time you open the application, this choice automatically fast-tracks you into your preferred environment.",
+      },
+      {
+        icon: "🎛️",
+        title: "Dynamic View Culling",
+        description:
+          "If a user somehow navigates here without explicit Teaching credentials, the layout automatically self-censors by hiding restricted pathways before the screen is even rendered.",
+      },
+      {
+        icon: "🚀",
+        title: "Native Inflation Speed",
+        description:
+          "Intentionally bypasses Jetpack Compose in favor of legacy XML Android ViewBinding, shaving off inflation milliseconds for this critical transition gateway.",
       },
     ],
     hotspots: [
@@ -281,7 +346,7 @@ export const screens: Record<string, AppScreen> = {
         width: 87,
         height: 7.6,
         targetScreenId: "vol-updates",
-        label: "NSS Wing",
+        label: "NSS",
       },
       {
         shape: "rect",
@@ -304,15 +369,35 @@ export const screens: Record<string, AppScreen> = {
     featureTitle: "Volunteer Feed",
     hookLine: "Stay in the loop.",
     techTags: [
-      { emoji: "📰", label: "Live Feed", color: "var(--accent-cyan)" },
+      { emoji: "⚛️", label: "Jetpack Compose", color: "var(--accent-cyan)" },
       { emoji: "🗄️", label: "Cloud Firestore", color: "var(--accent-emerald)" },
     ],
-    builtBy: "Eshan",
+    builtBy: "Ankesh",
     features: [
       {
-        icon: "📰",
-        title: "Real-Time Announcements",
-        description: "Posts and documents are streamed from Firestore in real time, ensuring volunteers always see the latest updates without manual refreshes.",
+        icon: "⚡",
+        title: "Smart Data Caching",
+        description: "Features a custom 5-minute TTL cache engine leveraging SharedPreferences to drastically cut Firestore read volumes while enabling near-instant optimistic UI loads upon cold starts.",
+      },
+      {
+        icon: "⚛️",
+        title: "Compose Interoperability",
+        description: "Demonstrates modern Android migration via a ComposeView bridge, rendering the complex, reactive feed using declarative Jetpack Compose within a traditional legacy Fragment.",
+      },
+      {
+        icon: "👆",
+        title: "Seamless Media Splitting",
+        description: "Intelligently parses a single unified Firestore dataset and splits it into separated 'Text' and 'Reels' feeds, wrapped in a smooth HorizontalPager swipe gesture.",
+      },
+      {
+        icon: "🛡️",
+        title: "Defensive Type Parsing",
+        description: "Employs strict nullable assertions and manual type casting when deserializing NoSQL payloads to safely merge legacy text posts with new rich multi-media arrays without crashing.",
+      },
+      {
+        icon: "📱",
+        title: "Density-Adaptive Styling",
+        description: "Monitors screen height via Compose's LocalConfiguration to dynamically scale typography and adjust layout padding boundaries, ensuring optimal readability across varying hardware sizes.",
       },
     ],
     hotspots: [
@@ -351,19 +436,39 @@ export const screens: Record<string, AppScreen> = {
     id: "vol-calender",
     screenshot: "/screenshots/vol-calender.jpg",
     pageName: "Volunteer Calendar",
-    pageDescription: 'A shared calendar view for NSS volunteers showing upcoming <span class="highlight_text">events, drives, and camp schedules</span> synced from the admin portal.',
-    featureTitle: "Event Calendar",
-    hookLine: "Never miss a camp.",
+    pageDescription: 'A dynamic, interactive calendar grid that unifies past attendance history and future schedule drops based on <span class="highlight_text">real-time Firestore event triggers</span> and strict wing-access rules.',
+    featureTitle: "Dynamic Attendance Grid",
+    hookLine: "Your schedule, color-coded.",
     techTags: [
-      { emoji: "📅", label: "Calendar View", color: "var(--accent-cyan)" },
-      { emoji: "🗄️", label: "Cloud Firestore", color: "var(--accent-emerald)" },
+      { emoji: "⚛️", label: "Jetpack Compose", color: "var(--accent-purple)" },
+      { emoji: "🎨", label: "State-Driven UI", color: "var(--accent-emerald)" },
     ],
     builtBy: "Eshan",
     features: [
       {
-        icon: "📅",
-        title: "Event Scheduling",
-        description: "Displays all upcoming NSS events and camps synced in real time from Firestore, ensuring volunteers always have the latest schedule.",
+        icon: "⚛️",
+        title: "Compose Interoperability",
+        description: "Uses a ComposeView bridge to render complex, adaptive Jetpack Compose calendar grids and pull-to-refresh logic inside a traditional XML Fragment architecture.",
+      },
+      {
+        icon: "🛡️",
+        title: "Context-Aware Filtering",
+        description: "Enforces strict local filtering by matching the volunteer's assigned wings against Firebase event targets, preventing irrelevant schedule clutter.",
+      },
+      {
+        icon: "🎨",
+        title: "Dynamic Status Encoding",
+        description: "Evaluates complex attendance history arrays on the fly to calculate cell background hex colors (e.g., Green for Present, Red for Absent) for instant data visualization.",
+      },
+      {
+        icon: "🏗️",
+        title: "Unified Role Architecture",
+        description: "Reuses QRAttendanceViewModel and Admin Dialogs to let event managers create schedule drops directly within the calendar feed, keeping the Fragment DRY while handling diverse privileges.",
+      },
+      {
+        icon: "⚡",
+        title: "Coroutine-Powered Sync",
+        description: "Implements Kotlin structured concurrency via refreshScope.launch paired with Compose's PullToRefreshBox to safely run non-blocking Network calls and gracefully bypass local caching.",
       },
     ],
     hotspots: [
@@ -411,19 +516,29 @@ export const screens: Record<string, AppScreen> = {
     id: "vol-day",
     screenshot: "/screenshots/vol-day.jpg",
     pageName: "Day Schedule View",
-    pageDescription: 'A detailed daily agenda for NSS volunteers showing all <span class="highlight_text">events, timings, and locations</span> for a selected calendar date.',
-    featureTitle: "Day View",
-    hookLine: "Your day, planned.",
+    pageDescription: 'A detailed dynamic dialog showing chronologically sorted events for a selected calendar date with <span class="highlight_text">device-adaptive layout bounds</span> and interactive data truncation.',
+    featureTitle: "Day Agenda Dialog",
+    hookLine: "Your day, perfectly bounded.",
     techTags: [
-      { emoji: "📅", label: "Calendar View", color: "var(--accent-cyan)" },
-      { emoji: "🗄️", label: "Cloud Firestore", color: "var(--accent-emerald)" },
+      { emoji: "⚛️", label: "Jetpack Compose", color: "var(--accent-purple)" },
+      { emoji: "📱", label: "Adaptive Layout", color: "var(--accent-blue)" },
     ],
     builtBy: "Eshan",
     features: [
       {
-        icon: "📅",
-        title: "Day-Level Event Detail",
-        description: "Drills down from the monthly calendar to show all events scheduled for a specific day, with timings and event type badges.",
+        icon: "⏱️",
+        title: "Dynamic String Time Sorting",
+        description: "Parses wild-card time strings locally at runtime to calculate Long epoch bounds, ensuring chronologically accurate list sorting while gracefully dropping fallback errors to the stack bottom.",
+      },
+      {
+        icon: "📱",
+        title: "Device-Adaptive Bounding",
+        description: "Utilizes Compose's intrinsic widthIn(min = 340.dp, max = 500.dp) modifiers to ensure the dialog maintains readable margins across both compact mobile displays and expansive tablet form-factors.",
+      },
+      {
+        icon: "✂️",
+        title: "Interactive Data Truncation",
+        description: "Implements a dynamic 'Show more' expansion system using Compose state hoisting (isDescriptionExpanded) to preserve strict layout max-heights and prevent accidental scroll overflow.",
       },
     ],
     hotspots: [
@@ -462,19 +577,41 @@ export const screens: Record<string, AppScreen> = {
     id: "vol-QR",
     screenshot: "/screenshots/vol-QR.jpg",
     pageName: "QR Attendance Scanner",
-    pageDescription: 'A <span class="highlight_text">QR-code scanning interface</span> that lets volunteers mark attendance at NSS events instantly through their device camera.',
+    pageDescription: 'A <span class="highlight_text">server-verified QR scanner</span> that gates attendance marking behind Play Integrity checks, multi-layer client validation, and real-time Firestore session confirmation — making attendance spoofing structurally impossible.',
     featureTitle: "QR Check-In",
     hookLine: "Scan in. Get counted.",
     techTags: [
-      { emoji: "📷", label: "Camera API", color: "var(--accent-purple)" },
+      { emoji: "📷", label: "CameraX", color: "var(--accent-purple)" },
+      { emoji: "🛡️", label: "Play Integrity", color: "var(--accent-amber)" },
       { emoji: "🗄️", label: "Cloud Firestore", color: "var(--accent-emerald)" },
+      { emoji: "🤖", label: "ML Kit", color: "var(--accent-cyan)" },
     ],
     builtBy: "Eshan",
     features: [
       {
-        icon: "📷",
-        title: "QR-Based Attendance",
-        description: "Volunteers scan a unique event QR code to instantly record their attendance in Firestore, eliminating manual sign-in sheets.",
+        icon: "🛡️",
+        title: "Play Integrity Gating",
+        description: "Blocks QR scanning until Google's Play Integrity API confirms the app is unmodified and running on a non-rooted device. A 24-hour SharedPreferences cache bypasses the network round-trip on crowded-event re-opens.",
+      },
+      {
+        icon: "🤖",
+        title: "ML Kit Analysis Pipeline",
+        description: "Feeds CameraX ImageAnalysis frames into ML Kit BarcodeScanning at 100ms intervals via STRATEGY_KEEP_ONLY_LATEST backpressure, with a 1-second same-code debounce preventing duplicate submissions from a held camera.",
+      },
+      {
+        icon: "🔐",
+        title: "5-Layer Client Validation",
+        description: "QRSecurityValidator runs a sequential gauntlet: format check → 10-second timestamp window → SHA-256 signature verification → ConcurrentHashMap replay-attack cache → 10-scans-per-minute rate limiter — all before touching Firestore.",
+      },
+      {
+        icon: "📍",
+        title: "Dual-Permission Location Guard",
+        description: "Requires CAMERA and ACCESS_FINE_LOCATION before the scanner activates. If GPS is disabled, a blocking dialog redirects to system settings. Location refreshes every 10 seconds via onResume/onPause lifecycle hooks.",
+      },
+      {
+        icon: "⚡",
+        title: "Instant Camera Exit UX",
+        description: "On valid QR detection, the CameraX provider unbinds and the PreviewView is hidden immediately. A DimmedHomeBackground overlay replaces the feed during Firestore writes, eliminating the jarring black-screen flash.",
       },
     ],
     hotspots: [
@@ -513,19 +650,41 @@ export const screens: Record<string, AppScreen> = {
     id: "vol-profile",
     screenshot: "/screenshots/vol-profile.jpg",
     pageName: "Volunteer Profile",
-    pageDescription: 'A personal dashboard showing each volunteer\'s <span class="highlight_text">attendance history, hour count, and wing assignment</span> — with Excel export support for reports.',
+    pageDescription: 'A personal dashboard with <span class="highlight_text">real-time semester stats, wing-aware attendance scoring, and admin-grade Excel export</span> — all derived from a live Firestore listener without a single page refresh.',
     featureTitle: "Your NSS Record",
     hookLine: "Your impact, quantified.",
     techTags: [
-      { emoji: "📊", label: "Hour Analytics", color: "var(--accent-amber)" },
-      { emoji: "🗄️", label: "Cloud Firestore", color: "var(--accent-emerald)" },
+      { emoji: "📡", label: "Realtime Firestore", color: "var(--accent-amber)" },
+      { emoji: "📊", label: "Semester Analytics", color: "var(--accent-purple)" },
+      { emoji: "📁", label: "Apache POI (xlsx)", color: "var(--accent-emerald)" },
+      { emoji: "🏷️", label: "Wing Logic", color: "var(--accent-cyan)" },
     ],
     builtBy: "Eshan",
     features: [
       {
-        icon: "📊",
-        title: "Attendance Analytics",
-        description: "Aggregates each volunteer's event participation and hour count in real time, with admin tools to export Excel matrices.",
+        icon: "📡",
+        title: "Real-Time Stat Listener",
+        description: "ProfileRepository opens a Firestore snapshotListener on the student's users document. Any attendance event write — even by an admin on a different device — propagates instantly to the profile card via StateFlow without a manual refresh.",
+      },
+      {
+        icon: "📅",
+        title: "Semester-Aware Stats Engine",
+        description: "AttendanceStatsCalculator partitions events by date into Sem 1 (Jul–Dec 10) and Sem 2 (Dec 11–Jun). It computes earned hours, deducts mandatory-event penalties, and formats them as 'earned/total' strings for both semesters independently.",
+      },
+      {
+        icon: "🏷️",
+        title: "Wing-Aware Mandatory Penalties",
+        description: "When a volunteer misses a mandatory event, the calculator checks wing membership using set intersection. Deductions only apply if the event's wing list overlaps the volunteer's assigned wings — preventing cross-wing false penalties.",
+      },
+      {
+        icon: "📁",
+        title: "Multi-Sheet Apache POI Export",
+        description: "Admin export builds an .xlsx workbook with Apache POI: one 'Open & DNC Events' summary sheet and individual sheets per wing (Chetna, Environmental, Prayatna, Rural Dev, TTW). A ClaimResult resolver prevents double-counting hours across sheets.",
+      },
+      {
+        icon: "🔎",
+        title: "Per-Semester Event Drilldown",
+        description: "Tapping Sem 1 or Sem 2 hours launches EventsListActivity with a semester intent parameter, filtering the student's attended events and generating a dated CSV export via FileProvider — scoped to the NSS_Reports subdirectory.",
       },
     ],
     hotspots: [
@@ -565,27 +724,92 @@ export const screens: Record<string, AppScreen> = {
         targetScreenId: "vol-ttw-home",
         label: "Switch to TTW",
       },
+      {
+        shape: "rect",
+        x: 70.8,
+        y: 44.5,
+        width: 20.1,
+        height: 8.1,
+        targetScreenId: "vol-sem2",
+        label: "Sem 2",
+      },
     ],
     laserTheme: "light",
+  },
+
+  "vol-sem2": {
+    id: "vol-sem2",
+    screenshot: "/screenshots/vol-sem2.jpg",
+    pageName: "Semester 2 Events",
+    pageDescription: 'A <span class="highlight_text">semester-partitioned event drilldown</span> showing each attended event\'s hours for Dec 11 – Jun, with mandatory-event penalty deductions and a CSV export scoped to NSS_Reports.',
+    featureTitle: "Per-Semester View",
+    hookLine: "Your event history, cleanly partitioned.",
+    techTags: [
+      { emoji: "📅", label: "Date Partitioning", color: "var(--accent-purple)" },
+      { emoji: "📁", label: "CSV Export", color: "var(--accent-emerald)" },
+      { emoji: "🏷️", label: "Wing Logic", color: "var(--accent-amber)" },
+    ],
+    builtBy: "Eshan",
+    features: [
+      {
+        icon: "📅",
+        title: "Semester Date Partitioning",
+        description: "AttendanceStatsCalculator maps each event's date string to Sem 1 (Jul–Dec 10) or Sem 2 (Dec 11–Jun) by parsing month and day. This view shows only Sem 2 events — including attendance from cross-wing open events that overlap the window.",
+      },
+      {
+        icon: "🏷️",
+        title: "Wing-Aware Penalty Deductions",
+        description: "For mandatory events the student missed, negative hours are deducted only if the event's wing set intersects the student's assigned wings. This prevents penalising volunteers for events that were irrelevant to their cohort.",
+      },
+      {
+        icon: "📁",
+        title: "FileProvider CSV Export",
+        description: "Tapping export generates a timestamped CSV in Downloads/NSS_Reports/ via ExcelGenerator, writing event name, date, and hours per row. The file is shared through a FileProvider URI, keeping private storage paths off the system clipboard.",
+      },
+    ],
+    hotspots: [],
+    laserTheme: "dark",
   },
 
   "vol-ttw-home": {
     id: "vol-ttw-home",
     screenshot: "/screenshots/vol-ttw-home.jpg",
     pageName: "TTW Volunteer View",
-    pageDescription: 'The <span class="highlight_text">Teaching & Tech Wing</span> dedicated feed for volunteers. Find teaching schedules, technical assignments, and wing-specific announcements here.',
+    pageDescription: 'The <span class="highlight_text">Teaching & Tech Wing\'s isolated update feed</span> — backed by a dual-layer 5-minute TTL cache, a rich post composer, and a cross-wing posting bridge to the NSS interface.',
     featureTitle: "TTW Feed",
     hookLine: "Teach, Code, Inspire.",
     techTags: [
-      { emoji: "🎓", label: "Specialized Feed", color: "var(--accent-purple)" },
-      { emoji: "🗄️", label: "Cloud Firestore", color: "var(--accent-emerald)" },
+      { emoji: "⚡", label: "5-min TTL Cache", color: "var(--accent-amber)" },
+      { emoji: "🗄️", label: "Firestore Feed", color: "var(--accent-emerald)" },
+      { emoji: "🎬", label: "Reel Embeds", color: "var(--accent-purple)" },
+      { emoji: "☁️", label: "Cloudinary CDN", color: "var(--accent-cyan)" },
     ],
-    builtBy: "Eshan",
+    builtBy: "Ankesh",
     features: [
       {
-        icon: "🎓",
-        title: "Wing-Specific Updates",
-        description: "Separates generic NSS announcements from specialized TTW tasks, giving volunteers clear context on their immediate teaching or tech duties.",
+        icon: "⚡",
+        title: "Dual-Layer 5-Min TTL Cache",
+        description: "On open, the feed checks a SharedPreferences timestamp against a 5-minute TTL. If valid, it serves an in-memory CachedUpdate list instantly. Only on expiry does it fire the Firestore query — a manual pull-to-refresh forces both layers to clear.",
+      },
+      {
+        icon: "🗄️",
+        title: "Wing-Isolated Firestore Feed",
+        description: "Updates are fetched exclusively from the 'ttw_updates' collection, ordered by timestamp descending with a limit of 20. This hard isolation means TTW volunteers never see unrelated NSS wing content — and vice versa.",
+      },
+      {
+        icon: "🎬",
+        title: "Dual Post-Type Composer",
+        description: "Admins choose between a Text post (title, body, multi-image, multi-doc, external links) or a Reel post (Instagram URL embed). Switching type toggles input field visibility and independently validates the Instagram URL format before publishing.",
+      },
+      {
+        icon: "🌐",
+        title: "Cross-Wing Posting Bridge",
+        description: "A 'Also post to NSS Interface' checkbox sets updateType=3 on the Firestore document. The NSS home feed query reads all updateType values — so a single admin action simultaneously publishes to both TTW and NSS audiences.",
+      },
+      {
+        icon: "☁️",
+        title: "Cloudinary Multi-Upload Pipeline",
+        description: "Attachments are uploaded sequentially to Cloudinary with per-item progress reported directly to a dialog ProgressBar. On edit, a ClipData multi-select picker pre-fills existing Remote URLs and tracks deleted attachments for precise cleanup.",
       },
     ],
     hotspots: [
@@ -624,20 +848,42 @@ export const screens: Record<string, AppScreen> = {
   "vol-ttw-grp": {
     id: "vol-ttw-grp",
     screenshot: "/screenshots/vol-ttw-grp.jpg",
-    pageName: "TTW Class Groups",
-    pageDescription: 'A structured list of <span class="highlight_text">teaching class groups</span> assigned to the volunteer, detailing location, syllabus, and student demographics.',
-    featureTitle: "Teaching Assignments",
-    hookLine: "Your classrooms, organized.",
+    pageName: "TTW Class Communities",
+    pageDescription: 'Auto-generated <span class="highlight_text">teaching chat groups</span> based on timetable assignments, enabling instant coordination between teaching partners and admins.',
+    featureTitle: "Teaching Communities",
+    hookLine: "Auto-synced class chats.",
     techTags: [
-      { emoji: "🏫", label: "Group Sorting", color: "var(--accent-purple)" },
-      { emoji: "🗄️", label: "Cloud Firestore", color: "var(--accent-emerald)" },
+      { emoji: "🔄", label: "Two-Way Sync", color: "var(--accent-emerald)" },
+      { emoji: "🗄️", label: "Cloud Firestore", color: "var(--accent-purple)" },
+      { emoji: "🛡️", label: "Admin Permissions", color: "var(--accent-amber)" },
+      { emoji: "👥", label: "Cross-Collection", color: "var(--accent-cyan)" },
     ],
-    builtBy: "Eshan",
+    builtBy: "Aditya Gupta",
     features: [
       {
-        icon: "🏫",
-        title: "Assigned Class Groups",
-        description: "Volunteers can view their specific teaching assignments, separating their responsibilities from the broader NSS cohort.",
+        icon: "🔄",
+        title: "Two-Way Subject Sync Engine",
+        description: "SubjectAssignmentService runs a two-phase sync. Phase 1 pushes pendingAdd/pendingRemove mutations from group documents directly into the global subjectAssignments collection. Phase 2 acts as a reverse sync, ensuring group participants perfectly mirror the timetable assignments.",
+      },
+      {
+        icon: "👥",
+        title: "Cross-Collection Hydration",
+        description: "When a new participant is added to a class community, the sync engine queries the 'Student' collection using volunteerRollNo to fetch 'Name' and 'NSS_gro' attributes, fully hydrating the new subjectAssignment map entry before writing.",
+      },
+      {
+        icon: "🗄️",
+        title: "Subject-Isolated Feeds",
+        description: "ChatFragment loads communities via GroupRepository by querying the 'groups' collection where the 'participants' array contains the current user's roll number. Subject groups are marked with 'subject: true' to invoke the sync engine.",
+      },
+      {
+        icon: "🛡️",
+        title: "Role-Based Visibility",
+        description: "The Chat UI enforces student/admin boundaries at the query level. While admins can search and query the entire 'users' collection, volunteers execute a bounded query (`whereEqualTo(\"userType\", \"Admin\")`) to restrict visibility only to authority figures and their own class communities.",
+      },
+      {
+        icon: "🔍",
+        title: "Unified Search Architecture",
+        description: "The search bar merges two async queries—one for Users and one for Groups—into a unified ChatSearchResult. Results are alphanumerically sorted and intelligently bounded by the user's role and existing community memberships.",
       },
     ],
     hotspots: [
@@ -675,20 +921,42 @@ export const screens: Record<string, AppScreen> = {
   "vol-ttw-cal": {
     id: "vol-ttw-cal",
     screenshot: "/screenshots/vol-ttw-cal.jpg",
-    pageName: "TTW Volunteer Calendar",
-    pageDescription: 'A specialized calendar view for <span class="highlight_text">Teaching & Tech Wing</span> volunteers showing upcoming teaching slots, tech meetings, and wing-specific deadlines.',
-    featureTitle: "TTW Event Schedule",
-    hookLine: "Never miss a class.",
+    pageName: "TTW Substitute Scheduler",
+    pageDescription: 'A dual-role calendar system managing <span class="highlight_text">Leave Substitutions and Schedule Syncing</span> enforced through real-time Firestore triggers and role-based gating.',
+    featureTitle: "Dynamic Scheduling",
+    hookLine: "Automated peer-to-peer substitutions.",
     techTags: [
-      { emoji: "📅", label: "Calendar View", color: "var(--accent-cyan)" },
+      { emoji: "🏛️", label: "MVVM Pattern", color: "var(--accent-amber)" },
+      { emoji: "🔄", label: "Leave Pipeline", color: "var(--accent-purple)" },
       { emoji: "🗄️", label: "Cloud Firestore", color: "var(--accent-emerald)" },
+      { emoji: "🔐", label: "Role Gating", color: "var(--accent-cyan)" },
     ],
     builtBy: "Eshan",
     features: [
       {
-        icon: "📅",
-        title: "Wing-Specific Scheduling",
-        description: "Filters out generic NSS events to focus purely on the schedule for teaching assignments and technical wing meetings.",
+        icon: "🔄",
+        title: "Leave Substitution Pipeline",
+        description: "Implements a state machine for teaching absences (PENDING → APPROVED → ACCEPTED/SUBSTITUTED). Approved leaves become available 'virtual classes' that other volunteers can accept to cover the slot.",
+      },
+      {
+        icon: "🛡️",
+        title: "Role-Context Action Menus",
+        description: "The UI dynamically generates Date Action dialogs based on `_currentUserRole`. Admins receive management actions (Add Teaching, Approve Leaves, Delete), while Volunteers see actions like 'Accept Class' and 'Book Slot'.",
+      },
+      {
+        icon: "⏳",
+        title: "Temporal Gating API",
+        description: "Enforces strict chronological boundaries using `Calendar.getInstance()`. Selecting any date before 'today' triggers a read-only fallback mode, blocking all event creation, modifications, and leave substitutions.",
+      },
+      {
+        icon: "🛑",
+        title: "Substitution Verification",
+        description: "When accepting a substitution class, the logic compares the input roll number against the original `LeaveApplication.rollNumber`, throwing a validation error if the applicant attempts to accept their own leave.",
+      },
+      {
+        icon: "🏛️",
+        title: "MVVM Architecture",
+        description: "Built strictly on the MVVM pattern. The `CalendarFragment` observes `CalendarViewModel` via LiveData, which coordinates with `CalendarRepository` and `CalendarSessionManager` to execute Firestore mutations effortlessly.",
       },
     ],
     hotspots: [
@@ -726,20 +994,42 @@ export const screens: Record<string, AppScreen> = {
   "vol-ttw-pro": {
     id: "vol-ttw-pro",
     screenshot: "/screenshots/vol-ttw-pro.jpg",
-    pageName: "TTW Volunteer Profile",
-    pageDescription: 'A personalized dashboard tracking a volunteer\'s <span class="highlight_text">teaching hours, completed tech tasks, and assignment history</span> within TTW.',
-    featureTitle: "TTW Analytics",
-    hookLine: "Your TTW impact, quantified.",
+    pageName: "TTW Impact Dashboard",
+    pageDescription: 'A unified profile view syncing <span class="highlight_text">centralized volunteer hours</span> with a detailed, real-time drilldown of wing-specific technical sessions and community events.',
+    featureTitle: "Historical Drilldown",
+    hookLine: "Complete visibility into your engagements.",
     techTags: [
-      { emoji: "📊", label: "Hour Analytics", color: "var(--accent-amber)" },
+      { emoji: "⚡", label: "Coroutines", color: "var(--accent-amber)" },
+      { emoji: "🔄", label: "PullToRefresh", color: "var(--accent-purple)" },
       { emoji: "🗄️", label: "Cloud Firestore", color: "var(--accent-emerald)" },
+      { emoji: "🔐", label: "State Hoisting", color: "var(--accent-cyan)" },
     ],
-    builtBy: "Eshan",
+    builtBy: "Ankesh",
     features: [
       {
-        icon: "📊",
-        title: "Wing-Specific Analytics",
-        description: "Tracks attendance and active responsibilities specifically tailored to the duties of the Teaching & Technical Wing.",
+        icon: "🔐",
+        title: "Strict Content Gating",
+        description: "Engineered a client-side visibility filter that validates the current user's roll number against the document's attendees array, ensuring volunteers only see their authorized TTW sessions.",
+      },
+      {
+        icon: "🔄",
+        title: "Pull-to-Refresh Architecture",
+        description: "Implemented the modern Material3 PullToRefreshBox API with state hoisting to seamlessly force-sync the local UI cache with live Firestore TTW data on demand.",
+      },
+      {
+        icon: "🔍",
+        title: "Multi-Parameter Filter Engine",
+        description: "Constructed a dynamic Compose sequence filter processing 5+ real-time constraints (Regex Search, Date Range, Wing Designation, Mandatory Flags) inside a remember block for zero-lag UI updates.",
+      },
+      {
+        icon: "⚡",
+        title: "Coroutines Data Layer",
+        description: "Utilized coroutineScope.launch tied to the Compose lifecycle to safely execute network calls on background threads, preventing UI lockups during large TTW history retrievals.",
+      },
+      {
+        icon: "🛡️",
+        title: "Secure Admin Overrides",
+        description: "Integrated an encrypted SessionManager state that identifies isAdmin flags globally, instantly overriding local visibility constraints to grant core team members full auditing access.",
       },
     ],
     hotspots: [
@@ -749,8 +1039,8 @@ export const screens: Record<string, AppScreen> = {
         y: 3.4,
         width: 8.5,
         height: 3.3,
-        targetScreenId: "vol-ttw-home",
-        label: "Edit Profile",
+        targetScreenId: "vol-updates",
+        label: "Switch to NSS",
       },
       {
         shape: "rect",
@@ -1493,10 +1783,10 @@ export const screens: Record<string, AppScreen> = {
     featureTitle: "Feed Systems",
     hookLine: "Zero lag. Instant updates.",
     techTags: [
-      { emoji: "⚡", label: "Live Feed", color: "var(--accent-emerald)" },
-      { emoji: "💾", label: "Smart Cache", color: "var(--accent-blue)" },
-      { emoji: "☁️", label: "Cloud Uploads", color: "var(--accent-orange)" },
-      { emoji: "👥", label: "Role Sync", color: "var(--accent-purple)" },
+      { emoji: "⚛️", label: "Jetpack Compose", color: "var(--accent-cyan)" },
+      { emoji: "☁️", label: "Async Media", color: "var(--accent-orange)" },
+      { emoji: "🛡️", label: "Role Base UI", color: "var(--accent-emerald)" },
+      { emoji: "🗄️", label: "Cloud Firestore", color: "var(--accent-purple)" },
     ],
     builtBy: "Ankesh",
     features: [
@@ -1517,6 +1807,18 @@ export const screens: Record<string, AppScreen> = {
         title: "Dual Content Syndication",
         description:
           "Uses Firebase Auth role checking to dynamically render 'Cross-Post' options, allowing dual-role administrators to broadcast to multiple wings simultaneously.",
+      },
+      {
+        icon: "🛡️",
+        title: "Role-Based UI Injections",
+        description:
+          "Dynamically overlays floating action menus for 'Create Update' and 'Batch Delete'—alongside a hidden notification panel—strictly when the user's view state verifies admin properties.",
+      },
+      {
+        icon: "📱",
+        title: "Immersive Detail Expansion",
+        description:
+          "Programmatically intercepts the hardware BackHandler and triggers bottom navigation culling when a post is expanded, giving maximum screen real estate to the UpdateDetailScreen.",
       },
     ],
     hotspots: [
@@ -1964,49 +2266,6 @@ export const screens: Record<string, AppScreen> = {
         label: "Calendar",
       },
       {
-        shape: "rect",
-        x: 56.3,
-        y: 93.0,
-        width: 7.3,
-        height: 3.8,
-        targetScreenId: "ttw-scheduling",
-        label: "History",
-      },
-    ],
-    laserTheme: "light",
-  },
-
-  "manage-students": {
-    id: "manage-students",
-    screenshot: "/screenshots/manage-students.jpg",
-    pageName: "Manage Students",
-    pageDescription: 'Admin panel to <span class="highlight_text">view, add, and configure</span> TTW student volunteers — including group assignments, class counts, and subject preference mappings.',
-    featureTitle: "Student Registry",
-    hookLine: "Full roster control.",
-    techTags: [
-      { emoji: "👥", label: "Volunteer Roster", color: "var(--accent-purple)" },
-      { emoji: "🗄️", label: "Firestore CRUD", color: "var(--accent-cyan)" },
-    ],
-    builtBy: "Eshan",
-    features: [
-      {
-        icon: "👥",
-        title: "Roster Management",
-        description: "Admins can browse all registered TTW volunteers, update group assignments, and adjust class counts — with every change persisted to the 'ttwStudents' Firestore collection in real time.",
-      },
-    ],
-    hotspots: [
-      {
-        shape: "rect",
-        x: 26.3,
-        y: 93.1,
-        width: 7.3,
-        height: 3.5,
-        targetScreenId: "ttw-updates",
-        label: "Home",
-      },
-      {
-        shape: "rect",
         x: 35.7,
         y: 92.9,
         width: 8.3,
