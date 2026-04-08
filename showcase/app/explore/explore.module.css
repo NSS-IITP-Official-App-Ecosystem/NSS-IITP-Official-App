@@ -454,7 +454,7 @@
   box-shadow: 0 0 20px rgba(139, 92, 246, 0.3), inset 0 0 15px rgba(139, 92, 246, 0.1);
 }
 
-/* Tooltip */
+/* Tooltip — default: appears ABOVE the hotspot */
 .hotspot_tooltip {
   position: absolute;
   top: -36px;
@@ -474,6 +474,7 @@
   box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
 }
 
+/* Arrow — triangle below label, points down */
 .hotspot_tooltip::after {
   content: '';
   position: absolute;
@@ -489,6 +490,60 @@
 .hotspot:hover .hotspot_tooltip {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
+}
+
+/* tooltipSide="left" — label appears to the LEFT of the hotspot */
+.hotspot_tooltip_left {
+  left: auto;
+  top: 50%;
+  right: calc(100% + 10px);
+  transform: translateY(-50%) translateX(4px);
+}
+
+.hotspot_tooltip_left::after {
+  bottom: auto;
+  left: auto;
+  top: 50%;
+  right: -5px;
+  transform: translateY(-50%);
+  width: 0;
+  height: 8px;
+  background: transparent;
+  clip-path: none;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 5px solid #8b5cf6;
+}
+
+.hotspot:hover .hotspot_tooltip_left {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
+}
+
+/* tooltipSide="right" — label appears to the RIGHT of the hotspot */
+.hotspot_tooltip_right {
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%) translateX(-4px);
+}
+
+.hotspot_tooltip_right::after {
+  bottom: auto;
+  top: 50%;
+  left: -5px;
+  transform: translateY(-50%);
+  width: 0;
+  height: 8px;
+  background: transparent;
+  clip-path: none;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-right: 5px solid #8b5cf6;
+}
+
+.hotspot:hover .hotspot_tooltip_right {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
 }
 
 /* ====== RIGHT PANEL ====== */

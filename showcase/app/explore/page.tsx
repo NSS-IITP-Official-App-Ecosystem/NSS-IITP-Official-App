@@ -139,6 +139,7 @@ function shapeToString(s: FittedShape): string {
 function HotspotEl({ hotspot, onClick }: { hotspot: Hotspot; onClick: () => void }) {
   if (hotspot.shape === "circle" && hotspot.cx != null && hotspot.cy != null && hotspot.r != null) {
     const d = hotspot.r * 2;
+    const tooltipClass = `${styles.hotspot_tooltip}${hotspot.tooltipSide === "left" ? ` ${styles.hotspot_tooltip_left}` : hotspot.tooltipSide === "right" ? ` ${styles.hotspot_tooltip_right}` : ""}`;
     return (
       <div
         className={styles.hotspot}
@@ -151,11 +152,12 @@ function HotspotEl({ hotspot, onClick }: { hotspot: Hotspot; onClick: () => void
         }}
         onClick={onClick}
       >
-        <span className={styles.hotspot_tooltip}>{hotspot.label}</span>
+        <span className={tooltipClass}>{hotspot.label}</span>
       </div>
     );
   }
   // rect (default)
+  const tooltipClass = `${styles.hotspot_tooltip}${hotspot.tooltipSide === "left" ? ` ${styles.hotspot_tooltip_left}` : hotspot.tooltipSide === "right" ? ` ${styles.hotspot_tooltip_right}` : ""}`;
   return (
     <div
       className={styles.hotspot}
@@ -167,7 +169,7 @@ function HotspotEl({ hotspot, onClick }: { hotspot: Hotspot; onClick: () => void
       }}
       onClick={onClick}
     >
-      <span className={styles.hotspot_tooltip}>{hotspot.label}</span>
+      <span className={tooltipClass}>{hotspot.label}</span>
     </div>
   );
 }
@@ -287,6 +289,97 @@ export default function ExplorePage() {
       "vol-ttw-grp", "vol-ttw-cal", "vol-ttw-pro"
     ];
     
+    if (currentScreenId === "teaching-slots") {
+      setHistory([START_SCREEN_ID, "admin-dashboard", "ttw-scheduling"]);
+      setCurrentScreenId("ttw-scheduling");
+      return;
+    }
+
+    if (currentScreenId === "edit-slots") {
+      setHistory([START_SCREEN_ID, "admin-dashboard", "ttw-scheduling", "teaching-slots"]);
+      setCurrentScreenId("teaching-slots");
+      return;
+    }
+
+    if (currentScreenId === "teaching-slots-preset") {
+      setHistory([START_SCREEN_ID, "admin-dashboard", "ttw-scheduling"]);
+      setCurrentScreenId("ttw-scheduling");
+      return;
+    }
+
+    if (currentScreenId === "volunteers-preset") {
+      setHistory([START_SCREEN_ID, "admin-dashboard", "ttw-scheduling"]);
+      setCurrentScreenId("ttw-scheduling");
+      return;
+    }
+
+    if (currentScreenId === "add-free-groups") {
+      setHistory([START_SCREEN_ID, "admin-dashboard", "ttw-scheduling", "volunteers-preset"]);
+      setCurrentScreenId("volunteers-preset");
+      return;
+    }
+
+    if (currentScreenId === "generate-schedule") {
+      setHistory([START_SCREEN_ID, "admin-dashboard", "ttw-scheduling"]);
+      setCurrentScreenId("ttw-scheduling");
+      return;
+    }
+
+    if (currentScreenId === "view-schedule") {
+      setHistory([START_SCREEN_ID, "admin-dashboard", "ttw-scheduling"]);
+      setCurrentScreenId("ttw-scheduling");
+      return;
+    }
+
+    if (currentScreenId === "schedule") {
+      setHistory([START_SCREEN_ID, "admin-dashboard", "ttw-scheduling", "view-schedule"]);
+      setCurrentScreenId("view-schedule");
+      return;
+    }
+
+    if (currentScreenId === "create-schedule") {
+      setHistory([START_SCREEN_ID, "admin-dashboard", "ttw-scheduling", "generate-schedule"]);
+      setCurrentScreenId("generate-schedule");
+      return;
+    }
+
+    if (currentScreenId === "assigned-volunteer") {
+      setHistory([START_SCREEN_ID, "admin-dashboard", "ttw-scheduling", "generate-schedule", "create-schedule"]);
+      setCurrentScreenId("create-schedule");
+      return;
+    }
+
+    if (currentScreenId === "add-volunteers") {
+      setHistory([START_SCREEN_ID, "admin-dashboard", "ttw-scheduling", "generate-schedule", "create-schedule"]);
+      setCurrentScreenId("create-schedule");
+      return;
+    }
+
+    if (currentScreenId === "assignment-log") {
+      setHistory([START_SCREEN_ID, "admin-dashboard", "ttw-scheduling", "generate-schedule", "create-schedule"]);
+      setCurrentScreenId("create-schedule");
+      return;
+    }
+
+    if (currentScreenId === "unassigned-slot") {
+      setHistory([START_SCREEN_ID, "admin-dashboard", "ttw-scheduling", "generate-schedule", "create-schedule"]);
+      setCurrentScreenId("create-schedule");
+      return;
+    }
+
+    if (currentScreenId === "day") {
+      setHistory([START_SCREEN_ID, "admin-dashboard", "ttw-scheduling", "teaching-slots-preset"]);
+      setCurrentScreenId("teaching-slots-preset");
+      return;
+    }
+
+
+    if (currentScreenId === "attendance-record") {
+      setHistory([START_SCREEN_ID, "admin-dashboard", "nss-qr-scan"]);
+      setCurrentScreenId("nss-qr-scan");
+      return;
+    }
+
     if (ttwScreens.includes(currentScreenId)) {
       setHistory([START_SCREEN_ID, "admin-dashboard"]);
       setCurrentScreenId("admin-dashboard");
