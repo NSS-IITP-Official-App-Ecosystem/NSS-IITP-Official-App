@@ -9,6 +9,7 @@ export interface Hotspot {
   r?: number;
   targetScreenId: string;
   label: string;
+  tooltipSide?: "left" | "right";
 }
 
 export interface FeatureHighlight {
@@ -27,7 +28,7 @@ export interface AppScreen {
   featureTitle: string;
   hookLine: string;
   techTags: { emoji: string; label: string; color?: string }[];
-  builtBy: "Eshan" | "Ankesh" | "Both";
+  builtBy: "Eshan" | "Ankesh" | "Both" | "Aditya Gupta";
   features: FeatureHighlight[];
   hotspots: Hotspot[];
   laserTheme?: "light" | "dark" | "mixed";
@@ -1076,36 +1077,48 @@ export const screens: Record<string, AppScreen> = {
   "nss-profile": {
     id: "nss-profile",
     screenshot: "/screenshots/nss-profile.jpg",
-    pageName: "Volunteer Profile",
+    pageName: "Command Center",
     pageDescription:
-      'A personalized hub for <span class="highlight_text">attendance tracking</span> and event history. It dynamically aggregates user statistics and allows admins to generate comprehensive <span class="highlight_text">Excel matrix reports</span> natively.',
+      'A highly specialized routing and analytical terminal (<code>NssProfileFragment</code>) for Administrators. It bypasses student views to fetch global <span class="highlight_text">meta telemetry</span>, unlocks restricted ledgers, and compiles raw Firestore document arrays into comprehensive <span class="highlight_text">Excel matrix spreadsheets</span> entirely client-side.',
     featureTitle: "Data Hub",
-    hookLine: "Your impact, quantified.",
+    hookLine: "Analyze globally. Export locally.",
     techTags: [
-      { emoji: "📊", label: "Hour Analytics", color: "var(--accent-amber)" },
-      { emoji: "🔄", label: "Real-time Sync", color: "var(--accent-emerald)" },
-      { emoji: "🗄️", label: "Firestore", color: "var(--accent-cyan)" },
-      { emoji: "📎", label: "Excel Export", color: "var(--accent-blue)" },
+      { emoji: "🧮", label: "Client Compute", color: "var(--accent-amber)" },
+      { emoji: "📊", label: "Matrix Compilation", color: "var(--accent-emerald)" },
+      { emoji: "⚖️", label: "Wing-Aware Penalties", color: "var(--accent-cyan)" },
+      { emoji: "🔐", label: "Route Gating", color: "var(--accent-purple)" },
     ],
     builtBy: "Ankesh",
     features: [
       {
-        icon: "⚡",
-        title: "Real-time Attendance Sync",
+        icon: "📡",
+        title: "Global Meta Telemetry",
         description:
-          "Maintains an active Firestore listener powered by Kotlin Coroutines to automatically push attendance recalculations without requiring manual refreshes.",
+          "Overrides the student listener logic by securely awaiting the `meta/statistics` singleton document, instantly resolving the operational scale by injecting `totalEvents` across the UI readouts.",
       },
       {
-        icon: "🧮",
-        title: "On-Device Excel Generation",
+        icon: "🖨️",
+        title: "Native Excel Compilation Engine",
         description:
-          "Compiles a complete attendance matrix from thousands of Firestore documents into a formatted .xls file directly on the phone, bypassing cloud function costs.",
+          "Bypasses expensive Cloud Functions by utilizing a native `ExcelGenerator` to parse thousands of Firestore cross-collection documents directly into styled .xls workbook files entirely on the mobile CPU.",
+      },
+      {
+        icon: "⚖️",
+        title: "Wing-Aware Penalty Resolution",
+        description:
+          "Cross-references `user.wings` against specific `event.wings` to apply targeted absentee penalties (`-negativeHours`) specifically for mandatory occurrences during matrix compilation processing.",
+      },
+      {
+        icon: "🔐",
+        title: "Role-Gated Routing",
+        description:
+          "Restricts administrative functions using synchronous checks against `SessionManager.fetchUserType()`, securely intercepting and routing verified traffic to the restricted `EventHistoryActivity`.",
       },
       {
         icon: "🧬",
-        title: "Hybrid Cache Resolution",
+        title: "Cross-Collection Aggregation",
         description:
-          "Instantly renders the UI using cached generic SessionManager traits before asynchronously overwriting them with enhanced Firestore profile data.",
+          "Stitches massive relational loops by mapping `NSS_Events_Attendence` schemas to `users` arrays (gated by userType 'Student'), asynchronously building a holistic, sorted data map for immediate administrative review.",
       },
     ],
     hotspots: [
@@ -1143,7 +1156,7 @@ export const screens: Record<string, AppScreen> = {
         width: 7.7,
         height: 3.0,
         targetScreenId: "ttw-updates",
-        label: "Settings",
+        label: "Switch to TTW",
       },
       {
         shape: "rect",
@@ -1194,26 +1207,42 @@ export const screens: Record<string, AppScreen> = {
   "nss-profile-right-action": {
     id: "nss-profile-right-action",
     screenshot: "/screenshots/more-option.jpg",
-    pageName: "System Settings",
-    pageDescription: 'A centralized control panel providing access to <span class="highlight_text">account preferences</span>, system cache clearing, privacy configurations, and active session termination processes.',
-    featureTitle: "Control Panel",
-    hookLine: "Manage preferences. Control sessions.",
+    pageName: "NSS Administration",
+    pageDescription: 'An elevated administrative panel providing rapid access to <span class="highlight_text">core system utilities</span>, including attendance matrix compilation, historical event logs, and secure session management.',
+    featureTitle: "System Utilities",
+    hookLine: "Extended admin tools. Real-time actions.",
     techTags: [
-      { emoji: "⚙️", label: "Preferences DataStore", color: "var(--accent-amber)" },
-      { emoji: "🧹", label: "Cache Management", color: "var(--accent-cyan)" },
-      { emoji: "🔐", label: "Session Termination", color: "var(--accent-emerald)" },
+      { emoji: "📊", label: "ExcelGenerator", color: "var(--accent-emerald)" },
+      { emoji: "⚖️", label: "Penalty Engine", color: "var(--accent-amber)" },
+      { emoji: "🔐", label: "Session Termination", color: "var(--accent-rose)" },
+      { emoji: "🔀", label: "Context Rendering", color: "var(--accent-cyan)" },
     ],
-    builtBy: "Ankesh",
+    builtBy: "Eshan",
     features: [
       {
-        icon: "🔐",
-        title: "Secure Session Revocation",
-        description: "Executes a robust sign-out sequence that proactively clears localized SessionManager states, purges SharedPreferences caches, and gracefully severs active WebSocket listeners to ensure complete termination of access tokens.",
+        icon: "📊",
+        title: "Matrix Generation Engine",
+        description: "Initiates the ExcelGenerator script to compile cross-collection Firestore data into a structured .xlsx spreadsheet ledger that is downloaded directly to local storage.",
       },
       {
-        icon: "⚙️",
-        title: "Preferences Persistence",
-        description: "Interacts natively with Android's secure DataStore API to instantly commit application-wide accessibility and thematic preferences without dropping frames.",
+        icon: "⚖️",
+        title: "Attendance Penalty Engine",
+        description: "During Excel generation the script dynamically checks users.eventsList against NSS_Events_Attendence, automatically applying negative hours to students who missed a mandatory event matching their wing.",
+      },
+      {
+        icon: "📅",
+        title: "Historical Event Retrieval",
+        description: "Routes administrative users to the chronological event history log, enabling targeted 5-axis filtering of past NSS activities and attendance records.",
+      },
+      {
+        icon: "🔀",
+        title: "Context-Aware Rendering",
+        description: "Dynamically configures action visibility and selectively displays the Event History and Export Attendance utilities only if the current user possesses isAdmin privileges in the active NSS interface.",
+      },
+      {
+        icon: "🔐",
+        title: "Robust Session Lifecycle",
+        description: "Executes a secure authentication termination lifecycle utilizing Intent.FLAG_ACTIVITY_CLEAR_TASK to destroy the activity stack alongside clearing standard Firebase authentication sessions.",
       }
     ],
     hotspots: [
@@ -1246,6 +1275,106 @@ export const screens: Record<string, AppScreen> = {
       }
     ],
     laserTheme: "mixed",
+  },
+
+  "nss-event-history": {
+    id: "nss-event-history",
+    screenshot: "/screenshots/event-history.jpg",
+    pageName: "Event History Log",
+    pageDescription: 'A searchable archive of all <span class="highlight_text">closed NSS events</span>, powered by a 5-axis filter pipeline. Admins can also <span class="highlight_text">resurrect past events</span> back to live status directly from this screen.',
+    featureTitle: "Closed Event Archive",
+    hookLine: "Query the past. Reactivate on demand.",
+    techTags: [
+      { emoji: "🔍", label: "Multi-Predicate Filter", color: "var(--accent-cyan)" },
+      { emoji: "📅", label: "Material3 DatePicker", color: "var(--accent-amber)" },
+      { emoji: "🏗️", label: "AttendanceViewModel", color: "var(--accent-purple)" },
+      { emoji: "♻️", label: "PullToRefreshBox", color: "var(--accent-emerald)" },
+    ],
+    builtBy: "Eshan",
+    features: [
+      {
+        icon: "🔬",
+        title: "5-Axis Filter Pipeline",
+        description:
+          "Every filter operation runs five independent named predicates simultaneously — search, date range, wing, mandatory flag, and attendee visibility — all chained inside a single `remember(closedEvents, searchQuery, fromDate, toDate, selectedWing, mandatoryOnly)` block for zero-redundancy recomputation.",
+      },
+      {
+        icon: "♻️",
+        title: "Event Resurrection",
+        description:
+          "The 'Make Live' button on every card triggers `viewModel.makeEventLive(event)` followed by a forced `loadEvents(true)` refresh — effectively pulling a closed event back into the active QR session pool without any server-side function.",
+      },
+      {
+        icon: "📅",
+        title: "Dual-Format Date Parser",
+        description:
+          "The date range filter parses event timestamps with a two-stage fallback: it first tries the `dd MMM yyyy` display format, then falls back to ISO `yyyy-MM-dd` — silently absorbing both parse failures to prevent list crashes from malformed legacy records.",
+      },
+      {
+        icon: "🎨",
+        title: "Mandatory Amber Tinting",
+        description:
+          "Cards automatically switch their container background to `Color(0xFFFFFDE7)` whenever `event.isMandatory` is true — giving administrators an instant, at-a-glance visual distinction without needing to open any detail view.",
+      },
+      {
+        icon: "🪪",
+        title: "Document ID Name Extraction",
+        description:
+          "Event names are decoded directly from Firestore document IDs (format: `day_month_event_name`) by splitting on `_`, dropping the first two segments (day + month), and rejoining the rest — a compact parser that avoids a redundant display name field entirely.",
+      },
+    ],
+    hotspots: [],
+    laserTheme: "mixed",
+  },
+
+  "nss-faq": {
+    id: "nss-faq",
+    screenshot: "/screenshots/faq.jpg",
+    pageName: "FAQ Management",
+    pageDescription: 'A full <span class="highlight_text">live-editing CMS</span> for the app\'s help content — admins can drill into a 3-level tree of sections, subsections, and Q&A pairs, with <span class="highlight_text">in-place CRUD</span> backed by a real-time Firestore flow.',
+    featureTitle: "Live Help CMS",
+    hookLine: "Edit the docs. Ship the truth.",
+    techTags: [
+      { emoji: "🌳", label: "Tree Navigation", color: "var(--accent-emerald)" },
+      { emoji: "📡", label: "Firestore Flow", color: "var(--accent-purple)" },
+      { emoji: "🗂️", label: "Tab Auto-Select", color: "var(--accent-cyan)" },
+      { emoji: "🔄", label: "Dual StateFlow", color: "var(--accent-amber)" },
+    ],
+    builtBy: "Ankesh",
+    features: [
+      {
+        icon: "🌳",
+        title: "Universal Tree Cursor",
+        description:
+          "A single `FaqNode` data class represents any level of the FAQ hierarchy — ROOT_SECTION, SUBSECTION, or QUESTION — via a `FaqNodeType` discriminated union, with optional `section`, `subSection`, and `question` payloads providing full context at each depth without needing separate model types.",
+      },
+      {
+        icon: "📚",
+        title: "Stack-Driven Drill-Down",
+        description:
+          "`AdminFaqUiState` holds a `navigationStack: List<FaqNode>` as the single source of truth for screen depth. Entering a section pushes a node; going back pops it and `loadSectionContentForNode(previousNode)` reloads the parent — emptying the stack returns to the root section list.",
+      },
+      {
+        icon: "🔙",
+        title: "BackHandler Dual-Mode Exit",
+        description:
+          "A `BackHandler(enabled = true)` intercepts the hardware back button with context-aware logic: if the `navigationStack` is non-empty it calls `viewModel.navigateBack()` to go up a level; if at root it calls `onNavigateBack()` to exit the activity entirely.",
+      },
+      {
+        icon: "🗂️",
+        title: "Tab Auto-Selection Engine",
+        description:
+          "After fetching `SectionContent`, the ViewModel evaluates the returned data to auto-select the active tab: 'questions' if only questions exist, 'subsections' if only subsections, or 'subsections' as the default when both are present — eliminating any empty-tab flash.",
+      },
+      {
+        icon: "🔄",
+        title: "Dual StateFlow Architecture",
+        description:
+          "Screen state and dialog state are kept in two separate `MutableStateFlow`s — `_uiState` manages the navigation stack and section data, while `_dialogState` owns CRUD form data and operation type — ensuring dialog mutations never trigger full-screen recomposition.",
+      },
+    ],
+    hotspots: [],
+    laserTheme: "light",
   },
 
   "ttw-updates": {
@@ -1291,7 +1420,7 @@ export const screens: Record<string, AppScreen> = {
         width: 7.6,
         height: 3.5,
         targetScreenId: "class-groups",
-        label: "Feed",
+        label: "Messages",
       },
       {
         shape: "rect",
@@ -1309,7 +1438,7 @@ export const screens: Record<string, AppScreen> = {
         width: 7.4,
         height: 3.8,
         targetScreenId: "ttw-scheduling",
-        label: "History",
+        label: "Scheduling",
       },
       {
         shape: "rect",
@@ -1324,127 +1453,51 @@ export const screens: Record<string, AppScreen> = {
     laserTheme: "light",
   },
 
-  "nss-faq": {
-    id: "nss-faq",
-    screenshot: "/screenshots/faq.jpg",
-    pageName: "Dynamic Knowledge Base",
-    pageDescription: 'A dual-pane interactive knowledge base featuring a <span class="highlight_text">Conversation Panel</span> and an Expandable Question Tree, integrated with real-time text parsing.',
-    featureTitle: "Active QnA",
-    hookLine: "Find answers instantly.",
-    techTags: [
-      { emoji: "🗄️", label: "Firestore Nested State", color: "var(--accent-cyan)" },
-      { emoji: "🔗", label: "Link Detection Regex", color: "var(--accent-amber)" },
-      { emoji: "🔒", label: "Admin Content Gate", color: "var(--accent-rose)" }
-    ],
-    builtBy: "Ankesh",
-    features: [
-      {
-        icon: "🧠",
-        title: "Intelligent State Search",
-        description: "Executes client-side deep searches simultaneously querying hierarchical Question Trees and parsed Answer text via 'performSearch(query, uiState)'.",
-      },
-      {
-        icon: "🔗",
-        title: "Regex Link Parsing",
-        description: "Leverages a custom 'LinkDetector' to map plain-text URLs inside multi-line Markdown-like answers into safely interactive 'ClickableTextWithLinks' elements.",
-      },
-      {
-        icon: "👑",
-        title: "Admin Edit Gateway",
-        description: "Conditionally renders the 'AdminFaqActivity' edit controls exclusively for validated SessionManager administrative roles, blocking all unauthorized content manipulation.",
-      }
-    ],
-    hotspots: [
-      {
-        shape: "rect",
-        x: 65.0,
-        y: 93.6,
-        width: 7.2,
-        height: 3.5,
-        targetScreenId: "nss-profile",
-        label: "Profile Tab",
-      }
-    ],
-    laserTheme: "dark",
-  },
-
-  "nss-event-history": {
-    id: "nss-event-history",
-    screenshot: "/screenshots/event-history.jpg",
-    pageName: "Event History Matrix",
-    pageDescription: 'A multi-parameter analytics dashboard enabling complex sorting of archived events based on <span class="highlight_text">Attendance Visibility</span>, wing allocation, and mandatory hours matrices.',
-    featureTitle: "Historical Log",
-    hookLine: "Audit trails. Re-live past events.",
-    techTags: [
-      { emoji: "🔄", label: "Pull-To-Refresh", color: "var(--accent-emerald)" },
-      { emoji: "🗓️", label: "Instant Date Parsing", color: "var(--accent-amber)" },
-      { emoji: "🧮", label: "Visibility Filters", color: "var(--accent-cyan)" }
-    ],
-    builtBy: "Eshan",
-    features: [
-      {
-        icon: "🧮",
-        title: "Multi-parameter Pipeline Filters",
-        description: "Channels historic payloads through 5 distinct predicate layers simultaneously (Search, DateRange, Wing, Mandatory, Identity Access) without stuttering Compose Recomposition.",
-      },
-      {
-        icon: "🔒",
-        title: "Strict Visibility Control",
-        description: "Dynamically audits the 'visibleOnlyToPresent' boolean—forcing the rendering tree to cross-reference the user's specific roll number against the historical Attendance List registry before building the card.",
-      },
-      {
-        icon: "🔄",
-        title: "Make Live Idempotency",
-        description: "Empowers Admins to rapidly resurrect closed events via the 'makeEventLive' suspend block, safely cloning and restructuring legacy payload schemas back into active Listeners.",
-      }
-    ],
-    hotspots: [
-      {
-        shape: "rect",
-        x: 65.0,
-        y: 93.6,
-        width: 7.2,
-        height: 3.5,
-        targetScreenId: "nss-profile",
-        label: "Profile Tab",
-      }
-    ],
-    laserTheme: "light",
-  },
-
   "nss-calendar": {
     id: "nss-calendar",
     screenshot: "/screenshots/calender.jpg",
-    pageName: "Interactive Calendar",
+    pageName: "Event Calendar",
     pageDescription:
-      'A comprehensive scheduling hub that unifies <span class="highlight_text">teaching substitution management</span> and general event booking. It enforces contextual <span class="highlight_text">role-based dialogue options</span> and strict validation rules instantly.',
-    featureTitle: "Scheduling Engine",
-    hookLine: "Organize chaos. Delegate seamlessly.",
+      'An interactive graphical calendar built with Jetpack Compose that orchestrates upcoming and past NSS events. It enforces <span class="highlight_text">role-based visibility</span>, allowing volunteers to track their schedule while empowering admins to <span class="highlight_text">orchestrate new events</span> directly from the grid.',
+    featureTitle: "Graphical Scheduling Engine",
+    hookLine: "Visualize impact. Schedule with intent.",
     techTags: [
-      { emoji: "📅", label: "Smart Calendar", color: "var(--accent-amber)" },
+      { emoji: "📅", label: "LazyVerticalGrid", color: "var(--accent-amber)" },
       { emoji: "🚦", label: "Role Dialogs", color: "var(--accent-cyan)" },
-      { emoji: "🔄", label: "Substitution Logic", color: "var(--accent-emerald)" },
+      { emoji: "🔄", label: "StateFlows", color: "var(--accent-emerald)" },
       { emoji: "🗄️", label: "Firestore DB", color: "var(--accent-purple)" },
     ],
     builtBy: "Eshan",
     features: [
       {
+        icon: "📅",
+        title: "Dynamic Visual Grid",
+        description:
+          "Constructs a fully interactive scheduling interface using Jetpack Compose's LazyVerticalGrid, mathematically mapping month boundaries and day indices into a performant, scrollable matrix.",
+      },
+      {
         icon: "🚦",
-        title: "Role-Aware Action Dialogs",
+        title: "Strict Role-Based Filtering",
         description:
-          "Dynamically constructs contextual options based on admin vs user states derived from a local SessionManager—allowing admins to define slots while users book or substitute.",
+          "Implements a multi-layered visibility engine evaluating local SessionManager state. Admins gain unrestricted tracking, while volunteers only see events tied to their assigned wings or attendance history.",
       },
       {
-        icon: "🔄",
-        title: "Class Substitution Pipeline",
+        icon: "🛡️",
+        title: "Privileged Action Dialogs",
         description:
-          "Facilitates an end-to-end leave substitution mechanism, algorithmically enforcing constraints like prohibiting self-acceptance and validating explicit availability slots via Coroutines.",
+          "Contextually alters tap interactions. Selecting a date grants admins immediate access to a 'Create Event' pipeline, whereas standard users are restricted to viewing contextual attendance statuses.",
       },
       {
-        icon: "🧬",
-        title: "Tabbed Data Filtering",
+        icon: "🏗️",
+        title: "Architectural State Hoisting",
         description:
-          "Strictly partitions scheduling data into 'Teaching' and 'General' domains via fragmented instances, ensuring isolated data streams and avoiding UI thread blocks.",
+          "Leverages a centralized QRAttendanceViewModel combined with a clean repository pattern, funneling Firestore operations through Kotlin StateFlows to assure unidirectional reactivity.",
+      },
+      {
+        icon: "⚡",
+        title: "Real-time Event Hydration",
+        description:
+          "Integrates Material3's PullToRefreshBox to provide an intuitive mechanism for fetching live database updates, instantly re-evaluating wing assignments without tearing down the UI.",
       },
     ],
     hotspots: [
@@ -1491,36 +1544,48 @@ export const screens: Record<string, AppScreen> = {
   "nss-calendar-day": {
     id: "nss-calendar-day",
     screenshot: "/screenshots/day.jpg",
-    pageName: "Daily Schedule",
+    pageName: "Day Events Inspector",
     pageDescription:
-      'A focused daily schedule interface. It dynamically renders <span class="highlight_text">teaching assignments</span> and available <span class="highlight_text">leave applications</span> tailored to the active user\'s role.',
-    featureTitle: "Day View Engine",
-    hookLine: "Your day, perfectly organized.",
+      'A modal scheduling inspector activated via the calendar grid. It dynamically renders chronological event cards and empowers admins to <span class="highlight_text">monitor attendee counts</span> or instantly trigger the <span class="highlight_text">Create Event pipeline</span>.',
+    featureTitle: "Admin Day View",
+    hookLine: "Inspect events. Orchestrate schedules.",
     techTags: [
-      { emoji: "📅", label: "Live Schedule", color: "var(--accent-amber)" },
-      { emoji: "⚡", label: "ConcatAdapter", color: "var(--accent-cyan)" },
-      { emoji: "🔄", label: "Virtual Events", color: "var(--accent-emerald)" },
-      { emoji: "🚦", label: "Conflict Res", color: "var(--accent-purple)" },
+      { emoji: "🪟", label: "AlertDialog", color: "var(--accent-amber)" },
+      { emoji: "🕒", label: "Time Parser", color: "var(--accent-cyan)" },
+      { emoji: "📋", label: "LazyColumn", color: "var(--accent-emerald)" },
+      { emoji: "🚦", label: "Role Context", color: "var(--accent-purple)" },
     ],
     builtBy: "Eshan",
     features: [
       {
-        icon: "🧠",
-        title: "Virtual Event Generation",
+        icon: "⏱️",
+        title: "Chronological Execution Pipeline",
         description:
-          "Dynamically constructs un-persisted CalendarEvents from raw Schedule Assignments, avoiding redundant database queries while mapping daily constraints.",
+          "Evaluates the raw list of daily events, invoking a custom AttendanceEventUtils time parser to mathematically sort elements by ascending start time for chronological analysis.",
       },
       {
-        icon: "🎯",
-        title: "Conflict Resolution",
+        icon: "🛡️",
+        title: "Restricted Mutation Privilege",
         description:
-          "Algorithmically detects and warns against overlapping schedule commitments before allowing a user to accept a substitute teaching request.",
+          "Conditionally mounts a 'Create Event' action button within the AlertDialog footer exclusively if the active session belongs to an administrator, securely gating database writes.",
       },
       {
-        icon: "🏎️",
-        title: "ConcatAdapter Implementation",
+        icon: "📊",
+        title: "Role-Aware Metric Badges",
         description:
-          "Utilizes an isolated ConcatAdapter to seamlessly combine distinct event and leave application lists into a single, highly performant scrollable Recyclerview.",
+          "Radically shifts the component UI based on identity. While standard users see an attendance status icon, admins are presented with a real-time getAttendeeCount() pill-shaped metric block.",
+      },
+      {
+        icon: "🧩",
+        title: "Dynamic Hierarchy Mapping",
+        description:
+          "Renders a constrained Jetpack Compose LazyColumn populated with intelligent EventDetailsCards. It conditionally maps complex metadata like Wing mappings and Mandatory status into cohesive visual tiers.",
+      },
+      {
+        icon: "👆",
+        title: "Interactive Detail Expansion",
+        description:
+          "Implements an expandable description constraint system using Compose's mutableStateOf. It restricts text to a soft character limit while preserving the ability for admins to toggle full-text contexts.",
       },
     ],
     hotspots: [
@@ -1589,6 +1654,18 @@ export const screens: Record<string, AppScreen> = {
         description:
           "Combines dynamic date parsing (LocalDate), case-insensitive text searching, and bitwise mandatory toggles to instantaneously filter thousands of local event records on the main thread.",
       },
+      {
+        icon: "🛡️",
+        title: "Manual Roll Overrides",
+        description:
+          "Integrates fail-safe mutation pathways natively within the event card, providing administrators immediate dialogs to process Add/Remove attendance requests without scanning.",
+      },
+      {
+        icon: "🧩",
+        title: "Constraint-Aware Dialogs",
+        description:
+          "Automates data integrity during event creation by programmatically enforcing mutual exclusivity between states (e.g., toggling 'Visible Only to Present' immediately disables 'Mandatory').",
+      },
     ],
     hotspots: [
       {
@@ -1636,6 +1713,15 @@ export const screens: Record<string, AppScreen> = {
         targetScreenId: "nss-start-attendance",
         label: "Start Attendance",
       },
+      {
+        shape: "rect",
+        x: 54.2,
+        y: 50.0,
+        width: 31.9,
+        height: 6.0,
+        targetScreenId: "attendance-record",
+        label: "Attendance Log",
+      },
     ],
     laserTheme: "mixed",
   },
@@ -1657,22 +1743,34 @@ export const screens: Record<string, AppScreen> = {
     builtBy: "Eshan",
     features: [
       {
+        icon: "📊",
+        title: "Real-Time Ingress Telemetry",
+        description:
+          "Projects a native StateFlow binding (`uiState.attendeeCount`) directly into a custom-styled Compose badge, driving instantaneous zero-latency updates to the administrator's dashboard as students scan in.",
+      },
+      {
+        icon: "📽️",
+        title: "Projection-Optimized Rendering",
+        description:
+          "The QR bitmap is structurally bounded by a strict matrix (400.dp fixed size, ContentScale.Fit) heavily engineered to ensure maximum scanning reliability when projected onto large surfaces in lecture halls.",
+      },
+      {
+        icon: "🎨",
+        title: "Context-Aware Visual Overlays",
+        description:
+          "Leverages deep Compose recomposition to globally inject a distinct warning palette (Color 0xFFFFFDE7) across the entire UI background structure strictly if the underlying event struct flags 'isMandatory'.",
+      },
+      {
         icon: "🛜",
-        title: "Dynamic Geo-Locking",
+        title: "Pre-Flight Geolocation Gating",
         description:
-          "Integrates deeply with native Android location services and the robust FusedLocationProviderClient to enforce an unyielding geospatial perimeter before allowing any QR ingress.",
+          "The fragment enforces a rigorous hardware-level permissions gauntlet via `LocationPermissionHelper` before the `ActiveSessionScreen` is permitted to boot, ensuring admin devices cannot spoof origins.",
       },
       {
-        icon: "⚡",
-        title: "WebSocket Snapshot Binding",
+        icon: "⚖️",
+        title: "Multi-Variant Credit Readout",
         description:
-          "Hooks natively into Firestore's underlying WebSocket implementation, projecting a high-performance RecyclerView stream of incoming attendee updates without blocking the main rendering thread.",
-      },
-      {
-        icon: "🛡️",
-        title: "Idempotent QR Engine",
-        description:
-          "The ingestion pipeline employs idempotent UUID verification strategies on incoming QR packets, instantly neutralizing duplicate scans or replay attacks natively on the client.",
+          "Dynamically parses complex event schemas within the Compose tree to unify positive (`event.hours`) and negative absentee penalties (`event.negativeHours`) into a singular, prominent metric line.",
       },
     ],
     hotspots: [
@@ -1712,34 +1810,46 @@ export const screens: Record<string, AppScreen> = {
     screenshot: "/screenshots/create-event.jpg",
     pageName: "Event Creation Hub",
     pageDescription:
-      'A secure gateway for defining new <span class="highlight_text">QR attendance sessions</span>. Validates input parameters instantly and provisions designated Firestore collections for <span class="highlight_text">live attendee tracking</span>.',
+      'A Jetpack Compose-driven Dialog interface (<code>CreateEventDialog</code>) responsible for configuring and structuring new <span class="highlight_text">QR attendance schemas</span>. It enforces strict temporal validation, mutual exclusivity for mandatory flags, and dedicated wing-based <span class="highlight_text">visibility constraints</span> before pushing data payloads to Firestore.',
     featureTitle: "Session Provisioning",
-    hookLine: "Deploy sessions. Track instantly.",
+    hookLine: "Build sessions. Enforce constraints.",
     techTags: [
-      { emoji: "🧮", label: "UUID Engine", color: "var(--accent-amber)" },
-      { emoji: "🚦", label: "Client Validation", color: "var(--accent-cyan)" },
-      { emoji: "🔑", label: "Admin Gated", color: "var(--accent-emerald)" },
-      { emoji: "🗄️", label: "Schema Prep", color: "var(--accent-purple)" },
+      { emoji: "🛡️", label: "Regex Input Validation", color: "var(--accent-amber)" },
+      { emoji: "⏱️", label: "Temporal Constraints", color: "var(--accent-cyan)" },
+      { emoji: "🔀", label: "Mutual Exclusivity", color: "var(--accent-emerald)" },
+      { emoji: "🚧", label: "State Blocking", color: "var(--accent-purple)" },
     ],
     builtBy: "Eshan",
     features: [
       {
-        icon: "🔑",
-        title: "Role-Gated Integration",
+        icon: "🛡️",
+        title: "Dynamic Input Validation Pipeline",
         description:
-          "The initialization suite is strictly tied to a local SessionManager validation pipeline, ensuring only verified administrators can construct live events.",
+          "Enforces real-time validation for hour assignments using dynamic Regex (`^\\d*\\.?\\d*$`) combined with standard limits, locking users out of malformed inputs directly through Jetpack Compose's inline `OutlinedTextField` supporting-text states.",
       },
       {
-        icon: "⚡",
-        title: "Synchronous Verification",
+        icon: "🔀",
+        title: "Context-Aware Event Modeling",
         description:
-          "Executes immediate client-side sanity checks to guarantee data integrity (title, dates, constraints) before initiating potentially costly network writes.",
+          "Manages complex event parameters by structurally linking `isMandatory` and `visibleOnlyToPresent` booleans with a mutually exclusive `toggleable` modifier switch to prevent logical conflicts upon database submission.",
       },
       {
-        icon: "🗄️",
-        title: "Scaffold Provisioning",
+        icon: "⏱️",
+        title: "Atomic Temporal Constraints",
         description:
-          "Asynchronously initializes a root event document while simultaneously scaffolding designated subcollection routes to prep for heavy QR ingress traffic.",
+          "Utilizes local cross-referencing utilities (`AttendanceEventUtils.validateEventTimes`) to guarantee opening times strictly precede closing times, instantly throwing localized errors if constraints are violated prior to Firebase initialization.",
+      },
+      {
+        icon: "🎯",
+        title: "Targeted Deployment Scopes",
+        description:
+          "Implements scoped audience parameters by allowing administrators to check explicit operational wings (e.g., Teaching, Chetna), translating the selection array into specific Firestore visibility indices.",
+      },
+      {
+        icon: "🚧",
+        title: "Interactive Scaffold Protection",
+        description:
+          "Immediately triggers an `isCreating` overlay block encompassing a `CircularProgressIndicator` during network transmission, thoroughly locking all parameter states and preventing duplicate dialog dismissals.",
       },
     ],
     hotspots: [
@@ -1864,8 +1974,10 @@ export const screens: Record<string, AppScreen> = {
       { emoji: "🔍", label: "Fuzzy Search", color: "var(--accent-cyan)" },
       { emoji: "🗄️", label: "Firestore Sync", color: "var(--accent-emerald)" },
       { emoji: "🧮", label: "Class Count Engine", color: "var(--accent-amber)" },
+      { emoji: "⚡", label: "StateFlow Rx", color: "var(--accent-purple)" },
+      { emoji: "📦", label: "Batch Writes", color: "var(--accent-pink)" },
     ],
-    builtBy: "Eshan",
+    builtBy: "Aditya Gupta",
     features: [
       {
         icon: "🔍",
@@ -1881,6 +1993,16 @@ export const screens: Record<string, AppScreen> = {
         icon: "🗄️",
         title: "Long-Press Firebase Sync",
         description: "Long-pressing the save button triggers a live Firestore read from the 'ttwStudents' collection to pull the latest 'classesPerWeek' values for all volunteers, safely overwriting stale local state.",
+      },
+      {
+        icon: "⚡",
+        title: "StateFlow Reactive Pipeline",
+        description: "Volunteers are cached locally in a MutableStateFlow and reactively filtered via a .combine() operator. This decouples network latency from the UI, ensuring instant 60fps list rendering as the administrator types.",
+      },
+      {
+        icon: "📦",
+        title: "Atomic Write Batching",
+        description: "When applying group assignments, modified volunteer records are pooled and dispatched as a unified Firestore WriteBatch. This minimizes network round-trips and guarantees atomic state integrity across the collection.",
       },
     ],
     hotspots: [
@@ -1909,7 +2031,7 @@ export const screens: Record<string, AppScreen> = {
         width: 7.1,
         height: 3.5,
         targetScreenId: "ttw-scheduling",
-        label: "History",
+        label: "Scheduling",
       },
       {
         shape: "rect",
@@ -1927,31 +2049,43 @@ export const screens: Record<string, AppScreen> = {
   "ttw-calender": {
     id: "ttw-calender",
     screenshot: "/screenshots/ttw-calender.jpg",
-    pageName: "Teaching Slot Presets",
-    pageDescription: 'A preset management hub for <span class="highlight_text">teaching slot configurations</span>. Each card visualizes group-frequency availability chips, fetched and sorted using the <span class="highlight_text">natural sort engine</span>.',
-    featureTitle: "Preset Library",
-    hookLine: "Configure. Load. Schedule.",
+    pageName: "Teaching Calendar",
+    pageDescription: 'A personalized scheduling interface for TTW volunteers to manage their school classes. Volunteers can view assigned slots, request localized leave, and proactively apply to cover classes for their peers.',
+    featureTitle: "Substitute Management",
+    hookLine: "Never leave a class unattended.",
     techTags: [
-      { emoji: "🔢", label: "Natural Sort", color: "var(--accent-purple)" },
-      { emoji: "📊", label: "Group Frequency", color: "var(--accent-cyan)" },
-      { emoji: "🗄️", label: "Firestore Presets", color: "var(--accent-emerald)" },
+      { emoji: "🙋", label: "Leave Requests", color: "var(--accent-purple)" },
+      { emoji: "🤝", label: "Peer Covering", color: "var(--accent-cyan)" },
+      { emoji: "🏫", label: "Class Tracking", color: "var(--accent-emerald)" },
+      { emoji: "🛑", label: "Conflict Checks", color: "var(--accent-amber)" },
+      { emoji: "📱", label: "Broadcast Logic", color: "var(--accent-pink)" },
     ],
     builtBy: "Eshan",
     features: [
       {
-        icon: "🔢",
-        title: "Natural Sort Engine",
-        description: "All preset names are sorted by padding every numeric substring to 10 digits before comparison, ensuring 'AM 9B' always precedes 'AM 10G' without any manual ordering.",
+        icon: "🏫",
+        title: "Assigned Class Tracking",
+        description: "Volunteers can tap any calendar date to instantly view their specific teaching assignments for the day, complete with subject details, exact timings, and precise venue locations.",
       },
       {
-        icon: "📊",
-        title: "Group Frequency Chips",
-        description: "For each preset with uploaded availability data, the card dynamically renders a FlowRow of YellowAccent chips showing 'Gp N: count' — expanding compressed group ranges (e.g. '4-8') into individual frequency tallies.",
+        icon: "🙋",
+        title: "Dynamic Sub Requests",
+        description: "If a volunteer cannot attend an assigned class, they can flag their slot as 'Open for Sub'. This securely triggers a state change that broadcasts the open slot to the broader TTW volunteer network.",
       },
       {
-        icon: "🗑️",
-        title: "Availability Data Purge",
-        description: "Admins can delete stale availability data per-preset using the ErrorRed icon button, which fires a targeted Firestore 'FieldValue.delete()' call to surgically remove only the availability field.",
+        icon: "🤝",
+        title: "Peer-to-Peer Covering",
+        description: "Other volunteers browsing the calendar can instantly discover slots marked as open. With a single tap, they can apply to cover the class, dynamically transferring the teaching responsibility and ensuring continuity.",
+      },
+      {
+        icon: "🛑",
+        title: "Conflict Prevention Validation",
+        description: "Before a peer can successfully claim an 'Open for Sub' slot, the system validates their existing calendar assignments to prevent double-booking or physically impossible transit times between concurrent school locations.",
+      },
+      {
+        icon: "📱",
+        title: "Broadcast Verification",
+        description: "When a slot is successfully covered, a backend Cloud Function intercepts the robust Firestore write to dispatch targeted push notifications to both the original assignee and the substitute, finalizing the transfer seamlessly.",
       },
     ],
     hotspots: [
@@ -1971,7 +2105,7 @@ export const screens: Record<string, AppScreen> = {
         width: 7.3,
         height: 3.5,
         targetScreenId: "class-groups",
-        label: "Feed",
+        label: "Messages",
       },
       {
         shape: "rect",
@@ -1980,7 +2114,7 @@ export const screens: Record<string, AppScreen> = {
         width: 7.2,
         height: 3.5,
         targetScreenId: "ttw-scheduling",
-        label: "History",
+        label: "Scheduling",
       },
       {
         shape: "rect",
@@ -2003,26 +2137,37 @@ export const screens: Record<string, AppScreen> = {
     featureTitle: "Hub Navigation",
     hookLine: "Centralized configuration.",
     techTags: [
-      { emoji: "🎛️", label: "StaggeredMenuButton", color: "var(--accent-emerald)" },
-      { emoji: "📱", label: "Compose Navigation", color: "var(--accent-cyan)" },
-      { emoji: "🛠️", label: "Task Workflows", color: "var(--accent-purple)" },
+      { emoji: "🎛️", label: "Component Modularization", color: "var(--accent-emerald)" },
+      { emoji: "📍", label: "Parameter Routing", color: "var(--accent-cyan)" },
+      { emoji: "📏", label: "Scroll Memory", color: "var(--accent-amber)" },
+      { emoji: "🧱", label: "BorderStrokes", color: "var(--accent-purple)" },
     ],
     builtBy: "Eshan",
     features: [
       {
-        icon: "🧠",
-        title: "TFV Heat Badges",
-        description: "Every unassigned slot renders a live TFV badge color-mapped from red (TFV ≤ 3, most urgent) to green (TFV > 10, plenty of options), giving admins instant visual triage of scheduling bottlenecks.",
+        icon: "📏",
+        title: "Vertical Scroll Preservation",
+        description: "Employs 'rememberScrollState()' across the central Column payload to guarantee fluid vertical mobility across the administration actions while gracefully retaining scroll-y offsets during recompositions.",
       },
       {
-        icon: "⚡",
-        title: "Round-Robin Auto-Assignment",
-        description: "The AutoAwesome FAB triggers 'assignNextSlotInRoundRobin()'—greedily picking the highest-priority unassigned slot and running the TFV algorithm to find the optimal volunteer in a single coroutine step.",
+        icon: "🎛️",
+        title: "Rigid Component Delegation",
+        description: "The primary options aggressively reduce screen boilerplate by abstracting strictly into the 'StaggeredMenuButton' composable, standardizing the distinct yellow-accented Material theme globally.",
       },
       {
-        icon: "📋",
-        title: "Real-Time Algorithm Log Viewer",
-        description: "A dedicated log dialog streams the ViewModel's 'algorithmLogs' StateFlow live, letting admins inspect every scoring decision and rejection reason made during the auto-assignment process.",
+        icon: "📍",
+        title: "Deep-Linked Parameter Routing",
+        description: "The onClick Lambdas directly invoke the NavController to hurdle into tightly bounded features — seamlessly passing explicit query parameters like '?destination=setAvailability' within the route primitive.",
+      },
+      {
+        icon: "🧱",
+        title: "Explicit Outlined Boundaries",
+        description: "Execution tasks (like viewing the final schedule) are isolated from configuration tasks via an 'OutlinedButton', utilizing explicit 3dp BorderStrokes and shape-corners to command immediate visual priority.",
+      },
+      {
+        icon: "🛡️",
+        title: "Lower-Bound Occlusion Safety",
+        description: "Administers a brute-force 'Spacer(modifier = Modifier.height(100.dp))' inject at the lowest vertical bounds, acting as a robust layout hack to guarantee accessibility behind the floating BottomNavigationView.",
       },
     ],
     hotspots: [
@@ -2042,7 +2187,7 @@ export const screens: Record<string, AppScreen> = {
         width: 7.4,
         height: 3.5,
         targetScreenId: "class-groups",
-        label: "Feed",
+        label: "Messages",
       },
       {
         shape: "rect",
@@ -2111,34 +2256,137 @@ export const screens: Record<string, AppScreen> = {
     laserTheme: "light",
   },
 
-  "ttw-profile": {
-    id: "ttw-profile",
-    screenshot: "/screenshots/ttw-profile.jpg",
-    pageName: "Volunteer TTW Profile",
-    pageDescription: 'A personalized view for TTW volunteers showing their <span class="highlight_text">subject preferences</span>, assigned teaching slot presets, and <span class="highlight_text">availability configuration</span> within the scheduling system.',
-    featureTitle: "Volunteer Settings",
-    hookLine: "Your profile. Your schedule.",
+  "teaching-slots": {
+    id: "teaching-slots",
+    screenshot: "/screenshots/Teaching-slots.jpg",
+    pageName: "Teaching Slots",
+    pageDescription: 'A preset library for <span class="highlight_text">managing</span> reusable configurations of class times and subject demands.',
+    featureTitle: "Preset Registry",
+    hookLine: "Architect the curriculum.",
     techTags: [
-      { emoji: "📚", label: "Subject Preferences", color: "var(--accent-amber)" },
-      { emoji: "🗄️", label: "Firestore Profile", color: "var(--accent-emerald)" },
-      { emoji: "⚙️", label: "Availability Config", color: "var(--accent-purple)" },
+      { emoji: "⚡", label: "Real-time Sync", color: "var(--accent-purple)" },
+      { emoji: "🧩", label: "Dynamic Layout", color: "var(--accent-emerald)" },
+      { emoji: "🗑️", label: "Cascade Delete", color: "var(--accent-amber)" },
+      { emoji: "🧮", label: "Natural Sort", color: "var(--accent-cyan)" },
     ],
     builtBy: "Eshan",
     features: [
       {
+        icon: "⚡",
+        title: "Real-Time Coroutine Mapping",
+        description: "Executes a 'LaunchedEffect' bound to a 'refreshTrigger', suspending to map unstructured Firestore maps strictly into typed 'TimeSlotInfo' and 'SubjectInfo' dataclasses on the fly.",
+      },
+      {
+        icon: "🧮",
+        title: "Zero-Padded Natural Sort Key",
+        description: "Injects a Regex algorithm to dynamically zero-pad integers within alphanumeric document IDs, enforcing perfect lexicographical sorting so 'AM 9' flawlessly precedes 'AM 10'.",
+      },
+      {
+        icon: "🗑️",
+        title: "Referential Cascade Deletion",
+        description: "Document deletion structurally annihilates all nested volunteer availability references inherently tied to it, bypassing the need to check isolated sub-collections across the DB node.",
+      },
+      {
+        icon: "🧩",
+        title: "Dynamic Chunked Grids",
+        description: "Subject capacity badges are mathematically batched using Kotlin's Iterable '.chunked(4)', programmatically injecting Spacer weights to construct a dense 4-column grid adapting to any DPI.",
+      },
+      {
+        icon: "🛡️",
+        title: "Stateful Recomposition Control",
+        description: "Decouples network payloads via 'mutableStateOf<List<TeachingSlotItem>>' from the active UI thread, guaranteeing the visual array remains entirely butter-smooth while merging remote data.",
+      },
+    ],
+    hotspots: [
+      {
+        shape: "rect",
+        x: 4.7,
+        y: 9.5,
+        width: 91.0,
+        height: 32.8,
+        targetScreenId: "edit-slots",
+        label: "Edit Slot",
+      },
+      {
+        shape: "rect",
+        x: 27,
+        y: 93.4,
+        width: 6.5,
+        height: 2.8,
+        targetScreenId: "ttw-updates",
+        label: "Home",
+      },
+      {
+        shape: "rect",
+        x: 36.3,
+        y: 93.1,
+        width: 7.4,
+        height: 3,
+        targetScreenId: "class-groups",
+        label: "Messages",
+      },
+      {
+        shape: "rect",
+        x: 46.4,
+        y: 93,
+        width: 6.9,
+        height: 3.4,
+        targetScreenId: "ttw-calender",
+        label: "Calendar",
+      },
+      {
+        shape: "rect",
+        x: 66.5,
+        y: 93.2,
+        width: 6.6,
+        height: 3.1,
+        targetScreenId: "ttw-profile",
+        label: "Profile",
+      },
+    ],
+    laserTheme: "dark",
+  },
+
+  "ttw-profile": {
+    id: "ttw-profile",
+    screenshot: "/screenshots/ttw-profile.jpg",
+    pageName: "TTW Admin Command",
+    pageDescription: 'The central profile hub tailored specifically for TTW administrators. From this interface, admins can invoke nested routing to manage student rosters, edit subject curriculums, and securely switch back to the main NSS interface.',
+    featureTitle: "TTW Administration",
+    hookLine: "Manage the teaching network.",
+    techTags: [
+      { emoji: "👥", label: "Student Bundles", color: "var(--accent-emerald)" },
+      { emoji: "📚", label: "Subject Taxonomy", color: "var(--accent-cyan)" },
+      { emoji: "🔀", label: "State Purging", color: "var(--accent-purple)" },
+      { emoji: "❓", label: "FAQ Routing", color: "var(--accent-amber)" },
+      { emoji: "🔐", label: "Session Lifecycle", color: "var(--accent-pink)" },
+    ],
+    builtBy: "Ankesh",
+    features: [
+      {
+        icon: "👥",
+        title: "Nested Student Management",
+        description: "The menu routes administrators directly to the scheduling framework. By dynamically injecting the 'manageStudents' bundle payload, the NavController mounts the student roster configuration state without redundant Fragment creation.",
+      },
+      {
         icon: "📚",
-        title: "Subject Preference Ranking",
-        description: "Volunteers drag-rank their subject preferences in an ordered list that is persisted back to the 'ttwStudents' Firestore document, directly influencing the TFV algorithm's volunteer-to-slot matching.",
+        title: "Subject Taxonomy Editor",
+        description: "Admins can manage curriculums by delegating a 'manageSubjects' argument to the shared scheduling engine. This isolates the capability to define overarching grade levels and tracks for the entire TTW school network.",
       },
       {
-        icon: "📅",
-        title: "Slot Availability Declaration",
-        description: "Volunteers mark their availability against each teaching slot preset's schedule grid, writing a structured day-slot map to Firestore that the ScheduleGenerationViewModel reads during assignment scoring.",
+        icon: "🔀",
+        title: "Cross-Interface Purging",
+        description: "The 'Switch Interface' menu option instantly transitions the session from TTW back to the core NSS environment, safely passing 'FLAG_ACTIVITY_CLEAR_TASK' to destroy old back-stack instances and isolate memory states.",
       },
       {
-        icon: "🔄",
-        title: "Live Profile Sync",
-        description: "Profile data is fetched fresh on every composition from the 'ttwStudents' collection, ensuring the UI always reflects the latest group assignment, class count, and subject priority list without stale cache reads.",
+        icon: "❓",
+        title: "FAQ Central Routing",
+        description: "The profile acts as the launch point for the application's help module. Tapping the FAQ trigger fires an Intent for FaqActivity, granting admins a dedicated environment to construct nested, tree-based help hierarchies.",
+      },
+      {
+        icon: "🔐",
+        title: "Graceful Auth Termination",
+        description: "The logout workflow handles complete session closure. It safely surfaces a destructive confirmation dialog before sequentially purging local SharedPreferences cache, invalidating the Firebase Auth token, and pushing a clean login state.",
       },
     ],
     hotspots: [
@@ -2158,7 +2406,7 @@ export const screens: Record<string, AppScreen> = {
         width: 7.6,
         height: 3.3,
         targetScreenId: "class-groups",
-        label: "Feed",
+        label: "Messages",
       },
       {
         shape: "rect",
@@ -2176,7 +2424,7 @@ export const screens: Record<string, AppScreen> = {
         width: 7.3,
         height: 3.7,
         targetScreenId: "ttw-scheduling",
-        label: "History",
+        label: "Scheduling",
       },
       {
         shape: "rect",
@@ -2185,7 +2433,7 @@ export const screens: Record<string, AppScreen> = {
         width: 8.4,
         height: 3.5,
         targetScreenId: "nss-home",
-        label: "Operations Feed",
+        label: "Switch to NSS",
       },
       {
         shape: "rect",
@@ -2204,20 +2452,42 @@ export const screens: Record<string, AppScreen> = {
     id: "ttw-options",
     screenshot: "/screenshots/options.jpg",
     pageName: "TTW Options",
-    pageDescription: 'A dedicated settings panel for the TTW interface, providing access to <span class="highlight_text">account preferences</span>, notification controls, and module-level configurations.',
-    featureTitle: "Module Settings",
-    hookLine: "Configure your experience.",
+    pageDescription: 'The administrative control panel for the TTW module. It utilizes hoisted Compose state and <span class="highlight_text">SharedPreferences</span> to execute instant <span class="highlight_text">subject overrides</span> without triggering costly network round-trips.',
+    featureTitle: "Module Administration",
+    hookLine: "Context-aware controls. Instant state mutations.",
     techTags: [
-      { emoji: "⚙️", label: "Settings Panel", color: "var(--accent-cyan)" },
-      { emoji: "🔔", label: "Notifications", color: "var(--accent-amber)" },
+      { emoji: "💬", label: "Compose Dialog", color: "var(--accent-purple)" },
+      { emoji: "💾", label: "SharedPreferences", color: "var(--accent-amber)" },
+      { emoji: "📨", label: "Intent Routing", color: "var(--accent-cyan)" },
+      { emoji: "🧠", label: "SessionManager", color: "var(--accent-emerald)" },
     ],
     builtBy: "Eshan",
     features: [
       {
-        icon: "⚙️",
-        title: "Module-Level Config",
-        description: "TTW-specific preferences are stored separately from the global app settings, allowing volunteers to customise their teaching interface without affecting other module states.",
+        icon: "👻",
+        title: "Hidden Admin Interface",
+        description: "Regular student volunteers never even see these options. The dropdown automatically hides its administrative actions unless the session detects elevated permissions, keeping the volunteer UI completely clutter-free.",
       },
+      {
+        icon: "⚡",
+        title: "Instant Subject Switching",
+        description: "Need to manage Chemistry instead of Physics? Admins can swap their target subject on the fly. The modification applies instantly across all downstream TTW screens without requiring a full app reload.",
+      },
+      {
+        icon: "🧲",
+        title: "Sticky Context Memory",
+        description: "The Manage Students routing automatically intercepts the active teaching subject from the SessionManager cache, embedding it directly into the Intent payload so downstream screens launch pre-scoped to the active context.",
+      },
+      {
+        icon: "💾",
+        title: "Local State Mutations",
+        description: "The Change Subjects action surfaces a hoisted Compose dialog that writes selections directly to local SharedPreferences, deliberately skipping expensive backend user-profile updates for purely local filtering changes.",
+      },
+      {
+        icon: "💥",
+        title: "Backstack Annihilation",
+        description: "Logging out doesn't just sign out the user—it fires an Intent.FLAG_ACTIVITY_CLEAR_TASK command to completely obliterate the activity stack, ensuring no secure administrative data can be accessed via the Android 'Back' button post-logout.",
+      }
     ],
     hotspots: [
       {
@@ -2254,7 +2524,7 @@ export const screens: Record<string, AppScreen> = {
         width: 7.2,
         height: 3.5,
         targetScreenId: "class-groups",
-        label: "Feed",
+        label: "Messages",
       },
       {
         shape: "rect",
@@ -2266,12 +2536,13 @@ export const screens: Record<string, AppScreen> = {
         label: "Calendar",
       },
       {
+        shape: "rect",
         x: 35.7,
         y: 92.9,
         width: 8.3,
         height: 3.6,
         targetScreenId: "class-groups",
-        label: "Feed",
+        label: "Messages",
       },
       {
         shape: "rect",
@@ -2289,7 +2560,89 @@ export const screens: Record<string, AppScreen> = {
         width: 8.1,
         height: 3.9,
         targetScreenId: "ttw-scheduling",
-        label: "History",
+        label: "Scheduling",
+      },
+    ],
+    laserTheme: "light",
+  },
+
+  "manage-students": {
+    id: "manage-students",
+    screenshot: "/screenshots/manage-students.jpg",
+    pageName: "Student Operations",
+    pageDescription: 'An administrative interface for <span class="highlight_text">searching and auditing the student roster</span>. It allows Admins to view academic groups, review roll numbers, and selectively modify interview scores based on dynamic search filters.',
+    featureTitle: "Roster Management",
+    hookLine: "Audit the student base.",
+    techTags: [
+      { emoji: "⚡", label: "Smart Search", color: "var(--accent-purple)" },
+      { emoji: "🔄", label: "Optimistic UI", color: "var(--accent-emerald)" },
+      { emoji: "🛡️", label: "Type Safety", color: "var(--accent-amber)" },
+      { emoji: "📊", label: "In-Memory Sort", color: "var(--accent-cyan)" },
+    ],
+    builtBy: "Eshan",
+    features: [
+      {
+        icon: "⚡",
+        title: "Dynamic Search Indexing",
+        description: "Features an active LaunchedEffect that instantly filters the student list by matching the search query against both the volunteer's name and their rollNumber, driven by a reactive isSearchActive state.",
+      },
+      {
+        icon: "🔄",
+        title: "Optimistic UI Mutations",
+        description: "The updateStudentScore method executes local map transformations on the student collection immediately upon receiving a Firestore success callback, ensuring the UI feels exceptionally snappy without needing a costly network refresh.",
+      },
+      {
+        icon: "🛡️",
+        title: "Runtime Type Casting",
+        description: "The Firestore parsing block safely guards against schema anomalies by dynamically evaluating the interviewScore type (Long vs String) with a fallback to zero, preemptively halting runtime class cast exceptions.",
+      },
+      {
+        icon: "📊",
+        title: "Reactive Coroutine Sorting",
+        description: "Instead of querying the backend with strict OrderBy clauses, the frontend maintains a memory-efficient 'remember(filteredStudents)' dependency tree to natively sort the dataset by descending interview scores.",
+      },
+      {
+        icon: "🎯",
+        title: "Surgical Document Updates",
+        description: "When an Admin submits a new score, the client restricts the Database write solely to the 'interviewScore' field on the specific Document ID, preserving bandwidth and preventing accidental overwrites of parallel student data.",
+      },
+    ],
+    hotspots: [
+      {
+        shape: "rect",
+        x: 27.1,
+        y: 93.5,
+        width: 6.1,
+        height: 2.8,
+        targetScreenId: "ttw-dashboard",
+        label: "Home",
+      },
+      {
+        shape: "rect",
+        x: 36.6,
+        y: 93.1,
+        width: 7.5,
+        height: 3.1,
+        targetScreenId: "class-groups",
+        label: "Messages",
+      },
+      {
+        shape: "rect",
+        x: 46.5,
+        y: 93.2,
+        width: 7.2,
+        height: 3.3,
+        targetScreenId: "ttw-calender",
+        label: "Calendar",
+      },
+      {
+        shape: "rect",
+        x: 56.3,
+        y: 93.1,
+        width: 7.1,
+        height: 3.4,
+        targetScreenId: "ttw-scheduling",
+        label: "Scheduling",
       },
     ],
     laserTheme: "light",
@@ -2298,63 +2651,45 @@ export const screens: Record<string, AppScreen> = {
   "manage-subjects": {
     id: "manage-subjects",
     screenshot: "/screenshots/manage-subject.jpg",
-    pageName: "Manage Subjects",
-    pageDescription: 'A configuration screen for <span class="highlight_text">defining and editing the subject catalogue</span> used across the TTW scheduling system — each subject tied to slot compatibility rules.',
-    featureTitle: "Subject Catalogue",
-    hookLine: "Define what gets taught.",
+    pageName: "Subject Catalogue",
+    pageDescription: 'A global admin configuration tool for <span class="highlight_text">defining the TTW curriculum network</span>. Changes here broadcast down the entire database, safely restructuring student preferences on the fly.',
+    featureTitle: "Catalog Operations",
+    hookLine: "Manage the curriculum structure.",
     techTags: [
-      { emoji: "📚", label: "Subject Config", color: "var(--accent-amber)" },
-      { emoji: "🔗", label: "Slot Binding", color: "var(--accent-cyan)" },
+      { emoji: "⚡", label: "Firestore Batches", color: "var(--accent-purple)" },
+      { emoji: "👁️", label: "DisposableEffect", color: "var(--accent-cyan)" },
+      { emoji: "📡", label: "Array Syncing", color: "var(--accent-amber)" },
+      { emoji: "🧩", label: "Composable UI", color: "var(--accent-emerald)" },
     ],
     builtBy: "Eshan",
     features: [
       {
-        icon: "📚",
-        title: "Subject Definitions",
-        description: "Each subject entry maps to a set of compatible teaching slot types, constraining the TFV algorithm to only match volunteers who have listed that subject as a preference.",
+        icon: "👁️",
+        title: "Dynamic Nav Hiding",
+        description: "The Subject Manager intercepts the view lifecycle using a Jetpack Compose DisposableEffect, forcefully suppressing the BottomNavigationView while active, and cleanly restoring it via onDispose.",
       },
-    ],
-    hotspots: [
-    ],
-    laserTheme: "light",
-  },
-
-
-  "teaching-slots": {
-    id: "teaching-slots",
-    screenshot: "/screenshots/Teaching-slots.jpg",
-    pageName: "Create Teaching Slots",
-    pageDescription: 'Admin interface for configuring the core <span class="highlight_text">teaching session building blocks</span>. Defines the base structure that volunteers will map against.',
-    featureTitle: "Slot Engine",
-    hookLine: "Define the backbone of sessions.",
-    techTags: [
-      { emoji: "🧩", label: "TeachingSlotsScreen", color: "var(--accent-purple)" },
-      { emoji: "🔥", label: "Firestore Slots Core", color: "var(--accent-cyan)" },
-      { emoji: "⚡", label: "Suspending Deletes", color: "var(--accent-amber)" },
-    ],
-    builtBy: "Eshan",
-    features: [
       {
-        icon: "🧩",
-        title: "Dynamic Slot Construction",
-        description: "Admins dynamically spin up teaching slots that behave as atomic chunks for the assignment algorithm, mapped securely inside Firebase Collections.",
+        icon: "📡",
+        title: "Global Subject Registry",
+        description: "The UI binds directly to the 'TTW_Subjects' Firestore collection via suspending Coroutines. New additions write immediately using the raw subject string as the root Document ID for O(1) reads.",
       },
       {
         icon: "⚡",
-        title: "Suspending Mutators",
-        description: "Firestore mutations (like deleteTeachingSlot) are wrapped tightly in Kotlin coroutines, ensuring the UI remains buttery smooth while remote data syncing is processed.",
+        title: "Compound Batch Injections",
+        description: "Adding a new subject triggers 'updateAllStudentsOnAdd()', which chunks the 'ttwStudents' registry into arrays of 450 records, parallel-firing Firebase WriteBatches with 'FieldValue.arrayUnion' to update every remote device.",
+      },
+      {
+        icon: "🔥",
+        title: "Synchronous Purging",
+        description: "On subject destruction, 'FieldValue.arrayRemove' systematically scrubs the deprecated string identifier from every active volunteer's 'subjectPreferences' array, preventing phantom scheduling assignments.",
+      },
+      {
+        icon: "🧩",
+        title: "Declarative Validation",
+        description: "Client-side Composable states actively guard against duplicate subject injections and empty string payloads, preempting network calls and surfacing styled Material3 warnings before committing bad data.",
       },
     ],
     hotspots: [
-      {
-        shape: "rect",
-        x: 4.7,
-        y: 9.5,
-        width: 91.0,
-        height: 32.8,
-        targetScreenId: "edit-slots",
-        label: "Edit Slot",
-      },
     ],
     laserTheme: "light",
   },
@@ -2362,26 +2697,43 @@ export const screens: Record<string, AppScreen> = {
   "teaching-slots-preset": {
     id: "teaching-slots-preset",
     screenshot: "/screenshots/teaching-slots-preset.jpg",
-    pageName: "Set Availability",
-    pageDescription: 'This interface enables admins to configure <span class="highlight_text">Availability Presets</span> across designated days, giving volunteers a rigid template to select their free time against.',
-    featureTitle: "Availability Configurator",
-    hookLine: "Templated volunteer schedules.",
+    pageName: "Teaching Slots Presets",
+    pageDescription: 'A live-fetched dashboard listing every <span class="highlight_text">Teaching Slot Preset</span>. Each card shows the preset name alongside a chunked grid of group frequency chips — built directly from the Firestore availability map.',
+    featureTitle: "Preset Management Hub",
+    hookLine: "Every slot. Every group. At a glance.",
     techTags: [
-      { emoji: "🧮", label: "SetAvailabilityScreen", color: "var(--accent-emerald)" },
-      { emoji: "👥", label: "preset-templates", color: "var(--accent-purple)" },
-      { emoji: "🗄️", label: "Firebase Integration", color: "var(--accent-amber)" },
+      { emoji: "📊", label: "GroupFrequencyDisplay", color: "var(--accent-purple)" },
+      { emoji: "🔢", label: "Natural Sort", color: "var(--accent-cyan)" },
+      { emoji: "🗑️", label: "FieldValue.delete()", color: "var(--accent-rose)" },
+      { emoji: "🧮", label: "Range Expansion", color: "var(--accent-emerald)" },
+      { emoji: "⚡", label: "LazyColumn", color: "var(--accent-amber)" },
     ],
     builtBy: "Eshan",
     features: [
       {
-        icon: "👥",
-        title: "Interactive Presets",
-        description: "Availability templates are treated as first-class presets. An admin can load, copy, or overwrite preset matrices before flushing the resulting multi-dimensional arrays to Firestore.",
+        icon: "📊",
+        title: "Group Frequency Chips",
+        description: "The `GroupFrequencyDisplay` composable reads the nested availability map, calls `calculateGroupFrequenciesFromMap()` to count how many slots each volunteer group covers, then renders the results as chunked rows of 5 yellow chips each.",
+      },
+      {
+        icon: "🔢",
+        title: "Natural Sort Algorithm",
+        description: "The `naturalSortKey()` function pads all digit sequences in preset names to 10 characters before comparing, ensuring 'AM 9B' sorts before 'AM 10G' — standard lexicographic sorting would invert this order.",
+      },
+      {
+        icon: "🗑️",
+        title: "Surgical Field Deletion",
+        description: "The `deleteAvailabilityData()` suspend function uses `FieldValue.delete()` — not a full document overwrite — to atomically remove only the `availability` nested map from the preset document, leaving all other fields untouched.",
       },
       {
         icon: "🧮",
-        title: "Matrix Update Logic",
-        description: "Instead of complex multi-modal flows, this component utilizes intelligent Set semantics to instantly update 'AvailabilitySlots' when time chunks are selected or deselected.",
+        title: "Legacy Range Expansion",
+        description: "The `expandGroupRanges()` function detects the old compressed 'start-end' regex pattern (e.g. '4-8') and explodes it into individual group strings. Modern entries in expanded comma format pass through directly, ensuring backward compatibility.",
+      },
+      {
+        icon: "⚡",
+        title: "Dual-Mode Navigation",
+        description: "The screen accepts an optional `destination` parameter. When set to `'setAvailability'`, tapping a preset card navigates to `SetAvailabilityScreen` instead of the edit flow — enabling the same list to serve two distinct admin workflows.",
       },
     ],
     hotspots: [
@@ -2392,7 +2744,43 @@ export const screens: Record<string, AppScreen> = {
         width: 91.1,
         height: 34.3,
         targetScreenId: "day",
-        label: "Edit Day",
+        label: "Edit Free Group",
+      },
+      {
+        shape: "rect",
+        x: 27.1,
+        y: 93,
+        width: 5.9,
+        height: 2.9,
+        targetScreenId: "ttw-updates",
+        label: "Home",
+      },
+      {
+        shape: "rect",
+        x: 36.6,
+        y: 92.8,
+        width: 7,
+        height: 3.3,
+        targetScreenId: "class-groups",
+        label: "Messages",
+      },
+      {
+        shape: "rect",
+        x: 46.5,
+        y: 92.7,
+        width: 7,
+        height: 3.6,
+        targetScreenId: "ttw-calender",
+        label: "Calendar",
+      },
+      {
+        shape: "rect",
+        x: 66.6,
+        y: 92.9,
+        width: 6.5,
+        height: 3.1,
+        targetScreenId: "ttw-profile",
+        label: "Profile",
       },
     ],
     laserTheme: "light",
@@ -2401,37 +2789,90 @@ export const screens: Record<string, AppScreen> = {
   "volunteers-preset": {
     id: "volunteers-preset",
     screenshot: "/screenshots/volunteers-preset.jpg",
-    pageName: "Manage Volunteers",
-    pageDescription: 'An intuitive management dashboard for manipulating <span class="highlight_text">Volunteer Presets</span>. Essential for orchestrating varying workforce counts across complex assignments.',
-    featureTitle: "Preset Grouping",
-    hookLine: "Team orchestration.",
+    pageName: "Volunteer Presets",
+    pageDescription: 'A management dashboard for <span class="highlight_text">Volunteer Preset</span> groups. Admins can create, rename, delete, and deep-merge presets — with class count aggregation resolved at commit time.',
+    featureTitle: "Preset Orchestration",
+    hookLine: "Merge. Rename. Orchestrate. Zero data loss.",
     techTags: [
-      { emoji: "🙋", label: "VolunteerPresetsScreen", color: "var(--accent-cyan)" },
-      { emoji: "🔀", label: "Merging Logic", color: "var(--accent-amber)" },
-      { emoji: "🏷️", label: "GroupChips View", color: "var(--accent-emerald)" },
+      { emoji: "🔀", label: "Class Count Merge", color: "var(--accent-cyan)" },
+      { emoji: "✏️", label: "Doc-ID Rename", color: "var(--accent-amber)" },
+      { emoji: "🏷️", label: "GroupChips View", color: "var(--accent-purple)" },
+      { emoji: "🔢", label: "Natural Sort", color: "var(--accent-emerald)" },
+      { emoji: "🛡️", label: "Duplicate Guard", color: "var(--accent-rose)" },
     ],
     builtBy: "Eshan",
     features: [
       {
         icon: "🔀",
-        title: "Advanced Set Merging",
-        description: "Enables admins to perform deep merges on selected combinations of VolunteerPreset IDs directly, resolving grouping conflicts at runtime.",
+        title: "Class Count Merge Engine",
+        description: "When merging, `mergePresets()` fetches each selected preset's raw `volunteers` array from Firestore, then iterates using `rollNo` as the unique key. Duplicate volunteers have their `classCount` values summed rather than overwritten, ensuring zero data loss across presets.",
+      },
+      {
+        icon: "✏️",
+        title: "Document-ID Rename Strategy",
+        description: "Firestore document IDs are immutable. The `renamePreset()` function works around this by reading the full source document, writing it under the new name as the document ID, then deleting the stale original — a three-step atomic rename.",
       },
       {
         icon: "🏷️",
-        title: "Reactive Groups",
-        description: "Data chips reflect live-bound UI updates via Compose Flow observers. Real-time class capacity counts stay fully synchronized.",
+        title: "Live Group Count Chips",
+        description: "On load, `groupCounts` is first fetched from the stored Firestore field. If absent (legacy presets), it falls back to iterating the raw `volunteers` array in-memory, grouping by the 'group' key to derive live counts for the chip display.",
+      },
+      {
+        icon: "🔢",
+        title: "Natural Sort for Mixed Names",
+        description: "The shared `naturalSortKey()` pads numeric substrings in preset names with leading zeros before sorting, guaranteeing that 'AM 9B' precedes 'AM 10G' — a critical correctness fix over default string comparison.",
+      },
+      {
+        icon: "🛡️",
+        title: "Merge Preview Guard",
+        description: "Before committing, the UI requires the admin to type a new `mergedPresetName` and renders a live `mergePreviewText` summary of which presets will be combined. The merge call is blocked until this string binding is non-empty, preventing accidental overwrites.",
       },
     ],
     hotspots: [
       {
         shape: "rect",
         x: 4.6,
-        y: 8.3,
+        y: 9.4,
         width: 91.1,
-        height: 34.3,
+        height: 36.9,
         targetScreenId: "add-free-groups",
-        label: "View Groups",
+        label: "Preset Details",
+      },
+      {
+        shape: "rect",
+        x: 27.1,
+        y: 93,
+        width: 6.1,
+        height: 3,
+        targetScreenId: "ttw-updates",
+        label: "Home",
+      },
+      {
+        shape: "rect",
+        x: 36.7,
+        y: 92.7,
+        width: 7.1,
+        height: 3.1,
+        targetScreenId: "class-groups",
+        label: "Messages",
+      },
+      {
+        shape: "rect",
+        x: 46.7,
+        y: 92.6,
+        width: 6.8,
+        height: 3.5,
+        targetScreenId: "ttw-calender",
+        label: "Calendar",
+      },
+      {
+        shape: "rect",
+        x: 67,
+        y: 93,
+        width: 6,
+        height: 3,
+        targetScreenId: "ttw-profile",
+        label: "Profile",
       },
     ],
     laserTheme: "light",
@@ -2441,25 +2882,41 @@ export const screens: Record<string, AppScreen> = {
     id: "generate-schedule",
     screenshot: "/screenshots/generate-schedule.jpg",
     pageName: "Schedule Generator",
-    pageDescription: 'The core assignment workspace where <span class="highlight_text">ScheduleGenerationViewModel</span> leverages the Teacher Fulfillment Value (TFV) to automatically optimize placements, resolving conflicts before they happen.',
-    featureTitle: "Generation Engine",
-    hookLine: "Score. Assign. Optimize.",
+    pageDescription: 'A two-step preset configurator where admins pick one <span class="highlight_text">Volunteer Preset</span> and one or more <span class="highlight_text">Availability Presets</span> before firing the schedule engine — with Firestore filtering and natural sorting built in.',
+    featureTitle: "Preset Configurator",
+    hookLine: "Pick. Pair. Proceed.",
     techTags: [
-      { emoji: "🧠", label: "TFV Algorithm", color: "var(--accent-purple)" },
-      { emoji: "⚡", label: "Auto-Assign Core", color: "var(--accent-cyan)" },
-      { emoji: "📋", label: "Algorithm Tracing", color: "var(--accent-amber)" },
+      { emoji: "🔘", label: "Single-Select Radio", color: "var(--accent-purple)" },
+      { emoji: "☑️", label: "Multi-Select Checkbox", color: "var(--accent-cyan)" },
+      { emoji: "🔢", label: "Natural Sort", color: "var(--accent-amber)" },
+      { emoji: "🔍", label: "Availability Filter", color: "var(--accent-emerald)" },
     ],
     builtBy: "Eshan",
     features: [
       {
-        icon: "🧠",
-        title: "TFV Triage Engine",
-        description: "Volunteers and available blocks are evaluated using an intensive TFV formula, enabling the app to 'weigh' assignment success probabilities dynamically.",
+        icon: "🔘",
+        title: "Radio-Button Volunteer Preset Picker",
+        description: "Volunteer presets render as a single-select radio list. Each row highlights its background with YellowAccent at 15% opacity and swaps the icon from RadioButtonUnchecked to RadioButtonChecked when tapped, making the active selection immediately obvious.",
       },
       {
-        icon: "⚡",
-        title: "Algorithmic Coroutines",
-        description: "The intensive auto-assignment loop operates cleanly inside a dedicated background thread on the ViewModel, preserving frame rates on the main UI even during intense pathfinding.",
+        icon: "☑️",
+        title: "Multi-Select Availability Preset Checkboxes",
+        description: "Availability presets use CheckCircle / CheckCircleOutline toggle icons. Tapping a row adds or removes the preset from a remembered List<PresetItem>, allowing any number of school presets to be combined into a single schedule run.",
+      },
+      {
+        icon: "🔍",
+        title: "Availability-Map Firestore Filter",
+        description: "The availability loader queries the teachingSlotPresets collection and silently drops any document whose 'availability' field is null or empty. Only presets that contain real day-slot data are surfaced to the admin, preventing empty schedule configurations.",
+      },
+      {
+        icon: "🔢",
+        title: "Natural Sort Algorithm",
+        description: "Both preset lists are sorted by padding all embedded digit sequences to 10 characters via a Regex replace on the sort key. This prevents lexicographic mis-ordering where 'AM 10G' would otherwise appear before 'AM 9B'.",
+      },
+      {
+        icon: "✅",
+        title: "Validation-Gated FAB",
+        description: "The green arrow FAB only becomes actionable once both a VP and at least one VA preset are selected. Tapping without a complete selection triggers a Snackbar with a specific error message rather than silently navigating to an empty creation screen.",
       },
     ],
     hotspots: [
@@ -2471,6 +2928,42 @@ export const screens: Record<string, AppScreen> = {
         height: 6.8,
         targetScreenId: "create-schedule",
         label: "Next",
+      },
+      {
+        shape: "rect",
+        x: 27.1,
+        y: 93.5,
+        width: 6.3,
+        height: 2.8,
+        targetScreenId: "ttw-updates",
+        label: "Home",
+      },
+      {
+        shape: "rect",
+        x: 36.5,
+        y: 93.3,
+        width: 7.2,
+        height: 2.9,
+        targetScreenId: "class-groups",
+        label: "Messages",
+      },
+      {
+        shape: "rect",
+        x: 46.7,
+        y: 93.3,
+        width: 6.7,
+        height: 3.1,
+        targetScreenId: "ttw-calender",
+        label: "Calendar",
+      },
+      {
+        shape: "rect",
+        x: 66.8,
+        y: 93.3,
+        width: 6.6,
+        height: 3.1,
+        targetScreenId: "ttw-profile",
+        label: "Profile",
       },
     ],
     laserTheme: "light",
@@ -2485,25 +2978,131 @@ export const screens: Record<string, AppScreen> = {
     hookLine: "The final blueprint.",
     techTags: [
       { emoji: "📊", label: "ViewAssignmentsScreen", color: "var(--accent-purple)" },
-      { emoji: "🟩", label: "TFVGridView", color: "var(--accent-emerald)" },
-      { emoji: "🧭", label: "Spatial Mapping", color: "var(--accent-cyan)" },
+      { emoji: "🔍", label: "Live Search", color: "var(--accent-cyan)" },
+      { emoji: "📄", label: "PDF & Excel Export", color: "var(--accent-amber)" },
+      { emoji: "🇺🇸", label: "School Pivot", color: "var(--accent-emerald)" },
     ],
     builtBy: "Eshan",
     features: [
       {
         icon: "🟩",
-        title: "Custom Grid Renderers",
-        description: "Uses a highly performant generic lazy-grid wrapped in TFVGridView mapping coordinates back to assignments without jitter.",
+        title: "Synchronised Dual-Axis Grid",
+        description: "The assignment table renders with two independent horizontalScrollState instances sharing the same rememberScrollState(), so the header row and data rows scroll in perfect lockstep regardless of how many time-slot columns exist.",
       },
       {
-        icon: "📊",
-        title: "Legend Key Generation",
-        description: "Colors and statuses on the resultant grid are automatically translated by a dynamic composable legend, enforcing accessibility standards.",
+        icon: "🔍",
+        title: "First/Last-Name Prefix Search",
+        description: "A LaunchedEffect watches searchQuery and fires a real-time filter that checks both the first and last token of a volunteer's name with startsWith(), plus subjectName, subjectCode, and rollNo — highlighting matching cells amber while dimming non-matches.",
+      },
+      {
+        icon: "🇺🇸",
+        title: "School Pivot with Section Chips",
+        description: "A DropdownMenu lets the admin switch active schools; each switch triggers a LaunchedEffect that auto-selects all sections for that school. Sections then render as horizontally scrollable RoundedCorner Button chips, each toggling membership in a remembered Set<String>.",
+      },
+      {
+        icon: "📄",
+        title: "Dual-Format Export (PDF & XLSX)",
+        description: "A FAB opens an AlertDialog presenting two export branches: Excel via ScheduleExcelGenerator.generateAndShareExcel() and PDF via a native PdfDocument Canvas renderer — both run inside a coroutine scope on Dispatchers.IO, sharing the file via FileProvider for cross-app compatibility.",
+      },
+      {
+        icon: "🔢",
+        title: "Alphanumeric Section Comparator",
+        description: "Section labels ('10N', '9G') are sorted by a custom Comparator that splits on ' - ', extracts the integer prefix separately from the alphabetic suffix, and chains compareBy{} + thenBy{} chains, ensuring '9G' always precedes '10N' in both header and row order.",
+      },
+    ],
+    hotspots: [
+      {
+        shape: "rect",
+        x: 26.9,
+        y: 93.7,
+        width: 6.6,
+        height: 3.1,
+        targetScreenId: "ttw-updates",
+        label: "Home"
+      },
+      {
+        shape: "rect",
+        x: 36.3,
+        y: 93.5,
+        width: 7,
+        height: 3.2,
+        targetScreenId: "class-groups",
+        label: "Messages"
+      },
+      {
+        shape: "rect",
+        x: 46.9,
+        y: 93.5,
+        width: 6.4,
+        height: 3.2,
+        targetScreenId: "ttw-calender",
+        label: "Calendar"
+      },
+      {
+        shape: "rect",
+        x: 66.3,
+        y: 93.6,
+        width: 6.6,
+        height: 3.2,
+        targetScreenId: "ttw-profile",
+        label: "Profile"
+      },
+      {
+        shape: "rect",
+        x: 79.3,
+        y: 88.4,
+        width: 14.5,
+        height: 6.9,
+        targetScreenId: "schedule",
+        label: "Export Options"
+      }
+    ],
+    laserTheme: "light",
+  },
+
+  "schedule": {
+    id: "schedule",
+    screenshot: "/screenshots/schedule.jpg",
+    pageName: "Export Options",
+    pageDescription: 'A native multi-format <span class="highlight_text">document renderer</span> that serializes real-time scheduling maps into portable sheets and reports directly on the device.',
+    featureTitle: "Export Engine",
+    hookLine: "Generate. Package. Share.",
+    techTags: [
+      { emoji: "🖨️", label: "Native PDF Canvas", color: "var(--accent-cyan)" },
+      { emoji: "📊", label: "Apache POI Excel", color: "var(--accent-emerald)" },
+      { emoji: "🔄", label: "Intent.createChooser", color: "var(--accent-purple)" },
+    ],
+    builtBy: "Eshan",
+    features: [
+      {
+        icon: "⚡",
+        title: "Asynchronous IO Dispatch",
+        description: "Heavy document rendering runs securely off the main thread via coroutineScope.launch { withContext(Dispatchers.IO) }, ensuring zero frame drops while an isExporting state locks the UI.",
+      },
+      {
+        icon: "📐",
+        title: "Native Canvas Formatting",
+        description: "Constructs A4 dimensions using Android's native PdfDocument. Custom Paint objects map header backgrounds, stroke-weighted borders, and distinct typographies directly onto the Canvas without requiring external PDF libraries.",
+      },
+      {
+        icon: "🔤",
+        title: "Alphanumeric Token Sort",
+        description: "Prior to plotting the table, a custom Comparator regroups sections by isolating numeric prefixes ('9' from '9G'). This guarantees multi-grade layouts always render sequential ascending grades (9, 10, 11) rather than raw string orders (10 before 9).",
+      },
+      {
+        icon: "📈",
+        title: "Localized Excel Compilation",
+        description: "ScheduleExcelGenerator compiles the mapping payloads into stylized .xlsx workbooks completely on-device, bypassing API constraints or cloud dependency for private administrative exports.",
+      },
+      {
+        icon: "🔗",
+        title: "Secure FileProvider Beam",
+        description: "Generated files are written to safe cache directories, wrapped as URIs via FileProvider, and broadcasted to Android's Intent.ACTION_SEND chooser — seamlessly hooking into WhatsApp, Email, or cloud drives.",
       },
     ],
     hotspots: [
     ],
-    laserTheme: "light",
+    laserTheme: "dark",
   },
 
   "edit-slots": {
@@ -2514,23 +3113,75 @@ export const screens: Record<string, AppScreen> = {
     featureTitle: "Slot Mutator",
     hookLine: "Precision scheduling details.",
     techTags: [
-      { emoji: "⚙️", label: "State Hoisting", color: "var(--accent-purple)" },
-      { emoji: "🕒", label: "TimePicker API", color: "var(--accent-cyan)" },
+      { emoji: "🎛️", label: "SwipeWheelPicker", color: "var(--accent-purple)" },
+      { emoji: "🧬", label: "Regex Mutators", color: "var(--accent-cyan)" },
+      { emoji: "🛡️", label: "Constraint Validation", color: "var(--accent-amber)" },
     ],
     builtBy: "Eshan",
     features: [
       {
-        icon: "🕒",
-        title: "Material Time selection",
-        description: "Utilizes Compose Material3 TimePickers seamlessly integrated into the schedule modifier form for robust input validation.",
+        icon: "🎛️",
+        title: "Coroutine Scroll Snapping",
+        description: "The custom 'SwipeWheelPicker' leverages Compose's 'rememberLazyListState' with an active 'LaunchedEffect', executing a coroutine payload off-thread to fluidly snap to the closest focal index when scroll velocity terminates.",
       },
       {
         icon: "🔄",
-        title: "Immutable State Updates",
-        description: "Form inputs are hoisted and mapped to immutable data models before they are synchronously patched to Firebase.",
+        title: "Compound Wheel Delegation",
+        description: "The 'TimeWheelPicker' completely abstracts the complex logic of bridging independent hour and minute Lazylists, pushing state symmetrically up the tree using an injected 'onTimeChange: (Int, Int) -> Unit' lambda.",
+      },
+      {
+        icon: "🧬",
+        title: "Regex String Deconstruction",
+        description: "Re-entering edit mode reverse-engineers formatted persistence tokens (like '09:00-10:00') directly into discrete integer pairs using rigorous Regex matcher operations to populate the hoisted state variables.",
+      },
+      {
+        icon: "🧊",
+        title: "Immutable Array Swapping",
+        description: "Deep array updates are executed by chaining '.toMutableList().apply { ... }.toList()', forcibly stripping reference memory to guarantee flawless UI recomposition triggers across the heavy GridView.",
+      },
+      {
+        icon: "🛡️",
+        title: "Synchronous Boundary Bounds",
+        description: "Client-side numerical validation actively rejects temporal paradoxes (like ensuring end times strictly evaluate mathematically greater than start times) before permitting state merges or Firebase patch sequences.",
       },
     ],
     hotspots: [
+      {
+        shape: "rect",
+        x: 26.9,
+        y: 93.6,
+        width: 6.3,
+        height: 3,
+        targetScreenId: "ttw-updates",
+        label: "Home",
+      },
+      {
+        shape: "rect",
+        x: 36.5,
+        y: 93.3,
+        width: 7.3,
+        height: 3.2,
+        targetScreenId: "class-groups",
+        label: "Notifications",
+      },
+      {
+        shape: "rect",
+        x: 46.3,
+        y: 93.2,
+        width: 7.5,
+        height: 3.5,
+        targetScreenId: "ttw-calender",
+        label: "Calendar",
+      },
+      {
+        shape: "rect",
+        x: 66.3,
+        y: 93.4,
+        width: 6.9,
+        height: 3.3,
+        targetScreenId: "ttw-profile",
+        label: "Profile",
+      },
     ],
     laserTheme: "light",
   },
@@ -2544,22 +3195,76 @@ export const screens: Record<string, AppScreen> = {
     hookLine: "Intelligent cluster visualization.",
     techTags: [
       { emoji: "🏷️", label: "GroupChips View", color: "var(--accent-purple)" },
-      { emoji: "⚡", label: "Real-time Metrics", color: "var(--accent-cyan)" },
+      { emoji: "🔀", label: "Aggregation Logic", color: "var(--accent-cyan)" },
+      { emoji: "⚡", label: "Async Math", color: "var(--accent-emerald)" },
+      { emoji: "🛡️", label: "Safe Merging", color: "var(--accent-rose)" },
+      { emoji: "📡", label: "State Hoisting", color: "var(--accent-amber)" },
     ],
     builtBy: "Eshan",
     features: [
       {
         icon: "🏷️",
-        title: "Dynamic Capacity Chips",
-        description: "Group chips are rendered using Compose Flow, constantly updating their inner count (e.g. 'Gp 1: 5') based on the selected availability intersections in the ViewModel.",
+        title: "Declarative Chip Grids",
+        description: "The GroupChipsFlowLayout dynamically chunks the 'nonZeroGroups' list into uniform rows of five. This guarantees strict visual hierarchy for volunteer assignments before rendering the styled Material cards.",
+      },
+      {
+        icon: "🔀",
+        title: "Multi-Preset Aggregation",
+        description: "Admins can select two or more existing presets. The system recursively traverses the inner volunteer arrays, gracefully resolving object overlaps before preparing the final merge payload.",
+      },
+      {
+        icon: "⚡",
+        title: "Asynchronous Mapping",
+        description: "Data transformation functions (e.g., groupBy, mapValues) process the merged records natively in memory. They sum up active class counts natively without generating blocking thread delays.",
       },
       {
         icon: "🛡️",
-        title: "Conflict Avoidance",
-        description: "Admins receive direct visual cues on capacity limits per group block before flushing any changes, guaranteeing scheduling bounds.",
+        title: "Safeguarded Checkouts",
+        description: "The confirmation layer enforces a strict barrier, displaying a live preview 'mergePreviewText' buffer. This demands an explicit new string binding before triggering any destructive 'setDocument' commands.",
+      },
+      {
+        icon: "📡",
+        title: "Deterministic Fallbacks",
+        description: "Upon batch execution, the success callback automatically inspects a derived 'duplicateCount' integer. A SnackBar injects context-sensitive error strings detailing exact array reduction states.",
       },
     ],
     hotspots: [
+      {
+        shape: "rect",
+        x: 27.1,
+        y: 93,
+        width: 5.9,
+        height: 2.9,
+        targetScreenId: "ttw-updates",
+        label: "Home",
+      },
+      {
+        shape: "rect",
+        x: 36.6,
+        y: 92.8,
+        width: 7,
+        height: 3.3,
+        targetScreenId: "class-groups",
+        label: "Messages",
+      },
+      {
+        shape: "rect",
+        x: 46.5,
+        y: 92.7,
+        width: 7,
+        height: 3.6,
+        targetScreenId: "ttw-calender",
+        label: "Calendar",
+      },
+      {
+        shape: "rect",
+        x: 66.6,
+        y: 92.9,
+        width: 6.5,
+        height: 3.1,
+        targetScreenId: "ttw-profile",
+        label: "Profile",
+      },
     ],
     laserTheme: "light",
   },
@@ -2567,28 +3272,82 @@ export const screens: Record<string, AppScreen> = {
   "day": {
     id: "day",
     screenshot: "/screenshots/add-free-groups.jpg",
-    pageName: "Day Availability Editor",
-    pageDescription: 'A micro-level view for a specific day inside an Availability Preset. Admins can toggle individual <span class="highlight_text">availability slots</span> on and off before finalizing the preset.',
-    featureTitle: "Granular Time Config",
-    hookLine: "Slot by slot precision.",
+    pageName: "Set Availability",
+    pageDescription: 'A grid-based interface for admins to configure group availability against class times within an <span class="highlight_text">Availability Preset</span>. Supports Excel ingestion, preset cloning, and surgical Firestore writes.',
+    featureTitle: "Availability Configuration",
+    hookLine: "Slot-level precision. Zero redundant writes.",
     techTags: [
-      { emoji: "🧮", label: "AvailabilitySlot API", color: "var(--accent-purple)" },
-      { emoji: "⚡", label: "State Hoisting", color: "var(--accent-cyan)" },
+      { emoji: "🧮", label: "Range Compressor", color: "var(--accent-purple)" },
+      { emoji: "📂", label: "Excel Ingestion", color: "var(--accent-cyan)" },
+      { emoji: "🔄", label: "Preset Cloning", color: "var(--accent-emerald)" },
+      { emoji: "📡", label: "Surgical Updates", color: "var(--accent-amber)" },
+      { emoji: "🔁", label: "Bidirectional Parsing", color: "var(--accent-rose)" },
     ],
     builtBy: "Eshan",
     features: [
       {
-        icon: "👆",
-        title: "Toggle Architecture",
-        description: "Uses hoisted Sets to instantly reflect selected availability timeslots without round-tripping to the database for every single click.",
+        icon: "🧮",
+        title: "Range Compression Engine",
+        description: "The `compressNumberRangesForDisplay()` function scans sorted integer lists and collapses sequences of 3+ consecutive group numbers into compact 'start-end' notation while deliberately leaving pairs as individual comma values.",
       },
       {
-        icon: "🗄️",
-        title: "Batched Writing",
-        description: "All selections for the day are batched and written synchronously to Firebase, significantly saving on unnecessary write operations.",
+        icon: "📂",
+        title: "Excel Slot Ingestion",
+        description: "A file picker registered via `rememberLauncherForActivityResult` fires `ExcelAvailabilityParser.parseExcelAndGetFreeGroups()` in a coroutine. Parsed slots are surgically merged into the active mutable list by matching on exact `dayIndex` and `slotIndex` keys.",
+      },
+      {
+        icon: "🔄",
+        title: "Cross-Preset Cloning",
+        description: "The `copyFromPreset()` function deliberately re-fetches the source document from Firestore rather than reading the in-memory list, which lacks the nested `availability` map. Slots are then remapped by day name to match the target preset's schedule structure.",
+      },
+      {
+        icon: "📡",
+        title: "Surgical Firestore Writes",
+        description: "The `saveAvailabilityData()` function serializes selections into a nested `Map<String, Map<String, String>>` keyed by day name then slot index. It then fires a targeted `.update('availability', availabilityMap)` to avoid overwriting sibling fields on the preset document.",
+      },
+      {
+        icon: "🔁",
+        title: "Bidirectional Format Parsing",
+        description: "The `expandNumberRanges()` function simultaneously handles the legacy hyphenated range format ('1-5') and the modern expanded comma format ('1,2,3,4'), enabling full backward compatibility as the app migrated its storage schema without a database migration.",
       },
     ],
     hotspots: [
+      {
+        shape: "rect",
+        x: 26.9,
+        y: 93.5,
+        width: 7,
+        height: 3.3,
+        targetScreenId: "ttw-updates",
+        label: "Home",
+      },
+      {
+        shape: "rect",
+        x: 36.7,
+        y: 93.1,
+        width: 6.9,
+        height: 3.5,
+        targetScreenId: "class-groups",
+        label: "Messages",
+      },
+      {
+        shape: "rect",
+        x: 46.5,
+        y: 93.2,
+        width: 7.1,
+        height: 3.6,
+        targetScreenId: "ttw-calender",
+        label: "Calendar",
+      },
+      {
+        shape: "rect",
+        x: 66.2,
+        y: 93.3,
+        width: 7,
+        height: 3.5,
+        targetScreenId: "ttw-profile",
+        label: "Profile",
+      },
     ],
     laserTheme: "light",
   },
@@ -2596,25 +3355,43 @@ export const screens: Record<string, AppScreen> = {
   "create-schedule": {
     id: "create-schedule",
     screenshot: "/screenshots/create-schedule.jpg",
-    pageName: "Finalize Schedule",
-    pageDescription: 'The final parameter check before triggering the TFV logic. Admins can <span class="highlight_text">configure fallback weights</span> or generation mode before executing.',
-    featureTitle: "TFV Trigger",
-    hookLine: "Commit to the match.",
+    pageName: "Create Schedule",
+    pageDescription: 'The live assignment workspace where admins manually fill or <span class="highlight_text">auto-assign volunteers to teaching slots</span> using the TFV round-robin engine — with real-time toast feedback and a crash-proof save flow.',
+    featureTitle: "Assignment Workspace",
+    hookLine: "Assign. Verify. Save.",
     techTags: [
-      { emoji: "⚡", label: "Runtime Logic", color: "var(--accent-orange)" },
-      { emoji: "🛠️", label: "Parameter Tuning", color: "var(--accent-cyan)" },
+      { emoji: "🧠", label: "TFV Round-Robin", color: "var(--accent-purple)" },
+      { emoji: "🎨", label: "Urgency Coloring", color: "var(--accent-amber)" },
+      { emoji: "📜", label: "Algorithm Logs", color: "var(--accent-cyan)" },
+      { emoji: "💾", label: "Triple-Save Flow", color: "var(--accent-emerald)" },
+      { emoji: "⚡", label: "Adjacency Guard", color: "var(--accent-rose)" },
     ],
     builtBy: "Eshan",
     features: [
       {
-        icon: "🚦",
-        title: "Execution Sandbox",
-        description: "Variables are held safely in a staging environment. The TFV engine only fires when this explicit intent is provided.",
+        icon: "🎨",
+        title: "TFV-Driven Slot Urgency Coloring",
+        description: "Every unassigned SlotItem reads its tfv score and renders a matching background: red (TFV ≤ 3), brown (≤ 5), blue-gray (≤ 10), or dark surface (> 10). A color-matched Badge overlays the exact TFV score, surfacing the most constrained slots at a glance without any admin manual triage.",
       },
       {
-        icon: "🔄",
-        title: "Coroutine Dispatch",
-        description: "Clicking Generate kicks off a long-running ViewModel coroutine on the Default dispatcher, avoiding main-thread blockages while paths calculate.",
+        icon: "🧠",
+        title: "Round-Robin Auto-Assign FAB",
+        description: "The AutoAwesome FAB calls assignNextSlotInRoundRobin() on the ViewModel, which picks the lowest-TFV unassigned slot and applies the adjacency + daily-limit guard before writing. If no valid volunteer exists, it sets showAutoAssignError instead of silently skipping, showing an explicit 'Assignment Failed' dialog with a YellowAccent OK button.",
+      },
+      {
+        icon: "🪄",
+        title: "Sliding Assignment Toast",
+        description: "On every successful placement, lastAssignmentMessage emits a string via StateFlow. A LaunchedEffect catches it, sets showMessage = true, waits 3 seconds with delay(), then slides the card back out via slideOutHorizontally. The message slot is cleared with clearAssignmentMessage() after the exit animation so no stale text leaks into the next assignment.",
+      },
+      {
+        icon: "📜",
+        title: "Algorithm Log Viewer Dialog",
+        description: "A LibraryBooks icon FAB opens AlgorithmLogDialog, which renders the ViewModel's algorithmLogs StateFlow as a scrollable LazyColumn of color-coded LogEntry rows. Each entry is typed (INFO, WARNING, ERROR) with a matching color, giving admins a full paper trail of every placement decision and rejection reason.",
+      },
+      {
+        icon: "💾",
+        title: "Triple-Preset Atomic Save Flow",
+        description: "The Save FAB opens FinishDialog for a preset name input. On confirm, a coroutine fires three sequential writes: saveSchedule(), saveAssignedVolunteersPresets() (one preset per teaching slot), and saveUnassignedVolunteersPreset(presetName). isSavingSchedule locks the UI with a full-screen CircularProgressIndicator overlay until all three succeed, then pops the back stack to the scheduling dashboard.",
       },
     ],
     hotspots: [
@@ -2625,7 +3402,8 @@ export const screens: Record<string, AppScreen> = {
         width: 10.5,
         height: 4.9,
         targetScreenId: "add-volunteers",
-        label: "Add Volunteers",
+        label: "Volunteers Info",
+        tooltipSide: "left",
       },
       {
         shape: "rect",
@@ -2635,6 +3413,7 @@ export const screens: Record<string, AppScreen> = {
         height: 4.9,
         targetScreenId: "assignment-log",
         label: "Assignment Logs",
+        tooltipSide: "left",
       },
       {
         shape: "rect",
@@ -2654,6 +3433,42 @@ export const screens: Record<string, AppScreen> = {
         targetScreenId: "unassigned-slot",
         label: "Unassigned Slot",
       },
+      {
+        shape: "rect",
+        x: 27.1,
+        y: 93.7,
+        width: 5.8,
+        height: 2.8,
+        targetScreenId: "ttw-updates",
+        label: "Home",
+      },
+      {
+        shape: "rect",
+        x: 36.6,
+        y: 93.3,
+        width: 7.1,
+        height: 3.2,
+        targetScreenId: "class-groups",
+        label: "Messages",
+      },
+      {
+        shape: "rect",
+        x: 46.6,
+        y: 93.3,
+        width: 7.1,
+        height: 3.4,
+        targetScreenId: "ttw-calender",
+        label: "Calendar",
+      },
+      {
+        shape: "rect",
+        x: 66.5,
+        y: 93.5,
+        width: 6,
+        height: 3.1,
+        targetScreenId: "ttw-profile",
+        label: "Profile",
+      },
     ],
     laserTheme: "light",
   },
@@ -2661,20 +3476,42 @@ export const screens: Record<string, AppScreen> = {
   "add-volunteers": {
     id: "add-volunteers",
     screenshot: "/screenshots/add-volunteers.jpg",
-    pageName: "Add Volunteers",
-    pageDescription: 'Admin console to <span class="highlight_text">assign specific roles</span> and manually inject selected volunteers directly into the schedule.',
-    featureTitle: "Volunteer Manager",
-    hookLine: "Manual insertion override.",
+    pageName: "Volunteers Info",
+    pageDescription: 'A full-screen roster dialog showing all volunteers with their <span class="highlight_text">assignment status</span> — filterable by state (All / Assigned / Unassigned), group, and sortable by group or name — giving admins a live assignment audit during schedule creation.',
+    featureTitle: "Volunteer Roster Panel",
+    hookLine: "Who's in. Who's out.",
     techTags: [
-      { emoji: "👤", label: "Profile Directory", color: "var(--accent-purple)" },
-      { emoji: "📝", label: "Manual Override", color: "var(--accent-amber)" },
+      { emoji: "🔁", label: "Tri-State FilterMode", color: "var(--accent-amber)" },
+      { emoji: "👥", label: "VolunteersListDialog", color: "var(--accent-purple)" },
+      { emoji: "📋", label: "LazyColumn", color: "var(--accent-cyan)" },
+      { emoji: "🔍", label: "Group Grid Filter", color: "var(--accent-emerald)" },
     ],
     builtBy: "Eshan",
     features: [
       {
-        icon: "📝",
-        title: "Direct Assignments",
-        description: "Bypass the automatic generation constraints by manually pushing specific volunteers into required teaching slots.",
+        icon: "🔁",
+        title: "Tri-State Assignment Filter",
+        description: "A single cycling Button toggles filterMode through 0 (All, YellowAccent), 1 (Assigned, green #2E7D32), and 2 (Unassigned, red #C62828). The button's containerColor and text color switch with each state via when() expressions, making the active filter immediately obvious without a dropdown.",
+      },
+      {
+        icon: "🔍",
+        title: "Multi-Group Grid Filter",
+        description: "A Group button opens a grid dialog (75% width, max 450dp height) containing all distinct group values as square chips. Tapping a chip toggles its membership in a selectedGroups Set<String>. The button label dynamically reads 'All Gps', 'Gp X', 'Gps X,Y', or 'N Gps' depending on selection size.",
+      },
+      {
+        icon: "📊",
+        title: "Sort Toggle (Name vs Group)",
+        description: "A FilterChip labeled 'Sort' drives sortByGroup: Boolean. When true, filteredVolunteers is sorted first by group number (parsed to Int with a fallback to Int.MAX_VALUE for non-numeric groups), then alphabetically by name. When false, results sort purely by name — matching the default admin workflow.",
+      },
+      {
+        icon: "👥",
+        title: "VolunteerListItem Dual-Column Card",
+        description: "Each card in the LazyColumn splits into 45% (volunteer info: name, group+roll chips, class count + score) and 55% (assignment info: assigned subject in YellowAccent with rank suffix '#N', school/day in success green, or plain preference list when unassigned). Both columns use CenterHorizontally alignment and TextOverflow.Ellipsis.",
+      },
+      {
+        icon: "🔢",
+        title: "Numeric Group Sort Comparator",
+        description: "Groups are sorted using a compareBy comparator that tries Integer.parseInt() on each group string. Non-numeric groups (e.g. 'A', 'B') receive Int.MAX_VALUE and sort last. The same comparator is reused in both the group dropdown and the main volunteer list to ensure consistent ordering across all filter views.",
       },
     ],
     hotspots: [
@@ -2686,46 +3523,160 @@ export const screens: Record<string, AppScreen> = {
     id: "assignment-log",
     screenshot: "/screenshots/assignment-log.jpg",
     pageName: "Assignment Logs",
-    pageDescription: 'A transparent audit trail showing all <span class="highlight_text">administrative changes</span> and schedule mutators applied during the current generation.',
-    featureTitle: "Action Tracker",
+    pageDescription: 'A transparent audit trail showing all <span class="highlight_text">algorithmic attempts</span>, constraint checks, and manual overrides applied during the current generation.',
+    featureTitle: "Algorithmic Trace Card",
     hookLine: "Trace every modifier.",
     techTags: [
-      { emoji: "📋", label: "LazyColumn", color: "var(--accent-cyan)" },
-      { emoji: "🗄️", label: "Session History", color: "var(--accent-purple)" },
+      { emoji: "🧮", label: "Stateful Grouping", color: "var(--accent-purple)" },
+      { emoji: "📊", label: "Custom Scrollbar", color: "var(--accent-yellow)" },
     ],
     builtBy: "Eshan",
     features: [
       {
-        icon: "📋",
-        title: "Immutable Logging",
-        description: "All assignments, swaps, and overrides are logged chronologically, providing full traceability for the finalized schedule.",
+        icon: "🔗",
+        title: "Stateful Log Grouping",
+        description: "Logs are aggregated into 'LogGroup' or 'FailedBatch' structures inside a remember block. Skipped attempts are accumulated and natively attached as 'precedingSkippedAttempts' to the next successful assignment, preserving exact chronological context without cluttering the main list.",
+      },
+      {
+        icon: "💳",
+        title: "Premium Log Card Structure",
+        description: "A dual-column card (35%/65% split) built with Row and Column weights. The left column displays slot context (school, day, time, TFV) using stylized surface chips. The right column parses complex string payloads into Name, Roll, Subject, Preference, Score, and dynamic [MANUAL] tags.",
+      },
+      {
+        icon: "⏬",
+        title: "Expandable Skipped Accordion",
+        description: "When an assignment succeeds after multiple failures, a clickable indicator toggles an AnimatedVisibility block (with expandVertically / shrinkVertically) to reveal underlying SkippedSlotRow items, keeping the UI dense while preserving full failure details.",
+      },
+      {
+        icon: "📜",
+        title: "Dynamic Canvas Scrollbar",
+        description: "A custom vertical scrollbar drawn natively via drawWithContent on a 6dp side-box. It calculates thumb height and offset dynamically using LazyListState.layoutInfo (viewport size vs total items count) to ensure smooth tracking across potentially thousands of generated logs.",
+      },
+      {
+        icon: "🔘",
+        title: "Round & Iteration Separators",
+        description: "Visual boundaries (ITERATION_START and ROUND_START) are parsed and injected as standalone TopLevelLogItem elements within the LazyColumn payload. They render custom circle-badges and dividers to clearly delineate scheduling phases.",
       },
     ],
     hotspots: [
+      {
+        shape: "rect",
+        x: 27,
+        y: 93.8,
+        width: 6.6,
+        height: 2.8,
+        targetScreenId: "ttw-updates",
+        label: "Home"
+      },
+      {
+        shape: "rect",
+        x: 36.7,
+        y: 93.5,
+        width: 6.8,
+        height: 3,
+        targetScreenId: "class-groups",
+        label: "Messages"
+      },
+      {
+        shape: "rect",
+        x: 46.9,
+        y: 93.6,
+        width: 6.3,
+        height: 3.1,
+        targetScreenId: "ttw-calender",
+        label: "Calendar"
+      },
+      {
+        shape: "rect",
+        x: 66.7,
+        y: 93.7,
+        width: 6.3,
+        height: 3.1,
+        targetScreenId: "ttw-profile",
+        label: "Profile"
+      }
     ],
-    laserTheme: "light",
+    laserTheme: "dark",
   },
 
   "assigned-volunteer": {
     id: "assigned-volunteer",
     screenshot: "/screenshots/assigned-volunteer.jpg",
     pageName: "Assigned Volunteer",
-    pageDescription: 'A detailed <span class="highlight_text">assignment card</span> showing a specific volunteer\'s placement and tracking their fulfillment value.',
-    featureTitle: "Placement details",
-    hookLine: "View the match.",
+    pageDescription: 'A full-screen overlay card showing the <span class="highlight_text">complete volunteer assignment</span> — name, roll number, group, interview score, subject preferences, slot details, and available groups — all resolved live from the ViewModel state.',
+    featureTitle: "Assignment Detail Panel",
+    hookLine: "The full picture. One tap.",
     techTags: [
-      { emoji: "👤", label: "Volunteer Profile", color: "var(--accent-purple)" },
-      { emoji: "🔗", label: "Runtime Binding", color: "var(--accent-cyan)" },
+      { emoji: "✅", label: "AssignmentPanel", color: "var(--accent-emerald)" },
+      { emoji: "🏷️", label: "YellowAccent Chips", color: "var(--accent-amber)" },
+      { emoji: "🌊", label: "FlowRow Layout", color: "var(--accent-cyan)" },
+      { emoji: "🟩", label: "Group Expander", color: "var(--accent-purple)" },
     ],
     builtBy: "Eshan",
     features: [
       {
-        icon: "🔗",
-        title: "Dynamic Resolutions",
-        description: "Clicking a populated grid block dynamically resolves the associated Volunteer ID against the local roster cache.",
+        icon: "✅",
+        title: "Dimmed Overlay with Success Header",
+        description: "Tapping an assigned green slot opens a full-screen Box with a 70% opaque black overlay. The card centers within it and leads with a CircleShape surface (success green) containing a Check icon alongside 'Volunteer Assigned' bold title — providing instant visual confirmation before the admin reads any data.",
+      },
+      {
+        icon: "🏷️",
+        title: "Triple-Chip Identity Row",
+        description: "The volunteer's full roll number, group number, and interview score each render as separate YellowAccent Surface chips with RoundedCornerShape(8dp). The score chip only appears when interviewScore > 0, keeping the layout clean for volunteers without a recorded score.",
+      },
+      {
+        icon: "🌊",
+        title: "Preference-Rank FlowRow",
+        description: "The volunteer's full subject preferences list renders in a FlowRow with maxItemsInEachRow = 4. The currently assigned subject gets a solid YellowAccent background with black bold text; all other preferences display as transparent-bordered chips with white text — immediately showing whether the volunteer received their first-choice subject.",
+      },
+      {
+        icon: "🟩",
+        title: "Group Range Expander",
+        description: "Available groups are stored as compressed range strings (e.g. '1-5'). A local expandGroupRangesForFlow() function applies a Regex pattern to split start and end integers and re-emit each individually. expandAllGroupRangesForFlow() chains this over every comma-separated part, producing a flat distinct list fed into GroupsFlowLayout.",
+      },
+      {
+        icon: "📍",
+        title: "Slot Detail Surface",
+        description: "A DarkSurface-tinted Surface row below the volunteer card renders schoolName, dayName, and timeLabel in a single formatted string. This anchors the volunteer detail to its exact teaching context without requiring the admin to navigate back to the schedule grid.",
       },
     ],
     hotspots: [
+      {
+        shape: "rect",
+        x: 27.3,
+        y: 93.6,
+        width: 6.3,
+        height: 2.7,
+        targetScreenId: "ttw-updates",
+        label: "Home",
+      },
+      {
+        shape: "rect",
+        x: 36.6,
+        y: 93.4,
+        width: 7,
+        height: 2.9,
+        targetScreenId: "class-groups",
+        label: "Messages",
+      },
+      {
+        shape: "rect",
+        x: 46.8,
+        y: 93.5,
+        width: 6.4,
+        height: 2.9,
+        targetScreenId: "ttw-calender",
+        label: "Calendar",
+      },
+      {
+        shape: "rect",
+        x: 66.9,
+        y: 93.5,
+        width: 6,
+        height: 2.8,
+        targetScreenId: "ttw-profile",
+        label: "Profile",
+      },
     ],
     laserTheme: "light",
   },
@@ -2734,23 +3685,89 @@ export const screens: Record<string, AppScreen> = {
     id: "unassigned-slot",
     screenshot: "/screenshots/unassigned-slot.jpg",
     pageName: "Unassigned Slot",
-    pageDescription: 'Highlights an <span class="highlight_text">unfilled block</span> in the generated schedule, allowing admins to invoke manual overrides or adjust fallback constraints.',
-    featureTitle: "Gap Resolution",
-    hookLine: "Fill the void.",
+    pageDescription: 'A bottom-sheet assignment panel for an <span class="highlight_text">unfilled teaching slot</span> — showing available groups, manual volunteer search, and a one-tap automatic fallback — driven live by the ViewModel\'s TFV engine.',
+    featureTitle: "Gap Resolution Panel",
+    hookLine: "Empty slot. Two paths to fill it.",
     techTags: [
-      { emoji: "⚠️", label: "Conflict State", color: "var(--accent-amber)" },
-      { emoji: "🧩", label: "Fallback Engine", color: "var(--accent-purple)" },
+      { emoji: "🔍", label: "ManualVolunteerDialog", color: "var(--accent-amber)" },
+      { emoji: "⚡", label: "AutoAwesome FAB", color: "var(--accent-purple)" },
+      { emoji: "🟡", label: "YellowAccent Buttons", color: "var(--accent-cyan)" },
+      { emoji: "📋", label: "LazyRow Groups", color: "var(--accent-emerald)" },
     ],
     builtBy: "Eshan",
     features: [
       {
-        icon: "🧩",
-        title: "Fallback Options",
-        description: "Empty slots immediately trigger the fallback suggestion engine to provide next-best alternatives based on TFV scores.",
+        icon: "🏷️",
+        title: "Slot Context Header",
+        description: "The panel header dynamically renders 'Assign Volunteer' with the slot's school, day, and time in a subtitle row. A close IconButton sits at the trailing end. Both fields are bound directly to the Slot object passed into AssignmentPanel — no extra state needed.",
+      },
+      {
+        icon: "📋",
+        title: "Available Groups LazyRow",
+        description: "A nested Card renders the slot's availableGroups list through expandAllGroupRangesForUI() — a helper that splits comma-separated entries and expands numeric ranges (e.g. '3-7' → ['3','4','5','6','7']) into individual YellowAccent Surface chips displayed in a horizontally scrollable LazyRow.",
+      },
+      {
+        icon: "🔍",
+        title: "Manual Assignment via Search Dialog",
+        description: "The YellowAccent primary button ('Assign Volunteer Manually') flips showManualSelection = true, launching ManualVolunteerSelectionDialog. The dialog receives the unfiltered volunteer list and slot context, letting the admin pick any available volunteer and subject — bypassing the TFV algorithm entirely.",
+      },
+      {
+        icon: "⚡",
+        title: "Automatic TFV Assignment Button",
+        description: "An OutlinedButton with a YellowAccent border and AutoAwesome icon calls onAssignAutomatic, which proxies to assignNextSlotInRoundRobin() on the ViewModel. The function selects the lowest-TFV unassigned volunteer satisfying the adjacency and daily-limit constraints, then writes the assignment atomically to the roster StateFlow.",
+      },
+      {
+        icon: "🚫",
+        title: "Empty-Roster Guard Card",
+        description: "When availableVolunteers.isEmpty() is true, the assignment buttons are replaced with a full-width Card filled with Color(0xFFB71C1C) (deep red), showing 'No volunteers available for assignment' centered in bold white text. This prevents the admin from triggering an assignment call that would immediately fail.",
       },
     ],
     hotspots: [
     ],
+    laserTheme: "light",
+  },
+
+  "attendance-record": {
+    id: "attendance-record",
+    screenshot: "/screenshots/attendance-record.jpg",
+    pageName: "Attendance Report",
+    pageDescription: 'An on-device PDF manifest auto-compiled after each session — rendering a <span class="highlight_text">structured, wing-sorted attendee table</span> with event metadata, roll numbers, and a timestamped generation footer.',
+    featureTitle: "PDF Report Engine",
+    hookLine: "Every session. One tap. Instant PDF.",
+    techTags: [
+      { emoji: "📄", label: "iText PDF Library", color: "var(--accent-amber)" },
+      { emoji: "🗂️", label: "Wing Grouping", color: "var(--accent-cyan)" },
+      { emoji: "💾", label: "Downloads Export", color: "var(--accent-purple)" },
+    ],
+    builtBy: "Eshan",
+    features: [
+      {
+        icon: "📋",
+        title: "Event Metadata Header",
+        description: "The PDF opens with a bold 'NSS Attendance Report' title followed by a 2-column details table. createCell() alternates label cells (light blue background, bold font) against data cells (white background) to render Event, Date, Time, Location, and Hours in a scannable grid format.",
+      },
+      {
+        icon: "🗂️",
+        title: "Wing-Sorted Attendee Table",
+        description: "groupAttendeesByWing() performs an async Firestore lookup on the 'users' collection per attendee roll number to resolve their Wing. Attendees are then bucketed by wing, sorted alphabetically within each group, and rendered in a 3-column Wing / Name / Roll Number table using toSortedMap() for lexicographic wing ordering.",
+      },
+      {
+        icon: "📄",
+        title: "iText Document Assembly",
+        description: "Built on the iText library chain: PdfWriter → PdfDocument → Document. Header cells use Helvetica-Bold with white text on a #336699 blue background, while data cells use plain Helvetica on white. createHeaderCell() and createCell() abstract all styling, keeping row-rendering logic clean.",
+      },
+      {
+        icon: "💾",
+        title: "Timestamped File Export",
+        description: "The output filename is sanitized from the event name via regex ([^a-zA-Z0-9.-] → _) and suffixed with a yyyyMMdd_HHmmss timestamp. The file is written via FileOutputStream to Downloads/NSS_Reports/, creating the folder with mkdirs() if absent, making every report uniquely addressable and instantly findable.",
+      },
+      {
+        icon: "⚙️",
+        title: "IO-Threaded Coroutine Suspension",
+        description: "generateAttendanceReport() is a suspend fun dispatched entirely on Dispatchers.IO via withContext(Dispatchers.IO). All Firestore cross-reference fetches for wing resolution and the final file write execute off the main thread — ensuring zero UI jank during heavy document compilation.",
+      },
+    ],
+    hotspots: [],
     laserTheme: "light",
   }
 };
