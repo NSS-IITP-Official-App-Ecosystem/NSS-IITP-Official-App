@@ -5,7 +5,7 @@ import { PostHogProvider } from 'posthog-js/react'
 if (typeof window !== 'undefined') {
   posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY as string, {
     api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST as string,
-    person_profiles: 'identified_only', // or 'always' to track anonymous users
+    person_profiles: 'always', // Track all anonymous visitors on the portfolio
   })
 }
 
