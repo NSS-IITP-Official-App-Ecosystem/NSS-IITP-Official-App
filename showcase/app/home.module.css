@@ -132,6 +132,14 @@
   50% { opacity: 0.6; box-shadow: 0 0 0 8px rgba(102, 252, 241, 0); }
 }
 
+.hero_header_top {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
 .hero_title {
   font-size: clamp(3.2rem, 6vw, 5.5rem);
   font-weight: 900;
@@ -959,6 +967,10 @@
 
 /* ====== RESPONSIVE ====== */
 @media (max-width: 968px) {
+  .hero {
+    padding: 6rem 1.5rem 3rem;
+  }
+
   .hero_layout {
     flex-direction: column;
     text-align: center;
@@ -968,6 +980,19 @@
   .hero_content {
     align-items: center;
     text-align: center;
+  }
+
+  .hero_header_top {
+    justify-content: center;
+  }
+
+  .hero_title {
+    font-size: clamp(2.5rem, 8vw, 3.5rem);
+  }
+
+  .hero_visual {
+    min-width: 0;
+    width: 100%;
   }
 
   .story_layout {
@@ -994,6 +1019,29 @@
 @media (max-width: 768px) {
   .team_grid {
     grid-template-columns: 1fr;
+  }
+
+  .team_header {
+    flex-direction: column;
+    text-align: center;
+    gap: 1.5rem;
+  }
+
+  .team_info {
+    align-items: center;
+  }
+
+  .team_links_row {
+    justify-content: center;
+  }
+
+  .arch_card_body {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+
+  .hero_tech_pills {
+    max-width: 100%;
   }
 
   .stats_strip {

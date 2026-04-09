@@ -78,7 +78,7 @@ export default function Home() {
               initial="hidden"
               animate="show"
             >
-              <motion.div variants={fadeUp} style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+              <motion.div variants={fadeUp} className={styles.hero_header_top}>
                 <Image src="/images/app-logo.png" alt="App Logo" width={88} height={88} style={{ borderRadius: '18px', boxShadow: '0 8px 32px rgba(102, 252, 241, 0.15)' }} />
                 <div className={styles.hero_badge} style={{ margin: 0 }}>
                   <span className={styles.hero_badge_dot} />

@@ -37,6 +37,11 @@ html {
   scroll-behavior: smooth;
 }
 
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
 body {
   background-color: var(--bg-primary);
   color: var(--text-primary);
@@ -201,79 +206,6 @@ h1, h2, h3, h4, h5, h6 {
   margin: 2rem 0;
 }
 
-/* =========================================
-   ORIENTATION LOCK (Desktop / Landscape Only)
-   ========================================= */
-#orientation-lock {
-  display: none; /* Hidden by default */
-  position: fixed;
-  inset: 0;
-  z-index: 9999999;
-  background: var(--bg-primary);
-  background-image: radial-gradient(circle at center, rgba(102, 252, 241, 0.06) 0%, transparent 70%);
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 2rem;
-  backdrop-filter: blur(20px);
-}
-
-.orientation-lock-content {
-  max-width: 380px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1.5rem;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.02);
-  padding: 3rem 2rem;
-  border-radius: 24px;
-  box-shadow: 0 0 50px rgba(0, 0, 0, 0.8), inset 0 0 40px rgba(102, 252, 241, 0.03);
-}
-
-.orientation-icon {
-  font-size: 4rem;
-  animation: pulse-icon 2.5s infinite ease-in-out;
-}
-
-#orientation-lock h2 {
-  font-family: var(--font-display);
-  font-size: 1.6rem;
-  font-weight: 800;
-  color: #fff;
-  line-height: 1.3;
-}
-
-#orientation-lock p {
-  color: var(--text-secondary);
-  font-size: 0.95rem;
-  line-height: 1.6;
-}
-
-.orientation-subtext {
-  color: var(--accent-cyan) !important;
-  font-weight: 500;
-  font-size: 0.9rem !important;
-  margin-top: 0.5rem;
-}
-
-@keyframes pulse-icon {
-  0% { transform: scale(1); opacity: 0.8; }
-  50% { transform: scale(1.1); opacity: 1; }
-  100% { transform: scale(1); opacity: 0.8; }
-}
-
-/* Show the lock ONLY if the device is mobile/tablet width AND in portrait mode */
-@media screen and (max-width: 1024px) and (orientation: portrait) {
-  #orientation-lock {
-    display: flex;
-  }
-  
-  /* Prevent background from scrolling/moving when lock is active */
-  body {
-    overflow: hidden !important;
-  }
-}
 /* ====== GLOBAL FOOTER ====== */
 .global-footer {
   padding: 1.5rem 1rem 1rem;

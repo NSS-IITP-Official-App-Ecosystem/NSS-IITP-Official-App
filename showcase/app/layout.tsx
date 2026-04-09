@@ -28,14 +28,6 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body suppressHydrationWarning>
         <CSPostHogProvider>
-          <div id="orientation-lock">
-            <div className="orientation-lock-content">
-              <div className="orientation-icon">🖥️</div>
-              <h2>Desktop Experience Recommended</h2>
-              <p>This showcase is engineered specifically for PCs and laptops.</p>
-              <p className="orientation-subtext">Please view on a desktop, or rotate your device to landscape mode for the best experience.</p>
-            </div>
-          </div>
           {children}
           <footer className="global-footer">
             <p className="global-footer-text">
