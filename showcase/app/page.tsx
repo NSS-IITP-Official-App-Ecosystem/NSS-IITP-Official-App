@@ -175,16 +175,16 @@ export default function Home() {
                   <div className={styles.arch_section_title} style={{ textAlign: 'center' }}>Built With</div>
                   <div className={styles.hero_tech_pills}>
                     <span className={styles.hero_tech_pill}>
-                      <Image src="/kotlin.svg" alt="Kotlin" width={14} height={14} className={styles.tech_logo} /> Kotlin
+                      <Image src="/kotlin.svg" alt="Kotlin" width={14} height={14} className={styles.tech_logo} unoptimized /> Kotlin
                     </span>
                     <span className={styles.hero_tech_pill}>
-                      <Image src="/compose.svg" alt="Jetpack Compose" width={14} height={14} className={styles.tech_logo} /> Jetpack Compose
+                      <Image src="/compose.svg" alt="Jetpack Compose" width={14} height={14} className={styles.tech_logo} unoptimized /> Jetpack Compose
                     </span>
                     <span className={styles.hero_tech_pill}>
-                      <Image src="/firebase.svg" alt="Firebase" width={14} height={14} className={styles.tech_logo} /> Firebase
+                      <Image src="/firebase.svg" alt="Firebase" width={14} height={14} className={styles.tech_logo} unoptimized /> Firebase
                     </span>
                     <span className={styles.hero_tech_pill}>
-                      <Image src="/android.svg" alt="Android MVVM" width={14} height={14} className={styles.tech_logo} /> MVVM
+                      <Image src="/android.svg" alt="Android MVVM" width={14} height={14} className={styles.tech_logo} unoptimized /> MVVM
                     </span>
                     <span className={styles.hero_tech_pill}>
                       <Network style={{ width: 15, height: 15, color: '#10b981' }} /> Retrofit
