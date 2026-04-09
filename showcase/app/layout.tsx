@@ -34,6 +34,12 @@ export default function RootLayout({
           </div>
         </div>
         {children}
+        <footer className="global-footer">
+          <p className="global-footer-text">
+            Built with <span style={{ color: 'var(--accent-blue)' }}>{'<'}code{'>'}</span> and no caffeine by{" "}
+            <a href="https://www.linkedin.com/in/eshan-bhaskar/" target="_blank" rel="noopener noreferrer">Eshan Bhaskar</a> — IIT Patna
+          </p>
+        </footer>
       </body>
     </html>
   );

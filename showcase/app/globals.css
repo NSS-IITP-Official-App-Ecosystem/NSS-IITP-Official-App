@@ -274,3 +274,38 @@ h1, h2, h3, h4, h5, h6 {
     overflow: hidden !important;
   }
 }
+/* ====== GLOBAL FOOTER ====== */
+.global-footer {
+  padding: 1.5rem 1rem 1rem;
+  text-align: center;
+  position: relative;
+  z-index: 10;
+  width: 100%;
+}
+
+.global-footer::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(80%, 600px);
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(96, 165, 250, 0.2) 25%, rgba(192, 132, 252, 0.2) 50%, rgba(251, 113, 133, 0.2) 75%, transparent 100%);
+}
+
+.global-footer-text {
+  font-size: 0.85rem;
+  color: var(--text-tertiary);
+  font-family: var(--font-sans);
+}
+
+.global-footer-text a {
+  color: var(--accent-glow);
+  transition: opacity 0.2s;
+  text-decoration: none;
+}
+
+.global-footer-text a:hover {
+  opacity: 0.8;
+}

@@ -374,9 +374,21 @@ export default function ExplorePage() {
     }
 
 
+    if (currentScreenId === "attendance-matrix") {
+      setHistory([START_SCREEN_ID, "admin-dashboard", "nss-home", "nss-profile", "nss-profile-right-action"]);
+      setCurrentScreenId("nss-profile-right-action");
+      return;
+    }
+
     if (currentScreenId === "attendance-record") {
       setHistory([START_SCREEN_ID, "admin-dashboard", "nss-qr-scan"]);
       setCurrentScreenId("nss-qr-scan");
+      return;
+    }
+
+    if (currentScreenId === "ttw-options") {
+      setHistory([START_SCREEN_ID, "admin-dashboard", "ttw-profile"]);
+      setCurrentScreenId("ttw-profile");
       return;
     }
 
@@ -389,6 +401,18 @@ export default function ExplorePage() {
     if (currentScreenId === "vol-day") {
       setHistory([START_SCREEN_ID, "vol-log-in", "vol-dashboard", "vol-calender"]);
       setCurrentScreenId("vol-calender");
+      return;
+    }
+
+    if (currentScreenId === "subject-preference") {
+      setHistory([START_SCREEN_ID, "vol-log-in", "vol-dashboard", "vol-ttw-pro"]);
+      setCurrentScreenId("vol-ttw-pro");
+      return;
+    }
+
+    if (currentScreenId === "sem-report") {
+      setHistory([START_SCREEN_ID, "vol-log-in", "vol-dashboard", "vol-profile", "vol-sem2"]);
+      setCurrentScreenId("vol-sem2");
       return;
     }
 
@@ -458,7 +482,7 @@ export default function ExplorePage() {
                 initial="initial"
                 animate="animate"
               >
-                <span className={styles.tech_section_label}>Tech Stack</span>
+                <span className={styles.tech_section_label}>Core Components</span>
                 <div className={styles.tech_tags}>
                   {currentScreen.techTags.map((tag, i) => (
                     <motion.span
@@ -507,6 +531,16 @@ export default function ExplorePage() {
                 >
                   <ArrowLeft size={18} strokeWidth={2.5} />
                 </button>
+              )}
+
+              {/* ── ONBOARDING HINT (First screen only) ── */}
+              {currentScreenId === START_SCREEN_ID && history.length === 1 && (
+                <div className={styles.onboarding_hint}>
+                  <span className={styles.onboarding_text}>Click the glowing buttons to explore the app!</span>
+                  <svg className={styles.onboarding_arrow} viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 12h14m0 0l-6-6m6 6l-6 6" />
+                  </svg>
+                </div>
               )}
 
               {/* Ambient glow */}
@@ -585,11 +619,13 @@ export default function ExplorePage() {
                   {/* ── HOTSPOTS (Visible unless drawing) ── */}
                   {!isDrawing && !isRecording && currentScreen.hotspots.map((hs, i) => (
                     <HotspotEl
-                      key={i}
+                      key={`${currentScreen.id}-hotspot-${i}`}
                       hotspot={hs}
                       onClick={() => navigateTo(hs.targetScreenId)}
                     />
                   ))}
+
+
 
                   {/* ── CALIBRATION OVERLAY ── */}
                   {calibMode && (
@@ -682,6 +718,7 @@ export default function ExplorePage() {
 
             {/* ── Controls bar ── */}
             <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", marginTop: "0.75rem", flexWrap: "wrap", justifyContent: "center" }}>
+              {/*
               <button
                 onClick={() => calibMode ? resetCalib() : setCalibMode(true)}
                 style={{
@@ -743,14 +780,9 @@ export default function ExplorePage() {
                   Clear
                 </button>
               )}
+              */}
 
-              {!calibMode && (
-                <div className={styles.nav_hint}>
-                  <span className={styles.nav_hint_dot} />
-                  <Pointer style={{ width: 13, height: 13 }} />
-                  Tap the highlighted buttons to navigate
-                </div>
-              )}
+
             </div>
 
             {/* ── Coordinate readout panel ── */}
