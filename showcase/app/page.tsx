@@ -337,7 +337,7 @@ export default function Home() {
                 <div className={`${styles.team_card_accent} ${styles.team_card_accent_blue}`} />
                 <div className={styles.team_header}>
                   <div className={styles.avatar}>
-                    <Image src="/images/eshan-avatar-new.jpg" alt="Eshan Bhaskar" width={220} height={220} className={styles.avatar_image} />
+                    <Image src="/images/eshan-avatar-new.jpg" alt="Eshan Bhaskar" width={220} height={220} className={styles.avatar_image} quality={100} unoptimized={true} />
                   </div>
                   <div className={styles.team_info}>
                     <h3>Eshan Bhaskar</h3>
@@ -366,7 +366,7 @@ export default function Home() {
                 <div className={`${styles.team_card_accent} ${styles.team_card_accent_warm}`} />
                 <div className={styles.team_header}>
                   <div className={styles.avatar}>
-                     <Image src="/images/ankesh-avatar-new.jpg" alt="Ankesh Kumar" width={220} height={220} className={styles.avatar_image} />
+                     <Image src="/images/ankesh-avatar-new.jpg" alt="Ankesh Kumar" width={220} height={220} className={styles.avatar_image} quality={100} unoptimized={true} />
                   </div>
                   <div className={styles.team_info}>
                     <h3>Ankesh Kumar</h3>
@@ -401,13 +401,6 @@ export default function Home() {
           </ScrollReveal>
         </section>
 
-        {/* ============ FOOTER ============ */}
-        <footer className={styles.footer}>
-          <p className={styles.footer_text}>
-            Built with ☕ and <span style={{ color: 'var(--accent-blue)' }}>{'<'}code{'>'}</span> by{" "}
-            <a href="https://github.com/Eshan-Bhaskar" target="_blank" rel="noopener noreferrer">Eshan Bhaskar</a> — IIT Patna
-          </p>
-        </footer>
       </div>
     </>
   );

@@ -768,7 +768,18 @@ export const screens: Record<string, AppScreen> = {
         description: "Tapping export generates a timestamped CSV in Downloads/NSS_Reports/ via ExcelGenerator, writing event name, date, and hours per row. The file is shared through a FileProvider URI, keeping private storage paths off the system clipboard.",
       },
     ],
-    hotspots: [],
+    hotspots: [
+      {
+        shape: "rect",
+        x: 86.7,
+        y: 2.7,
+        width: 5.7,
+        height: 3.4,
+        targetScreenId: "sem-report",
+        label: "Export PDF",
+        tooltipSide: "left",
+      }
+    ],
     laserTheme: "dark",
   },
 
@@ -1070,6 +1081,15 @@ export const screens: Record<string, AppScreen> = {
         targetScreenId: "vol-ttw-cal",
         label: "Calendar",
       },
+      {
+        shape: "rect",
+        x: 86.9,
+        y: 86.9,
+        width: 6.6,
+        height: 3.9,
+        targetScreenId: "subject-preference",
+        label: "Subject Preference",
+      },
     ],
     laserTheme: "dark",
   },
@@ -1166,6 +1186,7 @@ export const screens: Record<string, AppScreen> = {
         height: 3.3,
         targetScreenId: "nss-profile-right-action",
         label: "Actions",
+        tooltipSide: "left",
       },
     ],
     laserTheme: "mixed",
@@ -1266,6 +1287,15 @@ export const screens: Record<string, AppScreen> = {
       },
       {
         shape: "rect",
+        x: 38.7,
+        y: 8.5,
+        width: 53.6,
+        height: 5.5,
+        targetScreenId: "attendance-matrix",
+        label: "Attendance Matrix",
+      },
+      {
+        shape: "rect",
         x: 38.9,
         y: 20.8,
         width: 38.2,
@@ -1275,6 +1305,52 @@ export const screens: Record<string, AppScreen> = {
       }
     ],
     laserTheme: "mixed",
+  },
+
+  "attendance-matrix": {
+    id: "attendance-matrix",
+    screenshot: "/screenshots/attendance-matrix.jpg",
+    pageName: "Attendance Matrix",
+    pageDescription: 'A compiled, wing-segmented attendance ledger exported directly as a <span class="highlight_text">.xlsx spreadsheet</span>. The ExcelGenerator engine cross-references Firestore collections to calculate Wing Hours, Open Events, and Extra Events — with automatic <span class="highlight_text">penalty deductions</span> for missed mandatory events.',
+    featureTitle: "Export Engine",
+    hookLine: "Cross-collection data. One-tap spreadsheet.",
+    techTags: [
+      { emoji: "📊", label: "ExcelGenerator", color: "var(--accent-emerald)" },
+      { emoji: "🔥", label: "Firestore Cross-Query", color: "var(--accent-amber)" },
+      { emoji: "⚖️", label: "Penalty Engine", color: "var(--accent-rose)" },
+      { emoji: "🗂️", label: "Wing Segmentation", color: "var(--accent-cyan)" },
+      { emoji: "💾", label: "Local Storage Export", color: "var(--accent-purple)" },
+    ],
+    builtBy: "Eshan",
+    features: [
+      {
+        icon: "📊",
+        title: "ExcelGenerator Pipeline",
+        description: "A dedicated ExcelGenerator script compiles structured student attendance data from multiple Firestore collections into a formatted multi-column .xlsx ledger. The file is written directly to local device storage without requiring any backend server involvement.",
+      },
+      {
+        icon: "🔥",
+        title: "Multi-Collection Cross-Query",
+        description: "The engine simultaneously queries `users.eventsList` and `NSS_Events_Attendence` across Firestore to reconcile each student's actual participation against declared mandatory events. This cross-collection join is performed entirely on-device using structured async coroutines.",
+      },
+      {
+        icon: "⚖️",
+        title: "Automatic Penalty Deduction",
+        description: "Students who missed a mandatory wing-specific event automatically receive a negative hours penalty inserted into the Extra Events column. The engine detects wing-event mismatches at compile time and applies deductions without any admin intervention.",
+      },
+      {
+        icon: "🗂️",
+        title: "Wing-Based Segmentation",
+        description: "The spreadsheet is partitioned by wing affiliation — Chetna, Teaching & Technical, Rural Development, Pratyaya, and Environmental — with each wing occupying a dedicated sheet tab. This lets admins instantly filter and review attendance data per organizational unit.",
+      },
+      {
+        icon: "💾",
+        title: "On-Device Storage Export",
+        description: "The generated .xlsx file is saved directly to the device's public Downloads directory using a FileProvider URI, making it immediately accessible via the file manager or shareable via any standard Android share intent without cloud intermediaries.",
+      },
+    ],
+    hotspots: [],
+    laserTheme: "light",
   },
 
   "nss-event-history": {
@@ -2443,6 +2519,7 @@ export const screens: Record<string, AppScreen> = {
         height: 3.5,
         targetScreenId: "ttw-options",
         label: "Options",
+        tooltipSide: "left",
       },
     ],
     laserTheme: "light",
@@ -3765,6 +3842,89 @@ export const screens: Record<string, AppScreen> = {
         icon: "⚙️",
         title: "IO-Threaded Coroutine Suspension",
         description: "generateAttendanceReport() is a suspend fun dispatched entirely on Dispatchers.IO via withContext(Dispatchers.IO). All Firestore cross-reference fetches for wing resolution and the final file write execute off the main thread — ensuring zero UI jank during heavy document compilation.",
+      },
+    ],
+    hotspots: [],
+    laserTheme: "light",
+  },
+
+  "subject-preference": {
+    id: "subject-preference",
+    screenshot: "/screenshots/subject-preference.jpg",
+    pageName: "Subject Ranking engine",
+    pageDescription: 'A dynamic prioritization tool allowing volunteers to <span class="highlight_text">configure their subject preferences</span> for automated schedule matchmaking.',
+    featureTitle: "Subject Synchronization",
+    hookLine: "Rank your teaching specialties.",
+    techTags: [
+      { emoji: "⚡", label: "Coroutines", color: "var(--accent-amber)" },
+      { emoji: "🔄", label: "Optimistic UI", color: "var(--accent-purple)" },
+      { emoji: "🗄️", label: "Firestore SetOptions", color: "var(--accent-emerald)" },
+    ],
+    builtBy: "Eshan",
+    features: [
+      {
+        icon: "⚖️",
+        title: "Dynamic Prioritization Engine",
+        description: "Enables drag-free rank adjustments through dedicated sequence mutators (moveUp, moveDown, add, remove). The engine recalculates index positions locally and dispatches a sanitized preference list to Firestore on every meaningful interaction.",
+      },
+      {
+        icon: "⚡",
+        title: "Optimistic UI Updates",
+        description: "The engine updates the local preference state array instantaneously on button presses before committing to the network. This eliminates perceived latency so users aren't waiting on the TTW_Students database to reflect their choices.",
+      },
+      {
+        icon: "🧠",
+        title: "Partitioned Subject Pools",
+        description: "The UI cleanly separates the globally available subjects from the student's chosen ranked list, recalculating available versus preferred derived states strictly through memoized Compose remember blocks to avoid extraneous filtering operations.",
+      },
+      {
+        icon: "👻",
+        title: "Bottom Navigation Suppression",
+        description: "Hides the universal bottom navigation view upon entering the preference screen using a DisposableEffect lifecycle observer. This maximizes vertical scrolling real-estate for long subject lists and neatly resets visibility upon disposal.",
+      },
+      {
+        icon: "⏳",
+        title: "Real-time Loading States",
+        description: "Orchestrates complex simultaneous asynchronous fetches from both TTW_Subjects and ttwStudents collections. Circular progress indicators remain active until both reference datasets achieve local consensus and render.",
+      },
+    ],
+    hotspots: [],
+    laserTheme: "dark",
+  },
+
+  "sem-report": {
+    id: "sem-report",
+    screenshot: "/screenshots/sem-report.jpg",
+    pageName: "Semester Attendance Report",
+    pageDescription: 'A dynamic <span class="highlight_text">A4 PDF Report</span> generated entirely on-device using the iText library. It securely outputs directly to the public Downloads folder, aggregating wing and open events with total attendance counts.',
+    featureTitle: "On-Device PDF Generation",
+    hookLine: "Zero-latency, serverless academic reports right from the client.",
+    techTags: [
+      { emoji: "📄", label: "iTextPDF", color: "var(--accent-emerald)" },
+      { emoji: "📁", label: "FileProvider URI", color: "var(--accent-amber)" },
+      { emoji: "📊", label: "Categorized Tables", color: "var(--accent-orange)" },
+    ],
+    builtBy: "Eshan",
+    features: [
+      {
+        icon: "📄",
+        title: "A4 PDF Engine via iText",
+        description: "A customized PDFGenerator module creates standard A4 PDF files entirely on the client side using the iText7 library, eliminating the need for server-side PDF rendering routes and preserving bandwidth.",
+      },
+      {
+        icon: "📊",
+        title: "Partitioned Event Metrics",
+        description: "The report aggregates and structures the user's semester activity into multi-column tabulated views separating 'Wing Events' from 'Open Events', and natively calculates aggregated total hours.",
+      },
+      {
+        icon: "📁",
+        title: "MediaStore & FileProvider",
+        description: "Generated reports bypass Scoped Storage limitations by writing directly to the `Downloads/NSS_Reports` public directory. The app then leverages the Android `FileProvider` API to safely grant external PDF viewer apps read-access to the file.",
+      },
+      {
+        icon: "⚡",
+        title: "Non-Blocking Generation",
+        description: "PDF compilation logic is fully dispatched to a Kotlin Coroutine Scope, keeping the Compose UI thread unblocked. An optimistic overlay immediately reflects when generation completes.",
       },
     ],
     hotspots: [],
