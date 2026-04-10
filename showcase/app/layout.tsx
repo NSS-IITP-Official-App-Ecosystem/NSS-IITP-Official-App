@@ -18,6 +18,7 @@ export const metadata: Metadata = {
 };
 
 import { CSPostHogProvider } from './providers'
+import MobileWarning from './components/MobileWarning'
 
 export default function RootLayout({
   children,
@@ -28,6 +29,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body suppressHydrationWarning>
         <CSPostHogProvider>
+          <MobileWarning />
           {children}
           <footer className="global-footer">
             <p className="global-footer-text">
