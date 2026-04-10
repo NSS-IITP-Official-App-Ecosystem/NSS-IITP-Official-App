@@ -221,6 +221,14 @@ export default function ExplorePage() {
     return () => window.removeEventListener("resize", update);
   }, []);
 
+  // --- Preload all screenshots for seamless transitions ---
+  useEffect(() => {
+    Object.values(screens).forEach((screen) => {
+      const img = new window.Image();
+      img.src = screen.screenshot;
+    });
+  }, []);
+
   const currentScreen = screens[currentScreenId];
 
   const getPct = (e: React.PointerEvent<HTMLDivElement>): Pt => {
@@ -242,7 +250,7 @@ export default function ExplorePage() {
       setDisplayedLaserTheme(newTheme);
       // Phase 3: fade back in
       setLaserOpacity(1);
-    }, 180);
+    }, 300);
     return () => clearTimeout(swapTimer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentScreenId]);
@@ -613,17 +621,17 @@ export default function ExplorePage() {
                         className={styles.screenshot_image}
                         draggable={false}
                       />
+                      
+                      {/* ── HOTSPOTS (Visible unless drawing) ── */}
+                      {!isDrawing && !isRecording && currentScreen.hotspots.map((hs, i) => (
+                        <HotspotEl
+                          key={`${currentScreen.id}-hotspot-${i}`}
+                          hotspot={hs}
+                          onClick={() => navigateTo(hs.targetScreenId)}
+                        />
+                      ))}
                     </motion.div>
                   </AnimatePresence>
-
-                  {/* ── HOTSPOTS (Visible unless drawing) ── */}
-                  {!isDrawing && !isRecording && currentScreen.hotspots.map((hs, i) => (
-                    <HotspotEl
-                      key={`${currentScreen.id}-hotspot-${i}`}
-                      hotspot={hs}
-                      onClick={() => navigateTo(hs.targetScreenId)}
-                    />
-                  ))}
 
 
 

@@ -1011,8 +1011,13 @@
     justify-content: center;
   }
 
+  .story_section {
+    padding: 3rem 0.75rem;
+  }
+
   .story_block {
     width: 100%;
+    padding: 1.5rem 1.25rem;
   }
 }
 
@@ -1042,6 +1047,10 @@
 
   .hero_tech_pills {
     max-width: 100%;
+  }
+
+  .hero_scroll_indicator {
+    display: none;
   }
 
   .stats_strip {

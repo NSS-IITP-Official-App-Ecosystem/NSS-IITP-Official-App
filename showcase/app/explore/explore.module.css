@@ -593,6 +593,15 @@
   }
 }
 
+@keyframes float-bounce-vertical {
+  0%, 100% {
+    transform: translateX(-50%) translateY(0);
+  }
+  50% {
+    transform: translateX(-50%) translateY(12px);
+  }
+}
+
 /* ====== RIGHT PANEL ====== */
 .right_panel {
   display: flex;
@@ -1076,6 +1085,7 @@
   .left_panel {
     width: 100%;
     padding: 0;
+    margin-top: 0;
     align-items: center;
     text-align: center;
   }
@@ -1123,12 +1133,26 @@
 
   /* Phone */
   .phone_column {
-    margin: 1rem 0;
+    margin: 1rem 0 5rem 0;
     width: 100%;
     display: flex;
     justify-content: center;
-    /* Use zoom instead of transform so the layout footprint shrinks with it, preventing horizontal overflow */
-    zoom: min(0.9, calc(100vw / 480));
+    zoom: 0.75;
+  }
+
+  /* Onboarding hint */
+  .onboarding_hint {
+    right: auto;
+    left: 50%;
+    top: calc(100% + 20px);
+    transform: translateX(-50%);
+    flex-direction: column-reverse;
+    text-align: center;
+    animation: float-bounce-vertical 2s ease-in-out infinite;
+  }
+
+  .onboarding_arrow {
+    transform: rotate(-90deg);
   }
 
   /* Right Panel Cards */
@@ -1171,5 +1195,17 @@
     flex-direction: column;
     gap: 1.5rem;
     padding-bottom: 3rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .phone_column {
+    zoom: 0.8;
+  }
+}
+
+@media (max-width: 450px) {
+  .phone_column {
+    zoom: 0.7;
   }
 }
