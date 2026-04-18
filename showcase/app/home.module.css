@@ -806,6 +806,14 @@
   background: linear-gradient(90deg, var(--accent-orange), var(--accent-amber));
 }
 
+.team_card_accent_purple {
+  background: linear-gradient(90deg, var(--accent-purple), var(--accent-rose));
+}
+
+.team_card_accent_emerald {
+  background: linear-gradient(90deg, var(--accent-emerald), var(--accent-cyan));
+}
+
 .team_card:hover .team_card_accent {
   opacity: 1;
 }
@@ -860,6 +868,14 @@
 
 .role_amber {
   color: var(--accent-amber);
+}
+
+.role_purple {
+  color: var(--accent-purple);
+}
+
+.role_emerald {
+  color: var(--accent-emerald);
 }
 
 .team_bio {

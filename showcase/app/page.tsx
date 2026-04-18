@@ -324,7 +324,7 @@ export default function Home() {
                 <span className="text-gradient-cool">The Developers</span>
               </h2>
               <p className={styles.section_desc}>
-                Collaborative engineering at its finest — two developers,
+                Collaborative engineering at its finest — four developers,
                 one vision, zero compromises.
               </p>
             </div>
@@ -388,17 +388,65 @@ export default function Home() {
                 </div>
               </TiltCard>
             </ScrollReveal>
-          </div>
 
-          {/* Acknowledgements */}
-          <ScrollReveal delay={0.2}>
-            <div className={`${styles.ack_card} glass-card`}>
-              <h4 className={styles.ack_title}>Acknowledgements</h4>
-              <p className={styles.ack_text}>
-                A deep nod of gratitude to the original catalysts of this project. Special thanks to <strong>Aditya Onam</strong>, who sparked the initial idea, assembled the team, and fueled our momentum, and to <strong>Aditya Gupta</strong>, who laid down the foundational database architecture and handled early code integrations. Their contributions to the initial iterations paved the way for the platform we have today.
-              </p>
-            </div>
-          </ScrollReveal>
+            {/* Dev 3 */}
+            <ScrollReveal delay={0} direction="left" className={styles.team_card_reveal}>
+              <TiltCard className={`${styles.team_card} glass-card glass-card-purple`} innerClassName={styles.team_card_inner}>
+                <div className={`${styles.team_card_accent} ${styles.team_card_accent_purple}`} />
+                <div className={styles.team_header}>
+                  <div className={styles.avatar}>
+                    <Image src="/images/Aditya onam.png" alt="Aditya Onam" width={220} height={220} className={styles.avatar_image} quality={100} unoptimized={true} />
+                  </div>
+                  <div className={styles.team_info}>
+                    <h3>Aditya Onam</h3>
+                    <span className={`${styles.team_role} ${styles.role_purple}`}>Visionary Leader</span>
+                  </div>
+                </div>
+                <p className={styles.team_bio}>
+                  The visionary leader who sparked the initial idea and successfully roped everyone else into building this app. Assembled the original dream team, fueled the early momentum of the project, and made crucial foundational contributions to the TTW calendar. The original catalyst who somehow convinced a group of developers that building an attendance app was a brilliant idea in the first place.
+                </p>
+                <div className={styles.team_links_row}>
+                  <a href="https://github.com/AdityaOnam" target="_blank" rel="noopener noreferrer" className={styles.team_link_btn}>
+                    <Code style={{ width: 13, height: 13 }} /> GitHub
+                    <ArrowUpRight style={{ width: 11, height: 11 }} />
+                  </a>
+                  <a href="https://www.linkedin.com/in/aditya-onam-8a1ab22b4/" target="_blank" rel="noopener noreferrer" className={styles.team_link_btn}>
+                    <User style={{ width: 13, height: 13 }} /> LinkedIn
+                    <ArrowUpRight style={{ width: 11, height: 11 }} />
+                  </a>
+                </div>
+              </TiltCard>
+            </ScrollReveal>
+
+            {/* Dev 4 */}
+            <ScrollReveal delay={0.15} direction="right" className={styles.team_card_reveal}>
+              <TiltCard className={`${styles.team_card} glass-card glass-card-emerald`} innerClassName={styles.team_card_inner}>
+                <div className={`${styles.team_card_accent} ${styles.team_card_accent_emerald}`} />
+                <div className={styles.team_header}>
+                  <div className={styles.avatar}>
+                     <Image src="/images/Aditya Gupta.jpeg" alt="Aditya Gupta" width={220} height={220} className={styles.avatar_image} quality={100} unoptimized={true} />
+                  </div>
+                  <div className={styles.team_info}>
+                    <h3>Aditya Gupta</h3>
+                    <span className={`${styles.team_role} ${styles.role_emerald}`}>Foundational Architect</span>
+                  </div>
+                </div>
+                <p className={styles.team_bio}>
+                  The calm and composed architect who laid down the foundational database and somehow kept the early code integrations from falling apart. Single-handedly designed the initial database structure, created the original TTW messages, and drafted the first update page. A quiet force who handled the chaotic early days before the app&apos;s architecture was finalized, and remains unbothered by the subsequent redesigns.
+                </p>
+                <div className={styles.team_links_row}>
+                  <a href="https://github.com/code-epic-adi" target="_blank" rel="noopener noreferrer" className={styles.team_link_btn}>
+                    <Code style={{ width: 13, height: 13 }} /> GitHub
+                    <ArrowUpRight style={{ width: 11, height: 11 }} />
+                  </a>
+                  <a href="https://www.linkedin.com/in/aditya-gupta-702688287" target="_blank" rel="noopener noreferrer" className={styles.team_link_btn}>
+                    <User style={{ width: 13, height: 13 }} /> LinkedIn
+                    <ArrowUpRight style={{ width: 11, height: 11 }} />
+                  </a>
+                </div>
+              </TiltCard>
+            </ScrollReveal>
+          </div>
         </section>
 
       </div>
