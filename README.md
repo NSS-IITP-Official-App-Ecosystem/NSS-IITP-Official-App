@@ -1,17 +1,49 @@
 <div align="center">
 
-# NSS-App — Campus Operations Platform
+# NSS-IITP Official App
 
-**A full-stack Android + Web platform for NSS (National Service Scheme) campus management**
+**Production-grade campus management platform for the NSS unit of IIT Patna**
 
 [![Android](https://img.shields.io/badge/Android-Kotlin-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org/)
 [![Firebase](https://img.shields.io/badge/Backend-Firebase-FFCA28?logo=firebase&logoColor=black)](https://firebase.google.com/)
-[![Next.js](https://img.shields.io/badge/Web-Next.js-000000?logo=next.js&logoColor=white)](https://nextjs.org/)
+[![Compose](https://img.shields.io/badge/UI-Jetpack%20Compose-4285F4?logo=jetpack&logoColor=white)](https://developer.android.com/compose)
 [![Version](https://img.shields.io/badge/Version-1.1.3%20(build%2058)-blue)](./app/build.gradle.kts)
 [![Architecture](https://img.shields.io/badge/Architecture-MVVM-orange)](https://developer.android.com/topic/architecture)
-[![Compose](https://img.shields.io/badge/UI-Jetpack%20Compose-4285F4?logo=jetpack&logoColor=white)](https://developer.android.com/compose)
+[![Showcase](https://img.shields.io/badge/📸%20Showcase-nss--app--showcase.vercel.app-000000?logo=vercel&logoColor=white)](https://nss-app-showcase.vercel.app)
 
 </div>
+
+---
+
+## 🌐 Ecosystem
+
+This app is part of a three-repository ecosystem:
+
+| Repo | Description |
+|---|---|
+| 📱 **[NSS-IITP-Official-App](https://github.com/NSS-IITP-Official-App-Ecosystem/NSS-IITP-Official-App)** ← *you are here* | Android app, Cloud Functions, Python scripts |
+| 🌍 **[NSS-IITP-IOS-Web](https://github.com/NSS-IITP-Official-App-Ecosystem/NSS-IITP-IOS-Web)** | Public-facing Next.js website |
+| 📸 **[NSS-IITP-App-Showcase](https://github.com/NSS-IITP-Official-App-Ecosystem/NSS-IITP-App-Showcase)** | Visual showcase with 51 screenshots |
+
+---
+
+## 📸 App Screenshots
+
+<p float="left">
+  <img src="https://raw.githubusercontent.com/NSS-IITP-Official-App-Ecosystem/NSS-IITP-App-Showcase/main/public/screenshots/home.jpg" width="180"/>
+  <img src="https://raw.githubusercontent.com/NSS-IITP-Official-App-Ecosystem/NSS-IITP-App-Showcase/main/public/screenshots/calender.jpg" width="180"/>
+  <img src="https://raw.githubusercontent.com/NSS-IITP-Official-App-Ecosystem/NSS-IITP-App-Showcase/main/public/screenshots/ttw-scheduling.jpg" width="180"/>
+  <img src="https://raw.githubusercontent.com/NSS-IITP-Official-App-Ecosystem/NSS-IITP-App-Showcase/main/public/screenshots/QR.jpg" width="180"/>
+</p>
+
+<p float="left">
+  <img src="https://raw.githubusercontent.com/NSS-IITP-Official-App-Ecosystem/NSS-IITP-App-Showcase/main/public/screenshots/schedule.jpg" width="180"/>
+  <img src="https://raw.githubusercontent.com/NSS-IITP-Official-App-Ecosystem/NSS-IITP-App-Showcase/main/public/screenshots/attendance-matrix.jpg" width="180"/>
+  <img src="https://raw.githubusercontent.com/NSS-IITP-Official-App-Ecosystem/NSS-IITP-App-Showcase/main/public/screenshots/assignment-log.jpg" width="180"/>
+  <img src="https://raw.githubusercontent.com/NSS-IITP-Official-App-Ecosystem/NSS-IITP-App-Showcase/main/public/screenshots/nss-profile.jpg" width="180"/>
+</p>
+
+> 📸 See all 51 screenshots at **[NSS-IITP-App-Showcase](https://github.com/NSS-IITP-Official-App-Ecosystem/NSS-IITP-App-Showcase)** or live at **[nss-app-showcase.vercel.app](https://nss-app-showcase.vercel.app)**
 
 ---
 
@@ -23,8 +55,7 @@ The project spans:
 - **185+ Kotlin source files** across a clean MVVM + feature-module architecture
 - **Firebase Cloud Functions** (Node.js) with Play Integrity API integration
 - **Python admin toolkit** with 17 scripts for Firestore data management
-- **Next.js public website** deployed on Vercel
-- **Serverless FCM backend** deployed independently
+- **Serverless FCM backend** deployed independently on Vercel
 
 ---
 
@@ -93,7 +124,6 @@ Key constraints solved:
 | QR | ZXing + ML Kit Barcode Scanning |
 | Camera | CameraX |
 | Export | Apache POI (Excel), iText 7 (PDF) |
-| Web | Next.js 14 (TypeScript), deployed on Vercel |
 | Python Admin | 17 scripts — Firestore queries, attendance analytics, schedule export |
 | Build | Gradle KTS, 16 KB page-size aligned NDK |
 
@@ -102,7 +132,7 @@ Key constraints solved:
 ## 🏗️ Project Structure
 
 ```
-NSS-App/
+NSS-IITP-Official-App/
 ├── app/src/main/java/com/phad/chatapp/
 │   ├── activities/          # Legacy Activity screens (Chat, Login, etc.)
 │   ├── adapters/            # RecyclerView adapters (11 adapters)
@@ -125,14 +155,12 @@ NSS-App/
 ├── functions/               # Firebase Cloud Functions (Node.js)
 │   └── index.js             # Play Integrity verify, device bind, markAttendance
 │
-├── web/                     # Next.js public website (Vercel)
-│
 ├── scripts/                 # Python admin utilities (17 scripts)
 │   ├── check_event_attendance.py
 │   ├── export_schedule.py
 │   ├── group_attendees_by_time.py
 │   ├── preference_matrix.py
-│   └── ... (12 more)
+│   └── ... (13 more)
 │
 ├── SCHEDULING_ALGORITHM.md  # Full algorithm design doc
 ├── firestore.rules          # Firestore security rules
@@ -147,8 +175,8 @@ NSS-App/
 
 1. **Clone the repo:**
    ```bash
-   git clone https://github.com/EshanBhaskar/NSS-App.git
-   cd NSS-App
+   git clone https://github.com/NSS-IITP-Official-App-Ecosystem/NSS-IITP-Official-App.git
+   cd NSS-IITP-Official-App
    ```
 
 2. **Firebase setup:**
@@ -205,6 +233,7 @@ python scripts/export_schedule.py
 | Jetpack Compose screens | 20+ |
 | Firebase Cloud Functions | 8 |
 | Python admin scripts | 17 |
+| App screenshots | 51 |
 | App version builds | 58 |
 | minSdk / targetSdk | 26 / 35 |
 
@@ -217,5 +246,5 @@ MIT License — see [LICENSE](LICENSE) for details.
 ---
 
 <div align="center">
-Built for the NSS unit of a technical campus. Developed with ❤️ by <a href="https://github.com/EshanBhaskar">Eshan Bhaskar</a>.
+Built for the NSS unit of IIT Patna. Developed with ❤️ by <a href="https://github.com/EshanBhaskar">Eshan Bhaskar</a> and <a href="https://github.com/NSS-IITP-Official-App-Ecosystem">contributors</a>.
 </div>
