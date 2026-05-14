@@ -104,3 +104,9 @@ run_auth_creator.bat
 *.jks
 *.keystore
 *.aab
+
+# Extracted sub-repositories (now live in separate GitHub repos)
+# Web: NSS-IITP-Official-App-Ecosystem/NSS-IITP-IOS-Web
+web/
+# Showcase: NSS-IITP-Official-App-Ecosystem/NSS-IITP-App-Showcase
+showcase/
