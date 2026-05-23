@@ -11,6 +11,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,15 +34,17 @@ fun UpdateOverlay(
 ) {
     if (updateStatus == InAppUpdateManager.UpdateStatus.NONE) return
 
-    // Scrim to block interaction
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.5f))
-            .clickable { /* Consume clicks */ },
-        contentAlignment = Alignment.Center
-    ) {
-        UpdateDialogCard(updateStatus, onDismissRequest)
+    MaterialTheme {
+        // Scrim to block interaction
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.5f))
+                .clickable { /* Consume clicks */ },
+            contentAlignment = Alignment.Center
+        ) {
+            UpdateDialogCard(updateStatus, onDismissRequest)
+        }
     }
 }
 
