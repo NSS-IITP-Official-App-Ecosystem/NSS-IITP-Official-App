@@ -297,6 +297,9 @@ class ChatActivity : AppCompatActivity() {
         // Format: {timestamp_milliseconds}
         val messageId = System.currentTimeMillis().toString()
         
+        // Clear input field immediately for responsive UI
+        binding.messageInput.setText("")
+        
         // Create a batch to ensure both users' collections are updated
         val batch = db.batch()
         
@@ -409,19 +412,14 @@ class ChatActivity : AppCompatActivity() {
     private fun markMessagesAsRead() {
         Log.d(TAG, "Starting to mark messages as read from $otherUserRollNumber to $currentUserRollNumber")
         
-        // Get all messages sent by the other user
         db.collection("user_conversations")
             .document(currentUserRollNumber)
             .collection(otherUserRollNumber)
-            .whereEqualTo("sender", otherUserRollNumber)
+            .whereEqualTo("read.$currentUserRollNumber", false)
             .get()
             .addOnSuccessListener { querySnapshot ->
-                // Filter messages that the current user hasn't read yet
-                val unreadDocs = querySnapshot.documents.filter { doc ->
-                    val readMap = doc.get("read") as? Map<*, *>
-                    val currentUserRead = readMap?.get(currentUserRollNumber) as? Boolean ?: false
-                    !currentUserRead
-                }
+                // The query already filters for unread messages for this user
+                val unreadDocs = querySnapshot.documents
                 
                 val messageCount = unreadDocs.size
                 if (messageCount == 0) {

@@ -671,11 +671,22 @@ class GroupChatActivity : AppCompatActivity() {
     private fun setupRecyclerView() {
         // Initialize the message adapter with the current user ID
         messageAdapter = MessageAdapter(sessionManager.fetchUserId()) { message ->
-            // Only allow deleting own messages
-            if (message.sender == sessionManager.fetchUserId()) {
+            val userId = sessionManager.fetchUserId()
+            val isSender = message.sender == userId
+            val isAdmin = currentGroup?.isUserAdmin(userId) == true
+            val hasPermission = currentGroup?.canUserSendMessages(userId) == true
+            
+            // Allow deletion if the user is an admin, OR if they are the sender AND have permission
+            if ((isSender && hasPermission) || isAdmin) {
+                val alertMessage = if (isAdmin && !isSender) {
+                    "Are you sure you want to delete this participant's message for everyone?"
+                } else {
+                    "Are you sure you want to delete this message for everyone?"
+                }
+                
                 androidx.appcompat.app.AlertDialog.Builder(this)
                     .setTitle("Delete Message")
-                    .setMessage("Are you sure you want to delete this message for everyone?")
+                    .setMessage(alertMessage)
                     .setPositiveButton("Delete") { _, _ ->
                         messageRepository.deleteMessage(groupId, message.id)
                             .addOnSuccessListener {
@@ -684,6 +695,8 @@ class GroupChatActivity : AppCompatActivity() {
                     }
                     .setNegativeButton("Cancel", null)
                     .show()
+            } else if (isSender && !hasPermission) {
+                Toast.makeText(this, "You cannot delete messages while your permissions are revoked.", Toast.LENGTH_SHORT).show()
             }
         }
         
@@ -811,6 +824,8 @@ class GroupChatActivity : AppCompatActivity() {
         // Generate a timestamp-based document ID instead of auto-generated ID
         // Format: {timestamp_seconds}{timestamp_nanoseconds}
         val messageId = timestamp.seconds.toString() + timestamp.nanoseconds.toString()
+        // Clear input field immediately for responsive UI
+        binding.messageInput.setText("")
 
         // Add the message to Firestore with timestamp-based ID
         db.collection("groups").document(groupId)
@@ -819,9 +834,6 @@ class GroupChatActivity : AppCompatActivity() {
             .set(messageMap)      // Use set instead of add
             .addOnSuccessListener { 
                 Log.d(TAG, "Media message added with ID: $messageId")
-                
-                // Clear input field
-                binding.messageInput.setText("")
                 
                 // Send push notifications
                 kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
@@ -901,6 +913,9 @@ class GroupChatActivity : AppCompatActivity() {
             } else {
                         messageAdapter.updateMessages(messages)
                     }
+                    
+                    // Mark messages as read since they are being displayed
+                    markMessagesAsRead()
                     
                     // Hide loading progress
                     binding.loadingProgress.visibility = View.GONE
@@ -991,6 +1006,8 @@ class GroupChatActivity : AppCompatActivity() {
         // Generate a timestamp-based document ID instead of auto-generated ID
         // Format: {timestamp_seconds}{timestamp_nanoseconds}
         val messageId = timestamp.seconds.toString() + timestamp.nanoseconds.toString()
+        // Clear input field immediately for responsive UI
+        binding.messageInput.setText("")
 
         // Add message to group messages collection with timestamp-based ID
         db.collection("groups").document(groupId)
@@ -999,7 +1016,6 @@ class GroupChatActivity : AppCompatActivity() {
             .set(messageMap)
             .addOnSuccessListener {
                 Log.d(TAG, "Message sent successfully with ID: $messageId")
-                binding.messageInput.setText("")
                 
                 // Send push notifications
                 kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
@@ -1057,6 +1073,45 @@ class GroupChatActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         Log.d(TAG, "GroupChatActivity resumed")
+        // Mark messages as read when activity is resumed
+        if (groupId.isNotEmpty()) {
+            markMessagesAsRead()
+        }
+    }
+    
+    private fun markMessagesAsRead() {
+        val currentUserId = sessionManager.fetchUserId()
+        if (currentUserId.isEmpty() || groupId.isEmpty()) return
+        
+        db.collection("groups").document(groupId).collection("messages")
+            .whereEqualTo("read.$currentUserId", false)
+            .get()
+            .addOnSuccessListener { querySnapshot ->
+                val unreadDocs = querySnapshot.documents
+                
+                if (unreadDocs.isEmpty()) return@addOnSuccessListener
+                
+                Log.d(TAG, "Marking ${unreadDocs.size} group messages as read")
+                
+                // Firestore batch limit is 500, but we probably won't hit that here
+                // We could chunk it if needed
+                val chunks = unreadDocs.chunked(400)
+                for (chunk in chunks) {
+                    val batch = db.batch()
+                    for (doc in chunk) {
+                        val readMap = (doc.get("read") as? Map<*, *>)?.toMutableMap() ?: mutableMapOf<String, Boolean>()
+                        @Suppress("UNCHECKED_CAST")
+                        val updatedReadMap = (readMap as MutableMap<String, Boolean>).apply {
+                            this[currentUserId] = true
+                        }
+                        batch.update(doc.reference, "read", updatedReadMap)
+                    }
+                    batch.commit()
+                }
+            }
+            .addOnFailureListener { e ->
+                Log.e(TAG, "Failed to mark group messages as read", e)
+            }
     }
     
     override fun onPause() {

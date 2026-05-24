@@ -19,6 +19,7 @@ local.properties
 # Firebase
 google-services.json
 *firebase-adminsdk*.json
+service-account.json
 service-account-key.json
 serviceAccountKey.json
 chatapp-*.json
@@ -74,6 +75,8 @@ migration_log.txt
 /create_firebase_accounts.py
 /excel_to_firestore.py
 /upload_*.py
+/check_db.py
+/fix_groups.py
 /*.pyc
 
 # Data exports and temporary files

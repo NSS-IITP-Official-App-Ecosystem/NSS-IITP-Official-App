@@ -83,12 +83,18 @@ class ChatFragment : Fragment() {
                 ChatScreen(
                     state = state,
                     onCommunityClick = { group ->
+                        // Optimistically clear the unread indicator for this group
+                        _uiState.update { it.copy(unreadGroupChatIds = it.unreadGroupChatIds - group.groupId) }
+                        
                         val intent = Intent(requireContext(), GroupChatActivity::class.java)
                         intent.putExtra("GROUP_ID", group.groupId)
                         intent.putExtra("GROUP_NAME", group.name)
                         startActivity(intent)
                     },
                     onUserClick = { user ->
+                        // Optimistically clear the unread indicator for this user
+                        _uiState.update { it.copy(unreadDirectChatIds = it.unreadDirectChatIds - user.id) }
+                        
                         val intent = Intent(requireContext(), ChatActivity::class.java).apply {
                             putExtra("currentUserRollNumber", sessionManager.fetchRollNumber())
                             putExtra("currentUserName", sessionManager.fetchUserName())
@@ -103,6 +109,7 @@ class ChatFragment : Fragment() {
                     onRefreshClick = {
                         loadRecentUsers()
                         loadCommunities()
+                        fetchUnreadIndicators()
                         if (userType.equals("Admin", ignoreCase = true)) {
                             CoroutineScope(Dispatchers.IO).launch {
                                 AttendanceStatsUpdater.updateAttendanceStatsInSession(requireContext())
@@ -146,26 +153,73 @@ class ChatFragment : Fragment() {
         loadCommunities()
     }
 
+    override fun onResume() {
+        super.onResume()
+        fetchUnreadIndicators()
+    }
+
+    private fun fetchUnreadIndicators() {
+        lifecycleScope.launch {
+            try {
+                val repo = UnreadMessageRepository(requireContext())
+                val (directMessages, groupMessages) = repo.fetchAllUnreadMessages()
+                
+                val unreadDirectIds = directMessages.map { it.chatPartnerId }.toSet()
+                val unreadGroupIds = groupMessages.map { it.groupId }.toSet()
+                
+                _uiState.update { it.copy(
+                    unreadDirectChatIds = unreadDirectIds,
+                    unreadGroupChatIds = unreadGroupIds
+                ) }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error fetching unread indicators", e)
+            }
+        }
+    }
+
     private fun loadRecentUsers() {
         _uiState.update { it.copy(isLoading = true) }
         lifecycleScope.launch {
             try {
-                val query = if (userType.equals("Admin", ignoreCase = true)) {
-                    // If user is admin, show all users
-                    db.collection("users")
-                } else {
-                    // If user is student, show only admins
-                    db.collection("users").whereEqualTo("userType", "Admin")
+                // 1. Get all active conversations for the current user
+                val metadataSnapshot = db.collection("conversation_metadata")
+                    .whereArrayContains("participants", userRollNumber)
+                    .get().await()
+                
+                // 2. Sort locally (to avoid needing a Firestore composite index) and extract roll numbers
+                val otherUserRollNumbers = metadataSnapshot.documents
+                    .sortedByDescending { it.getTimestamp("lastMessageTime") }
+                    .mapNotNull { doc ->
+                        val participants = doc.get("participants") as? List<*>
+                        participants?.firstOrNull { it != userRollNumber }?.toString()
+                    }.distinct()
+                
+                val users = mutableListOf<User>()
+                
+                // 3. Fetch user details using chunking to avoid N+1 queries (Firestore limits 'in' to 10)
+                if (otherUserRollNumbers.isNotEmpty()) {
+                    val chunks = otherUserRollNumbers.chunked(10)
+                    for (chunk in chunks) {
+                        try {
+                            val usersSnapshot = db.collection("users")
+                                .whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
+                                .get().await()
+                            
+                            val chunkUsers = usersSnapshot.toObjects(User::class.java)
+                            users.addAll(chunkUsers)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error fetching user details chunk", e)
+                        }
+                    }
+                    
+                    // Sort the fetched users to match the original recent chats ordering
+                    users.sortBy { otherUserRollNumbers.indexOf(it.id) }
                 }
-                val snapshot = query.get().await()
-                val users = snapshot.toObjects(User::class.java).filter { it.id != userRollNumber }
+                
                 _uiState.update { it.copy(recentUsers = users) }
-                Log.d(TAG, "Loaded ${users.size} recent users for user type: $userType, current user: $userRollNumber")
-                users.forEach { user ->
-                    Log.d(TAG, "User: ${user.name}, ID: ${user.id}, RollNumber: ${user.rollNumber}, UserType: ${user.userType}")
-                }
+                Log.d(TAG, "Loaded ${users.size} active chat users for $userRollNumber")
             } catch (e: Exception) {
-                Log.e(TAG, "Error loading user avatars", e)
+                Log.e(TAG, "Error loading recent chats", e)
                 _uiState.update { it.copy(recentUsers = emptyList()) }
             }
         }
