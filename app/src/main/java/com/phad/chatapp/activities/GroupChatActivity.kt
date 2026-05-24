@@ -632,8 +632,24 @@ class GroupChatActivity : AppCompatActivity() {
         dialogBinding.groupInfoTitle.text = currentGroup?.name
         dialogBinding.groupDescription.text = currentGroup?.description
         
-        // TODO: Fetch creator name from users collection
-        dialogBinding.groupCreator.text = currentGroup?.createdBy ?: "Unknown"
+        // Fetch creator name from users collection
+        val creatorId = currentGroup?.createdBy ?: "Unknown"
+        dialogBinding.groupCreator.text = creatorId // Default to ID while loading
+        
+        if (creatorId != "Unknown" && creatorId.isNotEmpty()) {
+            db.collection("users").document(creatorId).get()
+                .addOnSuccessListener { document ->
+                    if (document != null && document.exists()) {
+                        val creatorName = document.getString("name")
+                        if (!creatorName.isNullOrEmpty()) {
+                            dialogBinding.groupCreator.text = creatorName
+                        }
+                    }
+                }
+                .addOnFailureListener { e ->
+                    Log.e(TAG, "Error fetching creator name", e)
+                }
+        }
         
         // Format the date
         val createdDate = currentGroup?.createdAt?.toDate()
@@ -654,7 +670,35 @@ class GroupChatActivity : AppCompatActivity() {
     
     private fun setupRecyclerView() {
         // Initialize the message adapter with the current user ID
-        messageAdapter = MessageAdapter(sessionManager.fetchUserId())
+        messageAdapter = MessageAdapter(sessionManager.fetchUserId()) { message ->
+            val userId = sessionManager.fetchUserId()
+            val isSender = message.sender == userId
+            val isAdmin = currentGroup?.isUserAdmin(userId) == true
+            val hasPermission = currentGroup?.canUserSendMessages(userId) == true
+            
+            // Allow deletion if the user is an admin, OR if they are the sender AND have permission
+            if ((isSender && hasPermission) || isAdmin) {
+                val alertMessage = if (isAdmin && !isSender) {
+                    "Are you sure you want to delete this participant's message for everyone?"
+                } else {
+                    "Are you sure you want to delete this message for everyone?"
+                }
+                
+                androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle("Delete Message")
+                    .setMessage(alertMessage)
+                    .setPositiveButton("Delete") { _, _ ->
+                        messageRepository.deleteMessage(groupId, message.id)
+                            .addOnSuccessListener {
+                                Toast.makeText(this, "Message deleted", Toast.LENGTH_SHORT).show()
+                            }
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            } else if (isSender && !hasPermission) {
+                Toast.makeText(this, "You cannot delete messages while your permissions are revoked.", Toast.LENGTH_SHORT).show()
+            }
+        }
         
         // Configure RecyclerView
         binding.messagesRecyclerView.apply {
@@ -780,6 +824,8 @@ class GroupChatActivity : AppCompatActivity() {
         // Generate a timestamp-based document ID instead of auto-generated ID
         // Format: {timestamp_seconds}{timestamp_nanoseconds}
         val messageId = timestamp.seconds.toString() + timestamp.nanoseconds.toString()
+        // Clear input field immediately for responsive UI
+        binding.messageInput.setText("")
 
         // Add the message to Firestore with timestamp-based ID
         db.collection("groups").document(groupId)
@@ -789,10 +835,29 @@ class GroupChatActivity : AppCompatActivity() {
             .addOnSuccessListener { 
                 Log.d(TAG, "Media message added with ID: $messageId")
                 
-                // Clear input field
-                binding.messageInput.setText("")
-                
-
+                // Send push notifications
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                    val senderName = sessionManager.fetchUserName().takeIf { it.isNotEmpty() } ?: "Someone"
+                    val groupTitle = currentGroup?.name ?: groupName
+                    val participants = currentGroup?.participants ?: listOf()
+                    
+                    // Notify everyone in the group for media messages
+                    val targets = participants.filter { it != sessionManager.fetchUserId() }
+                    
+                    targets.forEach { targetId ->
+                        com.phad.chatapp.utils.NotificationSender.sendNotification(
+                            topic = "user_$targetId",
+                            title = "$senderName in $groupTitle",
+                            body = "Sent a $fileType",
+                            data = mapOf(
+                                "type" to "group_message",
+                                "groupId" to groupId,
+                                "senderId" to sessionManager.fetchUserId(),
+                                "senderName" to senderName
+                            )
+                        )
+                    }
+                }
             }
             .addOnFailureListener { e ->
                 Log.e(TAG, "Error adding media message", e)
@@ -848,6 +913,9 @@ class GroupChatActivity : AppCompatActivity() {
             } else {
                         messageAdapter.updateMessages(messages)
                     }
+                    
+                    // Mark messages as read since they are being displayed
+                    markMessagesAsRead()
                     
                     // Hide loading progress
                     binding.loadingProgress.visibility = View.GONE
@@ -938,6 +1006,8 @@ class GroupChatActivity : AppCompatActivity() {
         // Generate a timestamp-based document ID instead of auto-generated ID
         // Format: {timestamp_seconds}{timestamp_nanoseconds}
         val messageId = timestamp.seconds.toString() + timestamp.nanoseconds.toString()
+        // Clear input field immediately for responsive UI
+        binding.messageInput.setText("")
 
         // Add message to group messages collection with timestamp-based ID
         db.collection("groups").document(groupId)
@@ -946,9 +1016,32 @@ class GroupChatActivity : AppCompatActivity() {
             .set(messageMap)
             .addOnSuccessListener {
                 Log.d(TAG, "Message sent successfully with ID: $messageId")
-                binding.messageInput.setText("")
                 
-
+                // Send push notifications
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                    val senderName = sessionManager.fetchUserName().takeIf { it.isNotEmpty() } ?: "Someone"
+                    val groupTitle = currentGroup?.name ?: groupName
+                    
+                    val targets = if (hasEveryoneMention) {
+                        participants.filter { it != currentUserId }
+                    } else {
+                        mentionedUsers.filter { it != currentUserId }
+                    }
+                    
+                    targets.forEach { targetId ->
+                        com.phad.chatapp.utils.NotificationSender.sendNotification(
+                            topic = "user_$targetId",
+                            title = "$senderName in $groupTitle",
+                            body = text,
+                            data = mapOf(
+                                "type" to "group_message",
+                                "groupId" to groupId,
+                                "senderId" to currentUserId,
+                                "senderName" to senderName
+                            )
+                        )
+                    }
+                }
             }
             .addOnFailureListener { e ->
                 Log.e(TAG, "Error sending message", e)
@@ -980,6 +1073,45 @@ class GroupChatActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         Log.d(TAG, "GroupChatActivity resumed")
+        // Mark messages as read when activity is resumed
+        if (groupId.isNotEmpty()) {
+            markMessagesAsRead()
+        }
+    }
+    
+    private fun markMessagesAsRead() {
+        val currentUserId = sessionManager.fetchUserId()
+        if (currentUserId.isEmpty() || groupId.isEmpty()) return
+        
+        db.collection("groups").document(groupId).collection("messages")
+            .whereEqualTo("read.$currentUserId", false)
+            .get()
+            .addOnSuccessListener { querySnapshot ->
+                val unreadDocs = querySnapshot.documents
+                
+                if (unreadDocs.isEmpty()) return@addOnSuccessListener
+                
+                Log.d(TAG, "Marking ${unreadDocs.size} group messages as read")
+                
+                // Firestore batch limit is 500, but we probably won't hit that here
+                // We could chunk it if needed
+                val chunks = unreadDocs.chunked(400)
+                for (chunk in chunks) {
+                    val batch = db.batch()
+                    for (doc in chunk) {
+                        val readMap = (doc.get("read") as? Map<*, *>)?.toMutableMap() ?: mutableMapOf<String, Boolean>()
+                        @Suppress("UNCHECKED_CAST")
+                        val updatedReadMap = (readMap as MutableMap<String, Boolean>).apply {
+                            this[currentUserId] = true
+                        }
+                        batch.update(doc.reference, "read", updatedReadMap)
+                    }
+                    batch.commit()
+                }
+            }
+            .addOnFailureListener { e ->
+                Log.e(TAG, "Failed to mark group messages as read", e)
+            }
     }
     
     override fun onPause() {

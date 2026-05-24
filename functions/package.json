@@ -15,9 +15,12 @@
   },
   "main": "index.js",
   "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
     "firebase-admin": "^12.7.0",
     "firebase-functions": "^6.3.2",
-    "google-auth-library": "^9.0.0"
+    "google-auth-library": "^9.0.0",
+    "multer": "^1.4.5-lts.1"
   },
   "devDependencies": {
     "eslint": "^8.15.0",

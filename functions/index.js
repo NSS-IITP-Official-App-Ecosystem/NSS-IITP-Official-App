@@ -490,6 +490,7 @@ exports.onEventDelete = onDocumentDeleted(
 
 // Notification functions removed in favor of Vercel Serverless Backend
 
+<<<<<<< HEAD
 
 /**
  * Apply negative hours to volunteers who missed a mandatory event.
@@ -583,3 +584,249 @@ exports.applyAbsentPenalty = onRequest({ region: 'asia-south1' }, async (req, re
     sendError(res, err);
   }
 });
+=======
+// ==========================================
+// Parallel Geo-Tagged Photo Attendance System
+// ==========================================
+
+const express = require('express');
+const cors = require('cors');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+const app = express();
+
+// Enable CORS
+app.use(cors({ origin: true }));
+app.use(express.json());
+
+// Configure Multer to upload to /tmp (the only writable directory in Firebase Functions)
+const upload = multer({ dest: '/tmp/' });
+
+/**
+ * Endpoint: POST /api/attendance/submit-photo
+ * Accept multipart/form-data with fields: userId, eventId, latitude, longitude and file: image
+ */
+app.post('/api/attendance/submit-photo', upload.single('image'), async (req, res) => {
+  try {
+    console.log('[submit-photo] Received request');
+    const decoded = await verifyAuthToken(req);
+    
+    const { userId, eventId, latitude, longitude } = req.body;
+    const file = req.file;
+
+    if (!userId || !eventId || !latitude || !longitude || !file) {
+      console.warn('[submit-photo] Missing required fields or file');
+      if (file && fs.existsSync(file.path)) {
+        fs.unlinkSync(file.path);
+      }
+      return res.status(400).json({ error: 'Missing required fields (userId, eventId, latitude, longitude) or image file' });
+    }
+
+    const rollNoUpper = userId.toUpperCase();
+    console.log(`[submit-photo] User: ${rollNoUpper}, Event: ${eventId}, Lat: ${latitude}, Lon: ${longitude}`);
+
+    const db = admin.firestore();
+
+    // Fetch user's name from Firestore users collection
+    const userSnap = await db.collection('users').doc(rollNoUpper).get();
+    const userData = userSnap.data() || {};
+    const userName = userData.name || 'Unknown Student';
+
+    // Construct photo url to serve this image from /tmp
+    const photoUrl = `https://asia-south1-nssiitp-app.cloudfunctions.net/attendance/api/attendance/photo/${file.filename}`;
+
+    const docId = `${eventId}_${rollNoUpper}`;
+    const logData = {
+      id: docId,
+      rollNumber: rollNoUpper,
+      name: userName,
+      eventId: eventId,
+      latitude: parseFloat(latitude),
+      longitude: parseFloat(longitude),
+      photo_url: photoUrl,
+      photo_filename: file.filename, // Store filename to make deletion easy
+      verification_status: 'Pending',
+      attendance_method: 'Photo_GPS',
+      submittedAt: admin.firestore.Timestamp.now()
+    };
+
+    await db.collection('PhotoAttendanceLog').doc(docId).set(logData);
+    console.log(`[submit-photo] Logged pending attendance in PhotoAttendanceLog for ${rollNoUpper}`);
+
+    res.status(200).json({ ok: true, id: docId });
+  } catch (err) {
+    console.error('[submit-photo] Error:', err);
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || 'Internal server error' });
+  }
+});
+
+/**
+ * Endpoint: GET /api/attendance/photo/:filename
+ * Serves the temporary uploaded image from /tmp
+ */
+app.get('/api/attendance/photo/:filename', (req, res) => {
+  try {
+    const filename = req.params.filename;
+    const safeFilename = path.basename(filename);
+    const filePath = path.join('/tmp', safeFilename);
+
+    if (fs.existsSync(filePath)) {
+      res.sendFile(filePath);
+    } else {
+      console.warn(`[get-photo] File not found: ${filePath}`);
+      res.status(404).send('Photo not found or expired');
+    }
+  } catch (err) {
+    console.error('[get-photo] Error:', err);
+    res.status(500).send('Internal server error');
+  }
+});
+
+/**
+ * Endpoint: GET /api/attendance/pending-photos
+ * Fetches all attendance requests with status 'Pending'
+ */
+app.get('/api/attendance/pending-photos', async (req, res) => {
+  try {
+    console.log('[pending-photos] Fetching pending records');
+    await verifyAuthToken(req);
+
+    const db = admin.firestore();
+    const snap = await db.collection('PhotoAttendanceLog')
+      .where('verification_status', '==', 'Pending')
+      .orderBy('submittedAt', 'desc')
+      .get();
+
+    const results = [];
+    snap.forEach(doc => {
+      results.push(doc.data());
+    });
+
+    console.log(`[pending-photos] Found ${results.length} pending records`);
+    res.status(200).json(results);
+  } catch (err) {
+    console.error('[pending-photos] Error:', err);
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || 'Internal server error' });
+  }
+});
+
+/**
+ * Endpoint: PUT /api/attendance/verify/:id
+ * Admin approves or rejects a photo attendance log
+ */
+app.put('/api/attendance/verify/:id', async (req, res) => {
+  try {
+    const docId = req.params.id; // eventId_rollNumber
+    console.log(`[verify] Verifying log ID: ${docId}`);
+    const decoded = await verifyAuthToken(req);
+    
+    // Extract admin details from body or token
+    const adminRoll = decoded.email ? decoded.email.split('@')[0].toUpperCase() : 'ADMIN';
+    const { status, adminRollNumber, adminName } = req.body;
+
+    if (!status || !['Approved', 'Rejected'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid or missing status (must be Approved or Rejected)' });
+    }
+
+    const db = admin.firestore();
+    const logRef = db.collection('PhotoAttendanceLog').doc(docId);
+    const logSnap = await logRef.get();
+
+    if (!logSnap.exists) {
+      return res.status(404).json({ error: 'Attendance log not found' });
+    }
+
+    const logData = logSnap.data();
+    if (logData.verification_status !== 'Pending') {
+      return res.status(400).json({ error: 'Record already verified' });
+    }
+
+    const { rollNumber, name, eventId, latitude, longitude, photo_filename } = logData;
+
+    // 1. Delete physical photo from /tmp
+    if (photo_filename) {
+      const filePath = path.join('/tmp', path.basename(photo_filename));
+      try {
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+          console.log(`[verify] Deleted file: ${filePath}`);
+        } else {
+          console.warn(`[verify] File not found for deletion: ${filePath}`);
+        }
+      } catch (fileErr) {
+        console.error(`[verify] Failed to delete file ${filePath}:`, fileErr);
+      }
+    }
+
+    // 2. If Approved, write to the main event attendance subcollection
+    if (status === 'Approved') {
+      const eventRef = db.collection('NSS_Events_Attendence').doc(eventId);
+      const attendanceDocRef = eventRef.collection('attendance').doc(rollNumber);
+
+      const gpLocation = new admin.firestore.GeoPoint(latitude, longitude);
+      const scannedFromObj = {
+        adminRollNumber: adminRollNumber || adminRoll,
+        adminName: adminName || 'Admin'
+      };
+
+      const normalizedAttendee = {
+        rollNumber: rollNumber,
+        roll_number: rollNumber,
+        name: name,
+        scanTimestamp: admin.firestore.Timestamp.now(),
+        scan_timestamp: admin.firestore.Timestamp.now(),
+        scannedFrom: scannedFromObj,
+        deviceId: 'Photo_GPS',
+        scanLocation: gpLocation,
+        scan_location: gpLocation,
+        manualEntry: false,
+        attendanceMethod: 'Photo_GPS',
+        attendance_method: 'Photo_GPS',
+        latitude: latitude,
+        longitude: longitude,
+        photoUrl: null,
+        photo_url: null,
+        verificationStatus: 'Approved',
+        verification_status: 'Approved'
+      };
+
+      await db.runTransaction(async (tx) => {
+        const eventSnap = await tx.get(eventRef);
+        if (!eventSnap.exists) throw Object.assign(new Error('Event not found'), { status: 404 });
+        tx.set(attendanceDocRef, normalizedAttendee);
+        tx.update(eventRef, {
+          attendees: admin.firestore.FieldValue.arrayUnion(normalizedAttendee),
+          total_marked: admin.firestore.FieldValue.increment(1),
+        });
+      });
+      console.log(`[verify] Approved attendance written to consolidated event ${eventId} for ${rollNumber}`);
+    }
+
+    // 3. Update verification log status and nullify photo_url
+    await logRef.update({
+      photo_url: null,
+      verification_status: status,
+      verifiedAt: admin.firestore.Timestamp.now(),
+      verifiedBy: adminRollNumber || adminRoll
+    });
+
+    console.log(`[verify] Log updated to status: ${status}`);
+    res.status(200).json({ ok: true, status });
+  } catch (err) {
+    console.error('[verify] Error:', err);
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || 'Internal server error' });
+  }
+});
+
+// Export Express app as Firebase Cloud Function
+exports.attendance = onRequest({ region: 'asia-south1' }, app);
+
+>>>>>>> b659eeddca00046aa1496fb602c61f0747010d16

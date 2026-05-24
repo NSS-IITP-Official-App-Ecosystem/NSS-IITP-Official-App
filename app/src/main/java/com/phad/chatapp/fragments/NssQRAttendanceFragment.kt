@@ -77,6 +77,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import com.phad.chatapp.R
+import coil.compose.AsyncImage
+import com.phad.chatapp.utils.PhotoAttendanceManager
 import com.phad.chatapp.models.AttendanceEvent
 import com.phad.chatapp.utils.SessionManager
 import com.phad.chatapp.utils.LocationPermissionHelper
@@ -329,6 +331,24 @@ fun QRAttendanceAdminScreen(
     // Scroll state for events list (hoisted to persist across navigation/dialogs)
     val eventsListState = rememberLazyListState()
 
+    var selectedTab by remember { mutableStateOf(0) }
+    var pendingPhotos by remember { mutableStateOf<List<PhotoAttendanceManager.PendingPhotoRecord>>(emptyList()) }
+    var isLoadingPending by remember { mutableStateOf(false) }
+    var pendingFetchError by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(selectedTab) {
+        if (selectedTab == 1) {
+            isLoadingPending = true
+            pendingFetchError = null
+            val result = PhotoAttendanceManager.getPendingPhotos()
+            isLoadingPending = false
+            result.fold(
+                onSuccess = { pendingPhotos = it },
+                onFailure = { pendingFetchError = it.message ?: "Failed to load pending photos" }
+            )
+        }
+    }
+
     // Handle success message
     val context = LocalContext.current
     LaunchedEffect(uiState.createEventSuccess) {
@@ -389,7 +409,7 @@ fun QRAttendanceAdminScreen(
         modifier = Modifier.fillMaxSize(),
         floatingActionButton = {
             // Show FAB only on event selection screen (not during active session) and for admin users
-            if (!uiState.isSessionActive && uiState.isAdmin) {
+            if (!uiState.isSessionActive && uiState.isAdmin && selectedTab == 0) {
                 FloatingActionButton(
                     onClick = onShowCreateDialog,
                     containerColor = Color(0xFF2196F3),
@@ -438,6 +458,25 @@ fun QRAttendanceAdminScreen(
                     // Removed refresh action
                 )
 
+                if (!uiState.isSessionActive) {
+                    TabRow(
+                        selectedTabIndex = selectedTab,
+                        containerColor = Color.White,
+                        contentColor = Color(0xFF2196F3)
+                    ) {
+                        Tab(
+                            selected = selectedTab == 0,
+                            onClick = { selectedTab = 0 },
+                            text = { Text("Events", fontWeight = FontWeight.Bold) }
+                        )
+                        Tab(
+                            selected = selectedTab == 1,
+                            onClick = { selectedTab = 1 },
+                            text = { Text("Pending Photos", fontWeight = FontWeight.Bold) }
+                        )
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(12.dp)) // Increased spacing below header
 
                 // Content container with padding
@@ -448,33 +487,63 @@ fun QRAttendanceAdminScreen(
                 ) {
                     // Spacer removed
     
-                    if (uiState.isLoading) {
-                        // Loading state
-                        Box(
-                            modifier = Modifier.fillMaxWidth(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator()
-                        }
-                    } else if (!uiState.isSessionActive) {
-                        // Event selection screen
-                        EventSelectionScreen(
-                            events = uiState.availableEvents,
-                            onEventSelected = onEventSelected,
-                            onRefresh = onLoadEvents,
-                            onCloseEvent = onCloseEvent,
-                            onShowEditDialog = onShowEditDialog, // Pass the new lambda here
-                            onGeneratePDF = onGeneratePDF, // Pass PDF generation callback
-                            onAddManualAttendance = onAddManualAttendance, // Pass manual attendance callback
-                            onMarkAbsent = onMarkAbsent, // Pass mark absent callback
-                            listState = eventsListState
+                    if (selectedTab == 1 && !uiState.isSessionActive) {
+                        PendingVerificationsScreen(
+                            pendingRecords = pendingPhotos,
+                            isLoading = isLoadingPending,
+                            error = pendingFetchError,
+                            eventList = uiState.availableEvents,
+                            onVerifyClick = { record, isApprove ->
+                                refreshScope.launch {
+                                    isLoadingPending = true
+                                    val res = PhotoAttendanceManager.verifyPhoto(
+                                        logId = record.id,
+                                        status = if (isApprove) "Approved" else "Rejected",
+                                        adminRollNumber = uiState.adminId,
+                                        adminName = uiState.adminName
+                                    )
+                                    isLoadingPending = false
+                                    res.fold(
+                                        onSuccess = {
+                                            pendingPhotos = pendingPhotos.filter { it.id != record.id }
+                                            Toast.makeText(context, "Attendance ${if (isApprove) "approved" else "rejected"} successfully!", Toast.LENGTH_SHORT).show()
+                                        },
+                                        onFailure = { err ->
+                                            Toast.makeText(context, "Verification failed: ${err.message}", Toast.LENGTH_LONG).show()
+                                        }
+                                    )
+                                }
+                            }
                         )
                     } else {
-                        // Active session screen
-                        ActiveSessionScreen(
-                            uiState = uiState,
-                            onEndSession = onEndSession
-                        )
+                        if (uiState.isLoading) {
+                            // Loading state
+                            Box(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator()
+                            }
+                        } else if (!uiState.isSessionActive) {
+                            // Event selection screen
+                            EventSelectionScreen(
+                                events = uiState.availableEvents,
+                                onEventSelected = onEventSelected,
+                                onRefresh = onLoadEvents,
+                                onCloseEvent = onCloseEvent,
+                                onShowEditDialog = onShowEditDialog, // Pass the new lambda here
+                                onGeneratePDF = onGeneratePDF, // Pass PDF generation callback
+                                onAddManualAttendance = onAddManualAttendance, // Pass manual attendance callback
+                                onMarkAbsent = onMarkAbsent, // Pass mark absent callback
+                                listState = eventsListState
+                            )
+                        } else {
+                            // Active session screen
+                            ActiveSessionScreen(
+                                uiState = uiState,
+                                onEndSession = onEndSession
+                            )
+                        }
                     }
                 }
             }
@@ -3043,3 +3112,204 @@ fun ManualRollNumberDialog(
         }
     )
 }
+
+@Composable
+fun PendingVerificationsScreen(
+    pendingRecords: List<PhotoAttendanceManager.PendingPhotoRecord>,
+    isLoading: Boolean,
+    error: String?,
+    eventList: List<AttendanceEvent>,
+    onVerifyClick: (PhotoAttendanceManager.PendingPhotoRecord, Boolean) -> Unit
+) {
+    val context = LocalContext.current
+    if (isLoading) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator(color = Color(0xFF2196F3))
+        }
+    } else if (error != null) {
+        Box(
+            modifier = Modifier.fillMaxSize().padding(16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Error",
+                    tint = Color.Red,
+                    modifier = Modifier.size(48.dp)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(text = error, color = Color.Red, textAlign = TextAlign.Center)
+            }
+        }
+    } else if (pendingRecords.isEmpty()) {
+        Box(
+            modifier = Modifier.fillMaxSize().padding(32.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    imageVector = Icons.Default.People,
+                    contentDescription = "No Pending",
+                    tint = Color.Gray,
+                    modifier = Modifier.size(64.dp)
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "No Pending Verifications",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    color = Color.Gray
+                )
+                Text(
+                    text = "All geo-tagged photo submissions have been reviewed.",
+                    fontSize = 14.sp,
+                    color = Color.Gray,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(pendingRecords) { record ->
+                val eventName = eventList.find { it.id == record.eventId }?.getEventName() ?: record.eventId
+                val formattedDate = remember(record.submittedAtMs) {
+                    val date = Date(record.submittedAtMs)
+                    val formatter = java.text.SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault())
+                    formatter.format(date)
+                }
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                    ) {
+                        // Header details
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = record.name,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
+                                    color = Color(0xFF212121)
+                                )
+                                Text(
+                                    text = "Roll: ${record.rollNumber}",
+                                    fontSize = 13.sp,
+                                    color = Color.Gray
+                                )
+                            }
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    text = "Pending",
+                                    color = Color(0xFFE65100),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        HorizontalDivider(color = Color(0xFFF5F5F5))
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Event and Location info
+                        Text(
+                            text = "Event: $eventName",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp,
+                            color = Color(0xFF2196F3)
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Submitted: $formattedDate",
+                            fontSize = 12.sp,
+                            color = Color.Gray
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.LocationOn,
+                                contentDescription = "Location",
+                                tint = Color.Gray,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = String.format("GPS: %.6f, %.6f", record.latitude, record.longitude),
+                                fontSize = 12.sp,
+                                color = Color.DarkGray
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Image display
+                        if (record.photoUrl.isNotEmpty()) {
+                            AsyncImage(
+                                model = record.photoUrl,
+                                contentDescription = "Volunteer Geo-Tagged Photo",
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(200.dp)
+                                    .background(Color(0xFFEEEEEE), RoundedCornerShape(8.dp)),
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
+
+                        // Approve / Reject Actions
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            // Reject Button
+                            Button(
+                                onClick = { onVerifyClick(record, false) },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF5350)), // Red
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("Reject", color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+
+                            // Approve Button
+                            Button(
+                                onClick = { onVerifyClick(record, true) },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF66BB6A)), // Green
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("Approve", color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+

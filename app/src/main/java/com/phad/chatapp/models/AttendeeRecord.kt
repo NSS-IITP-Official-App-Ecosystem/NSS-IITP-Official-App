@@ -42,10 +42,25 @@ data class AttendeeRecord(
     var scanLocation: GeoPoint? = null, // GPS location where QR code was scanned (null for manual entries)
 
     @PropertyName("manualEntry")
-    var isManualEntry: Boolean = false // True for manual add/delete, false for QR scan
+    var isManualEntry: Boolean = false, // True for manual add/delete, false for QR scan
+
+    @PropertyName("attendanceMethod")
+    var attendanceMethod: String? = "QR",
+
+    @PropertyName("latitude")
+    var latitude: Double? = null,
+
+    @PropertyName("longitude")
+    var longitude: Double? = null,
+
+    @PropertyName("photoUrl")
+    var photoUrl: String? = null,
+
+    @PropertyName("verificationStatus")
+    var verificationStatus: String? = "Approved"
 ) {
     // Empty constructor for Firestore
-    constructor() : this("", "", Timestamp.now(), ScannedFromAdmin(), "", null, false)
+    constructor() : this("", "", Timestamp.now(), ScannedFromAdmin(), "", null, false, "QR", null, null, null, "Approved")
     
     /**
      * Check if the attendance was marked recently (within last 5 seconds)

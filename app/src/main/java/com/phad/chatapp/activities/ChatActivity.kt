@@ -36,6 +36,7 @@ import com.phad.chatapp.utils.SessionManager
 import java.util.Date
 import java.util.regex.Pattern
 import androidx.appcompat.widget.PopupMenu
+import kotlinx.coroutines.launch
 
 class ChatActivity : AppCompatActivity() {
     private val TAG = "ChatActivity"
@@ -82,7 +83,33 @@ class ChatActivity : AppCompatActivity() {
         sessionManager = SessionManager(this)
         
         // Initialize adapter early to avoid null reference
-        adapter = MessageAdapter(sessionManager.fetchUserId())
+        adapter = MessageAdapter(sessionManager.fetchUserId()) { message ->
+            // Only allow deleting own messages
+            if (message.sender == currentUserRollNumber) {
+                androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle("Delete Message")
+                    .setMessage("Are you sure you want to delete this message for everyone?")
+                    .setPositiveButton("Delete") { _, _ ->
+                        // Delete from current user's collection
+                        db.collection("user_conversations")
+                            .document(currentUserRollNumber)
+                            .collection(otherUserRollNumber)
+                            .document(message.id)
+                            .delete()
+                        
+                        // Delete from other user's collection
+                        db.collection("user_conversations")
+                            .document(otherUserRollNumber)
+                            .collection(currentUserRollNumber)
+                            .document(message.id)
+                            .delete()
+                            
+                        Toast.makeText(this, "Message deleted", Toast.LENGTH_SHORT).show()
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+        }
         
         // Extract user info from intent
         val intent = intent
@@ -270,6 +297,9 @@ class ChatActivity : AppCompatActivity() {
         // Format: {timestamp_milliseconds}
         val messageId = System.currentTimeMillis().toString()
         
+        // Clear input field immediately for responsive UI
+        binding.messageInput.setText("")
+        
         // Create a batch to ensure both users' collections are updated
         val batch = db.batch()
         
@@ -293,9 +323,20 @@ class ChatActivity : AppCompatActivity() {
         batch.commit()
             .addOnSuccessListener {
                 Log.d(TAG, "Message sent with ID: $messageId")
-                binding.messageInput.setText("")
-                
-
+                // Send push notification
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                    val senderName = sessionManager.fetchUserName().takeIf { it.isNotEmpty() } ?: "Someone"
+                    com.phad.chatapp.utils.NotificationSender.sendNotification(
+                        topic = "user_$otherUserRollNumber",
+                        title = senderName,
+                        body = text,
+                        data = mapOf(
+                            "type" to "direct_message",
+                            "senderId" to currentUserRollNumber,
+                            "senderName" to senderName
+                        )
+                    )
+                }
                 
                 // Update last message in conversation
                 updateLastMessage(text)
@@ -371,19 +412,14 @@ class ChatActivity : AppCompatActivity() {
     private fun markMessagesAsRead() {
         Log.d(TAG, "Starting to mark messages as read from $otherUserRollNumber to $currentUserRollNumber")
         
-        // Get all messages sent by the other user
         db.collection("user_conversations")
             .document(currentUserRollNumber)
             .collection(otherUserRollNumber)
-            .whereEqualTo("sender", otherUserRollNumber)
+            .whereEqualTo("read.$currentUserRollNumber", false)
             .get()
             .addOnSuccessListener { querySnapshot ->
-                // Filter messages that the current user hasn't read yet
-                val unreadDocs = querySnapshot.documents.filter { doc ->
-                    val readMap = doc.get("read") as? Map<*, *>
-                    val currentUserRead = readMap?.get(currentUserRollNumber) as? Boolean ?: false
-                    !currentUserRead
-                }
+                // The query already filters for unread messages for this user
+                val unreadDocs = querySnapshot.documents
                 
                 val messageCount = unreadDocs.size
                 if (messageCount == 0) {
@@ -768,8 +804,20 @@ class ChatActivity : AppCompatActivity() {
         batch.commit()
             .addOnSuccessListener {
                 Log.d(TAG, "Media message sent with ID: $messageId")
-                
-
+                // Send push notification
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                    val senderName = sessionManager.fetchUserName().takeIf { it.isNotEmpty() } ?: "Someone"
+                    com.phad.chatapp.utils.NotificationSender.sendNotification(
+                        topic = "user_$otherUserRollNumber",
+                        title = senderName,
+                        body = "Sent a $fileType",
+                        data = mapOf(
+                            "type" to "direct_message",
+                            "senderId" to currentUserRollNumber,
+                            "senderName" to senderName
+                        )
+                    )
+                }
                 
                 // Update last message in conversation
                 updateLastMessage("[${fileType.capitalize()}]")

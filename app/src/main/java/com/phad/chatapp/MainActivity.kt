@@ -109,26 +109,42 @@ class MainActivity : AppCompatActivity() {
         setupCustomNavigation()
         Log.d("MainActivity", "after setupCustomNavigation")
 
-        // If launched from a push notification tap, open notification history
-        val shouldOpenNotifications = intent.getBooleanExtra("open_notifications", false) || 
-            intent.getStringExtra("type") == "LEAVE_NOTIFICATION" || 
-            intent.extras?.containsKey("relatedId") == true
-            
-        if (shouldOpenNotifications) {
-            val notifIntent = Intent(this, NotificationHistoryActivity::class.java).apply {
-                intent.extras?.let { putExtras(it) }
-            }
-            startActivity(notifIntent)
-        }
+        // If launched from a push notification tap, handle routing
+        handleIntentRouting(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        handleIntentRouting(intent)
+    }
+
+    private fun handleIntentRouting(intent: Intent) {
+        val groupId = intent.getStringExtra("groupId")
+        val senderId = intent.getStringExtra("senderId")
         val shouldOpenNotifications = intent.getBooleanExtra("open_notifications", false) || 
             intent.getStringExtra("type") == "LEAVE_NOTIFICATION" || 
             intent.extras?.containsKey("relatedId") == true
-            
-        if (shouldOpenNotifications) {
+
+        if (!groupId.isNullOrEmpty()) {
+            val groupName = intent.getStringExtra("groupName") ?: "Group Chat"
+            val chatIntent = Intent(this, com.phad.chatapp.activities.GroupChatActivity::class.java).apply {
+                putExtra("GROUP_ID", groupId)
+                putExtra("GROUP_NAME", groupName)
+            }
+            startActivity(chatIntent)
+            intent.removeExtra("groupId")
+        } else if (!senderId.isNullOrEmpty()) {
+            val senderName = intent.getStringExtra("senderName") ?: "User"
+            val currentUserRollNumber = sessionManager.fetchUserId()
+            val chatIntent = Intent(this, com.phad.chatapp.activities.ChatActivity::class.java).apply {
+                putExtra("otherUserRollNumber", senderId)
+                putExtra("otherUserName", senderName)
+                putExtra("currentUserRollNumber", currentUserRollNumber)
+                putExtra("currentUserName", sessionManager.fetchUserName())
+            }
+            startActivity(chatIntent)
+            intent.removeExtra("senderId")
+        } else if (shouldOpenNotifications) {
             val notifIntent = Intent(this, NotificationHistoryActivity::class.java).apply {
                 intent.extras?.let { putExtras(it) }
             }

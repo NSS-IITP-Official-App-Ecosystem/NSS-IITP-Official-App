@@ -1660,6 +1660,18 @@ class ScheduleGenerationViewModel : ViewModel() {
         batch.commit().await()
 
         Log.d(TAG, "🎉 Successfully saved optimized schedule with ${slotsByPreset.size} preset documents")
+        
+        // Auto-sync Chat Groups for each preset
+        try {
+            val groupData = slotsByPreset.mapValues { entry -> 
+                entry.value.mapNotNull { it.assignedVolunteerRollNo }.distinct()
+            }
+            val groupRepository = com.phad.chatapp.repositories.GroupRepository()
+            groupRepository.autoSyncScheduleGroups(groupData)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to trigger auto-sync for schedule chat groups", e)
+        }
+
         return scheduleId
     }
 
