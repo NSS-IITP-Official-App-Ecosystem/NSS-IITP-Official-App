@@ -110,3 +110,9 @@ run_auth_creator.bat
 web/
 # Showcase: NSS-IITP-Official-App-Ecosystem/NSS-IITP-App-Showcase
 showcase/
+
+# Agent Files
+ast.json
+ddg.json
+refactoring_issues.json
+agent_directives.md

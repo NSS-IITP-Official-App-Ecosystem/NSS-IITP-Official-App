@@ -39,8 +39,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class MessageAdapter(private val currentUserId: String) : 
-    RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+class MessageAdapter(
+    private val currentUserId: String,
+    private val onMessageLongClick: ((Message) -> Unit)? = null
+) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     
     // Define view types
     companion object {
@@ -331,6 +333,12 @@ class MessageAdapter(private val currentUserId: String) :
                 // This is a direct message
                 val otherUserRead = message.read.entries.firstOrNull { it.key != currentUserId }?.value ?: false
                 messageStatus.text = if (otherUserRead) "Read" else "Delivered"
+            }
+            
+            // Add long click listener for message deletion
+            itemView.setOnLongClickListener {
+                onMessageLongClick?.invoke(message)
+                true
             }
         }
     }

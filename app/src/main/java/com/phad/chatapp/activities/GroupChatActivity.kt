@@ -632,8 +632,24 @@ class GroupChatActivity : AppCompatActivity() {
         dialogBinding.groupInfoTitle.text = currentGroup?.name
         dialogBinding.groupDescription.text = currentGroup?.description
         
-        // TODO: Fetch creator name from users collection
-        dialogBinding.groupCreator.text = currentGroup?.createdBy ?: "Unknown"
+        // Fetch creator name from users collection
+        val creatorId = currentGroup?.createdBy ?: "Unknown"
+        dialogBinding.groupCreator.text = creatorId // Default to ID while loading
+        
+        if (creatorId != "Unknown" && creatorId.isNotEmpty()) {
+            db.collection("users").document(creatorId).get()
+                .addOnSuccessListener { document ->
+                    if (document != null && document.exists()) {
+                        val creatorName = document.getString("name")
+                        if (!creatorName.isNullOrEmpty()) {
+                            dialogBinding.groupCreator.text = creatorName
+                        }
+                    }
+                }
+                .addOnFailureListener { e ->
+                    Log.e(TAG, "Error fetching creator name", e)
+                }
+        }
         
         // Format the date
         val createdDate = currentGroup?.createdAt?.toDate()
@@ -654,7 +670,22 @@ class GroupChatActivity : AppCompatActivity() {
     
     private fun setupRecyclerView() {
         // Initialize the message adapter with the current user ID
-        messageAdapter = MessageAdapter(sessionManager.fetchUserId())
+        messageAdapter = MessageAdapter(sessionManager.fetchUserId()) { message ->
+            // Only allow deleting own messages
+            if (message.sender == sessionManager.fetchUserId()) {
+                androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle("Delete Message")
+                    .setMessage("Are you sure you want to delete this message for everyone?")
+                    .setPositiveButton("Delete") { _, _ ->
+                        messageRepository.deleteMessage(groupId, message.id)
+                            .addOnSuccessListener {
+                                Toast.makeText(this, "Message deleted", Toast.LENGTH_SHORT).show()
+                            }
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+        }
         
         // Configure RecyclerView
         binding.messagesRecyclerView.apply {
@@ -792,7 +823,29 @@ class GroupChatActivity : AppCompatActivity() {
                 // Clear input field
                 binding.messageInput.setText("")
                 
-
+                // Send push notifications
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                    val senderName = sessionManager.fetchUserName().takeIf { it.isNotEmpty() } ?: "Someone"
+                    val groupTitle = currentGroup?.name ?: groupName
+                    val participants = currentGroup?.participants ?: listOf()
+                    
+                    // Notify everyone in the group for media messages
+                    val targets = participants.filter { it != sessionManager.fetchUserId() }
+                    
+                    targets.forEach { targetId ->
+                        com.phad.chatapp.utils.NotificationSender.sendNotification(
+                            topic = "user_$targetId",
+                            title = "$senderName in $groupTitle",
+                            body = "Sent a $fileType",
+                            data = mapOf(
+                                "type" to "group_message",
+                                "groupId" to groupId,
+                                "senderId" to sessionManager.fetchUserId(),
+                                "senderName" to senderName
+                            )
+                        )
+                    }
+                }
             }
             .addOnFailureListener { e ->
                 Log.e(TAG, "Error adding media message", e)
@@ -948,7 +1001,31 @@ class GroupChatActivity : AppCompatActivity() {
                 Log.d(TAG, "Message sent successfully with ID: $messageId")
                 binding.messageInput.setText("")
                 
-
+                // Send push notifications
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                    val senderName = sessionManager.fetchUserName().takeIf { it.isNotEmpty() } ?: "Someone"
+                    val groupTitle = currentGroup?.name ?: groupName
+                    
+                    val targets = if (hasEveryoneMention) {
+                        participants.filter { it != currentUserId }
+                    } else {
+                        mentionedUsers.filter { it != currentUserId }
+                    }
+                    
+                    targets.forEach { targetId ->
+                        com.phad.chatapp.utils.NotificationSender.sendNotification(
+                            topic = "user_$targetId",
+                            title = "$senderName in $groupTitle",
+                            body = text,
+                            data = mapOf(
+                                "type" to "group_message",
+                                "groupId" to groupId,
+                                "senderId" to currentUserId,
+                                "senderName" to senderName
+                            )
+                        )
+                    }
+                }
             }
             .addOnFailureListener { e ->
                 Log.e(TAG, "Error sending message", e)

@@ -300,28 +300,47 @@ class AddGroupFragment : Fragment() {
     }
     
     private fun checkCourseIdAndCreateGroup(courseId: String, groupName: String, groupDescription: String, participants: List<String>) {
-        db.collection("groups").document(courseId).get()
-            .addOnSuccessListener { document ->
-                if (document.exists()) {
-                    // Course ID already exists, show error dialog
+        // First check if group name is already taken by an auto-generated group or another manual group
+        lifecycleScope.launch {
+            try {
+                val nameExists = groupRepository.isGroupNameExists(groupName)
+                if (nameExists) {
                     AlertDialog.Builder(requireContext())
-                        .setTitle("Group Already Exists")
-                        .setMessage("A group with ID '$courseId' already exists. Please use a different ID.")
+                        .setTitle("Name Already Taken")
+                        .setMessage("A group with name '$groupName' already exists. This might be an auto-generated class group. Please choose a different name.")
                         .setPositiveButton("OK", null)
                         .show()
-                } else {
-                    // Course ID is unique, proceed with group creation
-                    createGroup(courseId, groupName, groupDescription, participants)
+                    return@launch
                 }
+                
+                // If name is unique, proceed with Course ID check
+                db.collection("groups").document(courseId).get()
+                    .addOnSuccessListener { document ->
+                        if (document.exists()) {
+                            // Course ID already exists, show error dialog
+                            AlertDialog.Builder(requireContext())
+                                .setTitle("Group Already Exists")
+                                .setMessage("A group with ID '$courseId' already exists. Please use a different ID.")
+                                .setPositiveButton("OK", null)
+                                .show()
+                        } else {
+                            // Course ID is unique, proceed with group creation
+                            createGroup(courseId, groupName, groupDescription, participants)
+                        }
+                    }
+                    .addOnFailureListener { e ->
+                        Log.e(TAG, "Error checking group ID", e)
+                        Toast.makeText(
+                            requireContext(),
+                            "Error checking group ID: ${e.message}",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error during group name check", e)
+                Toast.makeText(requireContext(), "Error checking group name: ${e.message}", Toast.LENGTH_SHORT).show()
             }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "Error checking group ID", e)
-                Toast.makeText(
-                    requireContext(),
-                    "Error checking group ID: ${e.message}",
-                    Toast.LENGTH_LONG
-                ).show()
-            }
+        }
     }
     
     private fun createGroup(courseId: String, groupName: String, groupDescription: String, participants: List<String>) {
