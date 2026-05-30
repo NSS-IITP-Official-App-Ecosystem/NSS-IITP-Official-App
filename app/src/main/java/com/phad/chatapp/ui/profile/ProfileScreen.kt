@@ -30,6 +30,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -317,6 +318,7 @@ fun ProfileScreen(
                                     onChangeSubjects = onChangeSubjectsClick,
                                     onFaqs = onFaqsClick,
                                     onLogout = { showLogoutDialog = true },
+                                    onApplyPenalty = { },
                                     isTeachingWing = teachingWing,
                                     isAdmin = isAdmin,
                                     currentInterface = currentInterface
@@ -994,6 +996,7 @@ fun ProfileMenu(
     onChangeSubjects: () -> Unit,
     onFaqs: () -> Unit,
     onLogout: () -> Unit,
+    onApplyPenalty: () -> Unit,
     isTeachingWing: Boolean,
     isAdmin: Boolean,
     currentInterface: String,
@@ -1024,6 +1027,24 @@ fun ProfileMenu(
             )
         }
 
+// Apply Absent Penalty - only for admins in NSS interface
+
+if (isAdmin && currentInterface == "NSS") {
+    DropdownMenuItem(
+        text = { Text("Apply Absent Penalty", color = Color(0xFFE53935)) },
+        onClick = {
+            onApplyPenalty()
+            onDismiss()
+        },
+        leadingIcon = {
+            Icon(
+                imageVector = Icons.Default.Info,
+                contentDescription = null,
+                tint = Color(0xFFE53935)
+            )
+        }
+    )
+}
 
         // Event History - only for admins in NSS interface
         if (isAdmin && currentInterface == "NSS") {

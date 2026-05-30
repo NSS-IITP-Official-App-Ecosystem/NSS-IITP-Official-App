@@ -490,7 +490,6 @@ exports.onEventDelete = onDocumentDeleted(
 
 // Notification functions removed in favor of Vercel Serverless Backend
 
-<<<<<<< HEAD
 
 /**
  * Apply negative hours to volunteers who missed a mandatory event.
@@ -584,7 +583,6 @@ exports.applyAbsentPenalty = onRequest({ region: 'asia-south1' }, async (req, re
     sendError(res, err);
   }
 });
-=======
 // ==========================================
 // Parallel Geo-Tagged Photo Attendance System
 // ==========================================
@@ -829,4 +827,3 @@ app.put('/api/attendance/verify/:id', async (req, res) => {
 // Export Express app as Firebase Cloud Function
 exports.attendance = onRequest({ region: 'asia-south1' }, app);
 
->>>>>>> b659eeddca00046aa1496fb602c61f0747010d16
