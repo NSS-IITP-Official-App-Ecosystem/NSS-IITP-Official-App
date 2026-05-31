@@ -40,12 +40,8 @@ class CloudinaryHelper(private val context: Context) {
                             val apiSecret = com.phad.chatapp.BuildConfig.CLOUDINARY_API_SECRET
                             
                             if (cloudName.isEmpty() || apiKey.isEmpty() || apiSecret.isEmpty()) {
-                                throw IllegalStateException(
-                                    "Cloudinary credentials not found. Please add them to local.properties:\n" +
-                                    "cloudinary.cloud_name=YOUR_CLOUD_NAME\n" +
-                                    "cloudinary.api_key=YOUR_API_KEY\n" +
-                                    "cloudinary.api_secret=YOUR_API_SECRET"
-                                )
+                                Log.e(TAG, "Cloudinary credentials not found in local.properties. Uploads will fail, but app will continue.")
+                                return
                             }
                             
                             // Initialize MediaManager

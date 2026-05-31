@@ -299,7 +299,7 @@ class AttendanceViewModel(private val application: Application) : ViewModel() {
        // TODO: Replace with actual NSS IITP Functions URL after deployment
         val url = "https://asia-south1-chatapp-24fae.cloudfunctions.net/applyAbsentPenalty"
         
-        val client = java.net.HttpURLConnection.openConnection(java.net.URL(url)) as java.net.HttpURLConnection
+        val client = java.net.URL(url).openConnection() as java.net.HttpURLConnection
         client.requestMethod = "POST"
         client.setRequestProperty("Content-Type", "application/json")
         client.setRequestProperty("Authorization", "Bearer $idToken")
