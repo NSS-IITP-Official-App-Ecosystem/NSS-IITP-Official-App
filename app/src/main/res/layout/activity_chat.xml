@@ -33,18 +33,29 @@
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:tint="#FFFFFF" />
 
+            <!-- Profile Picture -->
+            <de.hdodenhof.circleimageview.CircleImageView
+                android:id="@+id/user_profile_pic"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginStart="8dp"
+                android:src="@drawable/ic_profile"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toEndOf="@id/back_button"
+                app:layout_constraintTop_toTopOf="parent" />
+
             <!-- User Name -->
             <TextView
                 android:id="@+id/textTitle"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="16dp"
+                android:layout_marginStart="8dp"
                 android:layout_marginEnd="16dp"
                 android:textColor="#FFFFFF"
                 android:textSize="18sp"
                 android:maxLines="1"
                 android:ellipsize="end"
-                app:layout_constraintStart_toEndOf="@id/back_button"
+                app:layout_constraintStart_toEndOf="@id/user_profile_pic"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
                 app:layout_constraintBottom_toBottomOf="parent" />

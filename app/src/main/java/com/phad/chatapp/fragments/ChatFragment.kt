@@ -226,7 +226,7 @@ class ChatFragment : Fragment() {
                             .whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
                             .get().await()
                         
-                        val chunkUsers = usersSnapshot.toObjects(User::class.java)
+                        val chunkUsers: List<User> = usersSnapshot.toObjects(User::class.java)
                         users.addAll(chunkUsers)
                     } catch (e: Exception) {
                         Log.e(TAG, "Error fetching user details chunk", e)
@@ -238,7 +238,7 @@ class ChatFragment : Fragment() {
             }
             
             Log.d(TAG, "Loaded ${users.size} active chat users for $userRollNumber")
-            users
+            users.toList()
         } catch (e: Exception) {
             Log.e(TAG, "Error loading recent chats", e)
             emptyList()
@@ -255,9 +255,7 @@ class ChatFragment : Fragment() {
             allGroups
         } catch (e: Exception) {
             Log.e(TAG, "Error loading communities", e)
-            withContext(Dispatchers.Main) {
-                Toast.makeText(requireContext(), "Failed to load communities.", Toast.LENGTH_SHORT).show()
-            }
+            Toast.makeText(requireContext(), "Failed to load communities.", Toast.LENGTH_SHORT).show()
             emptyList()
         }
     }
@@ -355,8 +353,12 @@ class ChatFragment : Fragment() {
         recyclerSearchResults.adapter = searchAdapter
 
         editSearch.addTextChangedListener(object : TextWatcher {
-            override fun afterTextChanged(s: Editable?) {}
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                // Not used because we only trigger search on text change
+            }
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {
+                // Not used because we only trigger search on text change
+            }
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 val query = s.toString()
                 btnClearSearch.visibility = if (query.isEmpty()) View.GONE else View.VISIBLE
@@ -397,35 +399,16 @@ class ChatFragment : Fragment() {
         noResultsText.visibility = View.GONE
         lifecycleScope.launch {
             try {
-                // Search users
-                val userQuery = if (userType.equals("Admin", ignoreCase = true)) {
-                    db.collection("users")
-                } else {
-                    db.collection("users").whereEqualTo("userType", "Admin")
-                }
-                val userSnapshot = userQuery.get().await()
-                val userResults = userSnapshot.documents.mapNotNull { document ->
-                    val user = document.toObject(User::class.java)
-                    if (user != null && user.id != userRollNumber &&
-                        (user.name.contains(query, ignoreCase = true) || user.rollNumber.contains(query, ignoreCase = true))) {
-                        ChatSearchResult.UserResult(user)
-                    } else null
-                }
-                // Search groups
-                val groupSnapshot = db.collection("groups").get().await()
-                val groupResults = groupSnapshot.documents.mapNotNull { document ->
-                    val group = document.toObject(Group::class.java)
-                    if (group != null && group.participants.contains(userRollNumber) &&
-                        (group.name.contains(query, ignoreCase = true) || group.id.contains(query, ignoreCase = true))) {
-                        ChatSearchResult.GroupResult(group)
-                    } else null
-                }
+                val userResults = searchUsersAsync(query)
+                val groupResults = searchGroupsAsync(query)
+                
                 val allResults = (userResults + groupResults).sortedWith(compareBy {
                     when (it) {
                         is ChatSearchResult.UserResult -> it.user.name
                         is ChatSearchResult.GroupResult -> it.group.name
                     }
                 })
+                
                 progressBar.visibility = View.GONE
                 if (allResults.isEmpty()) {
                     noResultsText.visibility = View.VISIBLE
@@ -441,6 +424,33 @@ class ChatFragment : Fragment() {
                 noResultsText.text = "Error searching. Try again."
                 noResultsText.visibility = View.VISIBLE
             }
+        }
+    }
+
+    private suspend fun searchUsersAsync(query: String): List<ChatSearchResult.UserResult> {
+        val userQuery = if (userType.equals("Admin", ignoreCase = true)) {
+            db.collection("users")
+        } else {
+            db.collection("users").whereEqualTo("userType", "Admin")
+        }
+        val userSnapshot = userQuery.get().await()
+        return userSnapshot.documents.mapNotNull { document ->
+            val user = document.toObject(User::class.java)
+            if (user != null && user.id != userRollNumber &&
+                (user.name.contains(query, ignoreCase = true) || user.rollNumber.contains(query, ignoreCase = true))) {
+                ChatSearchResult.UserResult(user)
+            } else null
+        }
+    }
+
+    private suspend fun searchGroupsAsync(query: String): List<ChatSearchResult.GroupResult> {
+        val groupSnapshot = db.collection("groups").get().await()
+        return groupSnapshot.documents.mapNotNull { document ->
+            val group = document.toObject(Group::class.java)
+            if (group != null && group.participants.contains(userRollNumber) &&
+                (group.name.contains(query, ignoreCase = true) || group.id.contains(query, ignoreCase = true))) {
+                ChatSearchResult.GroupResult(group)
+            } else null
         }
     }
 } 
