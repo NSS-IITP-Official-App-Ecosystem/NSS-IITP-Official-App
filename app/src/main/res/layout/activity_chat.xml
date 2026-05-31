@@ -62,6 +62,23 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintTop_toBottomOf="@id/toolbar">
 
+        <!-- Offline Banner -->
+        <TextView
+            android:id="@+id/banner_offline"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#FF5252"
+            android:padding="8dp"
+            android:text="Offline. Waiting for network..."
+            android:textAlignment="center"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"
+            android:visibility="gone"
+            android:elevation="4dp"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
         <!-- Messages RecyclerView -->
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recyclerMessages"
@@ -70,7 +87,7 @@
             android:clipToPadding="false"
             android:paddingTop="8dp"
             android:paddingBottom="8dp"
-            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/banner_offline"
             app:layout_constraintBottom_toTopOf="@id/message_input_container"
             tools:listitem="@layout/item_message_received" />
 

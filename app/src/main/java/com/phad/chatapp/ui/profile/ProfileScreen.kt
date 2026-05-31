@@ -58,6 +58,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.lazy.items
+import kotlinx.coroutines.launch
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -777,7 +779,7 @@ fun ProfileScreen(
                     Text(resultMessage, color = Color.White)
                     } else {
                         androidx.compose.foundation.lazy.LazyColumn {
-                        items(closedEvents) {= event ->
+                        items(closedEvents) { event ->
                             val isSelected = selectedEvent?.id == event.id
                             androidx.compose.material3.Card(
                                 modifier = Modifier

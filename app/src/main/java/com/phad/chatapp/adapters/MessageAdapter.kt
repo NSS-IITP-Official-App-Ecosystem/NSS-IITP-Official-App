@@ -251,6 +251,7 @@ class MessageAdapter(
         private val messageContent: TextView = itemView.findViewById(R.id.text_message_body)
         private val messageTime: TextView = itemView.findViewById(R.id.text_message_time)
         private val messageStatus: TextView = itemView.findViewById(R.id.text_message_status)
+        private val iconStatus: ImageView = itemView.findViewById(R.id.icon_message_status)
         private val imageContent: ImageView = itemView.findViewById(R.id.image_message_content)
         
         fun bind(message: Message) {
@@ -309,7 +310,7 @@ class MessageAdapter(
             val time = dateFormat.format(message.timestamp.toDate())
             messageTime.text = time
             
-            // Set read status
+            // Set read status and icon
             val allParticipantsRead = message.read.all { (userId, isRead) -> 
                 userId == currentUserId || isRead
             }
@@ -320,19 +321,24 @@ class MessageAdapter(
             
             val totalRecipients = message.read.size - 1 // Exclude sender
             
-            if (message.groupId.isNotEmpty()) {
-                // This is a group message
-                if (allParticipantsRead) {
-                    messageStatus.text = "Read by all"
-                } else if (hasReadBy > 0) {
-                    messageStatus.text = "Read by $hasReadBy of $totalRecipients"
-                } else {
-                    messageStatus.text = "Delivered"
-                }
+            // Set icon
+            if (message.isPending) {
+                iconStatus.setImageResource(R.drawable.ic_msg_pending)
+                iconStatus.setColorFilter(Color.parseColor("#99FFFFFF")) // Grey tinted
+            } else if (allParticipantsRead && totalRecipients > 0) {
+                iconStatus.setImageResource(R.drawable.ic_msg_read)
+                iconStatus.setColorFilter(Color.parseColor("#4FC3F7")) // Blue tick
             } else {
-                // This is a direct message
-                val otherUserRead = message.read.entries.firstOrNull { it.key != currentUserId }?.value ?: false
-                messageStatus.text = if (otherUserRead) "Read" else "Delivered"
+                iconStatus.setImageResource(R.drawable.ic_msg_sent)
+                iconStatus.setColorFilter(Color.parseColor("#99FFFFFF")) // Grey tinted single tick
+            }
+            
+            // Set text for group messages where not everyone has read it yet
+            if (message.groupId.isNotEmpty() && !allParticipantsRead && hasReadBy > 0 && !message.isPending) {
+                messageStatus.visibility = View.VISIBLE
+                messageStatus.text = "Read by $hasReadBy of $totalRecipients"
+            } else {
+                messageStatus.visibility = View.GONE
             }
             
             // Add long click listener for message deletion

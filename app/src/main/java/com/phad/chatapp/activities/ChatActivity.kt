@@ -36,7 +36,9 @@ import com.phad.chatapp.utils.SessionManager
 import java.util.Date
 import java.util.regex.Pattern
 import androidx.appcompat.widget.PopupMenu
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
+import com.phad.chatapp.utils.NetworkConnectivityObserver
 
 class ChatActivity : AppCompatActivity() {
     private val TAG = "ChatActivity"
@@ -113,14 +115,24 @@ class ChatActivity : AppCompatActivity() {
         
         // Extract user info from intent
         val intent = intent
-        otherUserName = intent.getStringExtra("otherUserName") ?: "Chat"
-        otherUserRollNumber = intent.getStringExtra("otherUserRollNumber") ?: ""
+        val passedCurrentUserName = intent.getStringExtra("currentUserName")
+        val passedOtherUserName = intent.getStringExtra("otherUserName")
         
-        // Setup window insets
+        // Observe network connectivity
+        val networkObserver = NetworkConnectivityObserver(this)
+        lifecycleScope.launch {
+            networkObserver.networkStatus.collect { isConnected ->
+                binding.bannerOffline.visibility = if (isConnected) View.GONE else View.VISIBLE
+            }
+        }
+        
+        // Handle incoming datas
         setupWindowInsets()
         
         // Get data from intent
         currentUserRollNumber = intent.getStringExtra("currentUserRollNumber") ?: ""
+        otherUserRollNumber = intent.getStringExtra("otherUserRollNumber") ?: ""
+        otherUserName = intent.getStringExtra("otherUserName") ?: "Chat"
         conversationId = generateConversationId(currentUserRollNumber, otherUserRollNumber)
         
         // Validate roll numbers
@@ -505,7 +517,7 @@ class ChatActivity : AppCompatActivity() {
             .document(currentUserRollNumber)
             .collection(otherUserRollNumber)
             .orderBy("timestamp", Query.Direction.ASCENDING)
-            .addSnapshotListener { snapshot, e ->
+            .addSnapshotListener(com.google.firebase.firestore.MetadataChanges.INCLUDE) { snapshot, e ->
                 if (e != null) {
                     Log.e(TAG, "Listen failed for messages: ${e.message}", e)
                     return@addSnapshotListener
@@ -581,7 +593,8 @@ class ChatActivity : AppCompatActivity() {
                     mediaUrl = mediaUrl,
                     mediaType = mediaType,
                     contentType = contentType,
-                    receiver = data["receiver"] as? String ?: ""
+                    receiver = data["receiver"] as? String ?: "",
+                    isPending = doc.metadata.hasPendingWrites()
                 )
                 messages.add(message)
                 Log.d(TAG, "Message parsed: ID=${message.id}, Text=${message.text}, From=${message.sender}, ReadStatus=${message.read}, MediaType=${message.mediaType}")

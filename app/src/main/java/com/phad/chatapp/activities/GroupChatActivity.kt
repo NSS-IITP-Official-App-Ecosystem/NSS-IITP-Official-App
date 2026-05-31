@@ -52,7 +52,9 @@ import com.phad.chatapp.utils.Constants
 import com.phad.chatapp.utils.AttachmentHandler
 import com.phad.chatapp.utils.FileTypeEnum
 import com.phad.chatapp.activities.ManagePermissionsActivity
-
+import com.phad.chatapp.utils.NetworkConnectivityObserver
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 
 class GroupChatActivity : AppCompatActivity() {
     private lateinit var binding: ActivityGroupChatBinding
@@ -135,6 +137,14 @@ class GroupChatActivity : AppCompatActivity() {
                         FileTypeEnum.DOCUMENT -> sendMediaMessage(fileUrl, "document")
                     }
                 }
+            }
+        }
+        
+        // Observe network connectivity
+        val networkObserver = NetworkConnectivityObserver(this)
+        lifecycleScope.launch {
+            networkObserver.networkStatus.collect { isConnected ->
+                binding.bannerOffline.visibility = if (isConnected) View.GONE else View.VISIBLE
             }
         }
         
@@ -871,7 +881,7 @@ class GroupChatActivity : AppCompatActivity() {
         
         // Listen for new messages
         messageRepository.getMessagesForGroup(groupId)
-            .addSnapshotListener { snapshot, e ->
+            .addSnapshotListener(com.google.firebase.firestore.MetadataChanges.INCLUDE) { snapshot, e ->
             if (e != null) {
                     Log.e(TAG, "Listen failed.", e)
                     binding.loadingProgress.visibility = View.GONE
@@ -888,6 +898,7 @@ class GroupChatActivity : AppCompatActivity() {
                             if (message != null) {
                                 // Ensure message has an ID
                                 message.id = doc.id
+                                message.isPending = doc.metadata.hasPendingWrites()
                                 messages.add(message)
                                 
                                 // If we don't have the sender's name, fetch it
