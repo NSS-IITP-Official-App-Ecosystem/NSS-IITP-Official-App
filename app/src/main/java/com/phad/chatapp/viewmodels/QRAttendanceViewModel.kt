@@ -205,7 +205,7 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
     /**
      * Create a new attendance event
      */
-    fun createAttendanceEvent(name: String, description: String, location: String, eventDate: java.util.Date, openingTime: java.util.Date, closingTime: java.util.Date, hours: Double, isMandatory: Boolean = false, negativeHours: Double = 0.0, wings: List<String> = emptyList(), visibleOnlyToPresent: Boolean = false) {
+    fun createAttendanceEvent(name: String, description: String, location: String, eventDate: java.util.Date, openingTime: java.util.Date, closingTime: java.util.Date, hours: Double, isMandatory: Boolean = false, negativeHours: Double = 0.0, wings: List<String> = emptyList(), visibleOnlyToPresent: Boolean = false, allowedAttendanceMode: String = "BOTH") {
         viewModelScope.launch {
             try {
                 Log.d(TAG, "Creating attendance event: $name")
@@ -241,7 +241,8 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                     attendees = emptyList(),
                     closedAt = null,
                     _isLive = true, // Explicitly set to true for new events
-                    visibleOnlyToPresent = visibleOnlyToPresent
+                    visibleOnlyToPresent = visibleOnlyToPresent,
+                    allowedAttendanceMode = allowedAttendanceMode
                 )
 
                 val result = repository.createAttendanceEvent(event)
@@ -404,7 +405,7 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
     /**
      * Update an existing attendance event
      */
-    fun updateAttendanceEvent(name: String, description: String, location: String, eventDate: java.util.Date, openingTime: java.util.Date, closingTime: java.util.Date, hours: Double, isMandatory: Boolean, negativeHours: Double, wings: List<String>, visibleOnlyToPresent: Boolean, eventId: String) {
+    fun updateAttendanceEvent(name: String, description: String, location: String, eventDate: java.util.Date, openingTime: java.util.Date, closingTime: java.util.Date, hours: Double, isMandatory: Boolean, negativeHours: Double, wings: List<String>, visibleOnlyToPresent: Boolean, allowedAttendanceMode: String, eventId: String) {
         viewModelScope.launch {
             try {
                 Log.d(TAG, "Updating attendance event: $name (ID: $eventId)")
@@ -444,7 +445,8 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                     location = location.trim(),
                     description = description.trim(),
                     wings = wings,
-                    visibleOnlyToPresent = visibleOnlyToPresent
+                    visibleOnlyToPresent = visibleOnlyToPresent,
+                    allowedAttendanceMode = allowedAttendanceMode
                 )
 
                 val result = if (needsRecreation) {
@@ -502,6 +504,14 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
         viewModelScope.launch {
             try {
                 Log.d(TAG, "Starting attendance session for event: ${event.getEventName()}")
+
+                if (event.allowedAttendanceMode == "GEO") {
+                    _adminUiState.value = _adminUiState.value.copy(
+                        isLoading = false,
+                        errorMessage = "This event is configured for Geo-tagged Photo attendance only. QR session cannot be started."
+                    )
+                    return@launch
+                }
 
                 _adminUiState.value = _adminUiState.value.copy(isLoading = true)
 
@@ -1068,6 +1078,14 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
             }
             
             if (eventForLocationCheck != null) {
+                if (eventForLocationCheck.allowedAttendanceMode == "GEO") {
+                    Log.w(TAG, "❌ QR scanning blocked: event allows GEO-tagging only")
+                    _studentUiState.value = _studentUiState.value.copy(
+                        isProcessing = false,
+                        scanResult = ScanResult.Error("This event only allows Geo-tagged Photo attendance. Please return and select 'Geo-Tagged Photo'.")
+                    )
+                    return
+                }
                 val eventLat = eventForLocationCheck.attendanceLocationLatitude
                 val eventLng = eventForLocationCheck.attendanceLocationLongitude
                 

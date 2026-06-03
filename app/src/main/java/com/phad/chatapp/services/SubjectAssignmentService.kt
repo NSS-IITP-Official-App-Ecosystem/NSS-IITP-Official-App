@@ -11,8 +11,28 @@ class SubjectAssignmentService {
     private val TAG = "SubjectAssignmentService"
     private val db = FirebaseFirestore.getInstance()
     
+    private suspend fun getAdminUsers(): List<String> {
+        val adminUsers = mutableSetOf<String>()
+        try {
+            val admins1 = db.collection("users").whereEqualTo("userType", "admin").get().await()
+            for (doc in admins1.documents) {
+                adminUsers.add(doc.id)
+            }
+            val admins2 = db.collection("users").whereEqualTo("userType", "Admin").get().await()
+            for (doc in admins2.documents) {
+                adminUsers.add(doc.id)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching admin users from firestore", e)
+        }
+        if (adminUsers.isEmpty()) {
+            return FALLBACK_ADMIN_USERS
+        }
+        return adminUsers.toList()
+    }
+    
     companion object {
-        val ADMIN_USERS = listOf("2301MC51", "2301CS16")
+        private val FALLBACK_ADMIN_USERS = listOf("2301MC51", "2301CS16")
     }
     
     /**
@@ -21,6 +41,7 @@ class SubjectAssignmentService {
     suspend fun syncSubjectAssignmentsToGroups() {
         try {
             Log.d(TAG, "Starting sync of subject assignments to groups")
+            val adminUsers = getAdminUsers()
             
             // Get initial data
             val subjectGroupsSnapshot = db.collection("groups").whereEqualTo("subject", true).get().await()
@@ -95,7 +116,7 @@ class SubjectAssignmentService {
                         val assignments = parentDoc.get("assignments") as? List<Map<String, Any>> ?: emptyList()
                         val subjectAssignments = assignments.filter { it["subjectCode"] == subjectCode }
                         val participants = subjectAssignments.mapNotNull { it["volunteerRollNo"] as? String }.toMutableList()
-                        participants.addAll(ADMIN_USERS)
+                        participants.addAll(adminUsers)
                         val uniqueParticipants = participants.distinct()
                         
                         // Only update if participants list has changed
@@ -124,7 +145,7 @@ class SubjectAssignmentService {
                             val groupId = "$parentDocId & $subjectCode"
                             val groupDoc = db.collection("groups").document(groupId).get().await()
                             if (!groupDoc.exists()) {
-                                createOrUpdateSubjectGroup(groupId, subjectCode, subjectAssignments)
+                                createOrUpdateSubjectGroup(groupId, subjectCode, subjectAssignments, adminUsers)
                             }
                         }
                     }
@@ -143,14 +164,15 @@ class SubjectAssignmentService {
     private suspend fun createOrUpdateSubjectGroup(
         groupId: String,
         subjectCode: String,
-        assignments: List<Map<String, Any>>
+        assignments: List<Map<String, Any>>,
+        adminUsers: List<String>
     ) {
         try {
             // Extract volunteer roll numbers from assignments
             val participants = assignments.mapNotNull { it["volunteerRollNo"] as? String }.toMutableList()
             
             // Add admin users
-            participants.addAll(ADMIN_USERS)
+            participants.addAll(adminUsers)
             
             // Remove duplicates
             val uniqueParticipants = participants.distinct()
@@ -164,8 +186,8 @@ class SubjectAssignmentService {
                 name = groupId, // Use groupId as name
                 description = "Subject group for $subjectCode",
                 participants = uniqueParticipants,
-                admins = ADMIN_USERS,
-                createdBy = ADMIN_USERS.first(),
+                admins = adminUsers,
+                createdBy = adminUsers.firstOrNull() ?: "",
                 messagingPermissions = messagingPermissions,
                 createdAt = Timestamp.now(),
                 subject = true,
@@ -272,8 +294,9 @@ class SubjectAssignmentService {
                 if (parentDoc.exists()) {
                     val assignments = parentDoc.get("assignments") as? List<Map<String, Any>> ?: emptyList()
                     
+                    val adminUsers = getAdminUsers()
                     // Filter out admin users from participants
-                    val nonAdminParticipants = participants.filter { it !in ADMIN_USERS }
+                    val nonAdminParticipants = participants.filter { it !in adminUsers }
                     
                     // Update assignments for this subject code
                     val updatedAssignments = assignments.map { assignment ->

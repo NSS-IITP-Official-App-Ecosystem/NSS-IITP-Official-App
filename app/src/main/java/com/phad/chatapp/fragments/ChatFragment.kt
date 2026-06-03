@@ -132,8 +132,7 @@ class ChatFragment : Fragment() {
                                 fetchChatData()
                             }
                         }
-                    },
-                    currentUserRollNumber = userRollNumber
+                    }
                 )
             }
         }

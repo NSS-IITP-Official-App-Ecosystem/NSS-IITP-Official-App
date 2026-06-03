@@ -61,12 +61,11 @@ fun ChatScreen(
     onCreateGroupClick: () -> Unit,
     onRemoveGroupClick: () -> Unit,
     onUnreadMessagesClick: () -> Unit,
-    onSyncSubjectGroupsClick: () -> Unit,
-    currentUserRollNumber: String
+    onSyncSubjectGroupsClick: () -> Unit
 ) {
     val backgroundColor = colorResource(id = R.color.ui_dark)
     val surfaceColor = Color.White
-    val isAdmin = currentUserRollNumber == "2301MC51" || currentUserRollNumber == "2301CS16"
+    val isAdmin = state.isUserAdmin
 
     Column(
         modifier = modifier
@@ -382,7 +381,6 @@ private fun ChatScreenPreview() {
         onCreateGroupClick = {},
         onRemoveGroupClick = {},
         onUnreadMessagesClick = {},
-        onSyncSubjectGroupsClick = {},
-        currentUserRollNumber = "2301MC51"
+        onSyncSubjectGroupsClick = {}
     )
 }

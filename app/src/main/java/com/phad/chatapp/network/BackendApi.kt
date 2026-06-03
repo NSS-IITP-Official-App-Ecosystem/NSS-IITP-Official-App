@@ -11,8 +11,23 @@ import org.json.JSONObject
 
 object BackendApi {
     private const val TAG = "BackendApi"
-    // Adjust region if different
-    private const val BASE_URL = "https://asia-south1-chatapp-24fae.cloudfunctions.net"
+    private val BASE_URL: String
+        get() {
+            val projId = try {
+                com.google.firebase.FirebaseApp.getInstance().options.projectId
+            } catch (e: Exception) {
+                null
+            } ?: "nssiitp-app"
+            return if (com.phad.chatapp.BuildConfig.DEBUG) {
+                val isEmulator = android.os.Build.FINGERPRINT.startsWith("generic") || 
+                                 android.os.Build.MODEL.contains("google_sdk") || 
+                                 android.os.Build.MODEL.contains("Emulator")
+                val host = if (isEmulator) "10.0.2.2" else "127.0.0.1"
+                "http://$host:5001/$projId/asia-south1"
+            } else {
+                "https://asia-south1-$projId.cloudfunctions.net"
+            }
+        }
     private val client = OkHttpClient()
     private val json = "application/json; charset=utf-8".toMediaType()
 
