@@ -289,4 +289,38 @@ class AttendanceViewModel(private val application: Application) : ViewModel() {
         }
         return currentUser.uid
     }
+
+    suspend fun applyAbsentPenalty(eventId: String): Result<String> {
+    return try {
+        val auth = FirebaseAuth.getInstance()
+        val idToken = auth.currentUser?.getIdToken(false)?.await()?.token
+            ?: return Result.failure(Exception("Not authenticated"))
+
+       // TODO: Replace with actual NSS IITP Functions URL after deployment
+        val url = "https://asia-south1-chatapp-24fae.cloudfunctions.net/applyAbsentPenalty"
+        
+        val client = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+        client.requestMethod = "POST"
+        client.setRequestProperty("Content-Type", "application/json")
+        client.setRequestProperty("Authorization", "Bearer $idToken")
+        client.doOutput = true
+
+        val body = """{"eventId": "$eventId"}"""
+        client.outputStream.write(body.toByteArray())
+
+        val responseCode = client.responseCode
+        val response = client.inputStream.bufferedReader().readText()
+        
+        Log.d(TAG, "applyAbsentPenalty response: $response")
+        
+        if (responseCode == 200) {
+            Result.success("Penalty applied successfully!")
+        } else {
+            Result.failure(Exception("Failed: $response"))
+        }
+    } catch (e: Exception) {
+        Log.e(TAG, "Error applying penalty", e)
+        Result.failure(e)
+    }
+}
 }

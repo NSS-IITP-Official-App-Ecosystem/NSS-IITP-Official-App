@@ -540,6 +540,99 @@ exports.onEventDelete = onDocumentDeleted(
 
 // Notification functions removed in favor of Vercel Serverless Backend
 
+
+/**
+ * Apply negative hours to volunteers who missed a mandatory event.
+ * Called when an admin closes a mandatory event.
+ * POST body: { eventId }
+ */
+exports.applyAbsentPenalty = onRequest({ region: 'asia-south1' }, async (req, res) => {
+  try {
+    if (req.method !== 'POST') throw Object.assign(new Error('Method not allowed'), { status: 405 });
+
+    const decoded = await verifyAuthToken(req);
+    const { eventId } = req.body || {};
+    if (!eventId) throw Object.assign(new Error('Missing eventId'), { status: 400 });
+
+    const db = admin.firestore();
+    const eventRef = db.collection('NSS_Events_Attendence').doc(eventId);
+    const eventSnap = await eventRef.get();
+
+    if (!eventSnap.exists) throw Object.assign(new Error('Event not found'), { status: 404 });
+
+    const event = eventSnap.data() || {};
+
+    if (!event.mandatory) {
+      return res.json({ ok: false, reason: 'Event is not mandatory. No penalty applied.' });
+    }
+    if (event.absentPenaltyApplied) {
+      return res.json({ ok: false, reason: 'Penalty already applied for this event.' });
+    }
+
+    const negativeHours = Number(event.negativeHours) || 0;
+    if (negativeHours <= 0) {
+      return res.json({ ok: false, reason: 'No negativeHours value set on this event.' });
+    }
+
+    const eventDate = event.eventDate || '';
+    const semester = (() => {
+      try {
+        const parts = eventDate.split(' ');
+        const month = parts[1];
+        const year = parseInt(parts[2], 10);
+        const monthIndex = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].indexOf(month);
+        if ((year === 2025 && monthIndex >= 6) || (year === 2026 && monthIndex <= 4)) {
+          return year === 2025 ? 1 : 2;
+        }
+      } catch (e) {}
+      return 0;
+    })();
+
+    const usersSnap = await db.collection('users').get();
+    const attendanceSnap = await eventRef.collection('attendance').get();
+    const attendedRollNumbers = new Set(
+      attendanceSnap.docs.map(doc => doc.id.toUpperCase())
+    );
+
+    const eventWings = event.wings || [];
+    const batch = db.batch();
+    let penaltyCount = 0;
+
+    for (const userDoc of usersSnap.docs) {
+      const user = userDoc.data() || {};
+      const rollNumber = userDoc.id.toUpperCase();
+
+      if (user.userType === 'Admin') continue;
+      if (attendedRollNumbers.has(rollNumber)) continue;
+
+      if (eventWings.length > 0) {
+        const userWings = user.wings || [];
+        const isInWing = userWings.some(w => eventWings.includes(w));
+        if (!isInWing) continue;
+      }
+
+      const userRef = db.collection('users').doc(userDoc.id);
+      const updates = {
+        hours: admin.firestore.FieldValue.increment(-negativeHours),
+      };
+      if (semester === 1) updates.sem1Hours = admin.firestore.FieldValue.increment(-negativeHours);
+      if (semester === 2) updates.sem2Hours = admin.firestore.FieldValue.increment(-negativeHours);
+
+      batch.set(userRef, updates, { merge: true });
+      penaltyCount++;
+    }
+
+    batch.update(eventRef, { absentPenaltyApplied: true });
+    await batch.commit();
+
+    console.log(`[AbsentPenalty] Applied -${negativeHours}hrs to ${penaltyCount} absentees for event ${eventId}`);
+    res.json({ ok: true, penaltyCount, negativeHours });
+
+  } catch (err) {
+    console.error('[AbsentPenalty] Error:', err);
+    sendError(res, err);
+  }
+});
 // ==========================================
 // Parallel Geo-Tagged Photo Attendance System
 // ==========================================

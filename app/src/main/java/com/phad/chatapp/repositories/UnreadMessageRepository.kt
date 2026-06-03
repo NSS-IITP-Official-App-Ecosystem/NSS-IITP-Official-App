@@ -102,48 +102,20 @@ class UnreadMessageRepository(private val context: Context) {
         val chatPartners = mutableListOf<String>()
         
         try {
-            // Query recent_chats collection for the current user
-            val recentChats = db.collection("recent_chats")
-                .document(userId)
+            // Query conversation_metadata collection for the current user
+            val metadataSnapshot = db.collection("conversation_metadata")
+                .whereArrayContains("participants", userId)
                 .get()
                 .await()
                 
-            if (recentChats.exists()) {
-                // Get the chat partners from the recent chats document
-                val partners = recentChats.get("partners") as? List<String>
-                if (!partners.isNullOrEmpty()) {
-                    chatPartners.addAll(partners)
+            val partners = metadataSnapshot.documents
+                .mapNotNull { doc ->
+                    val participants = doc.get("participants") as? List<*>
+                    participants?.firstOrNull { it != userId }?.toString()
                 }
-            }
-            
-            // If no recent chats found, try to get from user document
-            if (chatPartners.isEmpty()) {
-                val userDoc = db.collection("users")
-                    .document(userId)
-                    .get()
-                    .await()
-                    
-                if (userDoc.exists()) {
-                    val contacts = userDoc.get("contacts") as? List<String>
-                    if (!contacts.isNullOrEmpty()) {
-                        chatPartners.addAll(contacts)
-                    }
-                }
-            }
-            
-            // If still no partners found, query all users as a fallback
-            if (chatPartners.isEmpty()) {
-                val usersSnapshot = db.collection("users")
-                    .limit(20)  // Limit to avoid loading too many users
-                    .get()
-                    .await()
-                    
-                for (doc in usersSnapshot.documents) {
-                    val partnerId = doc.id
-                    if (partnerId != userId) {
-                        chatPartners.add(partnerId)
-                    }
-                }
+                
+            if (partners.isNotEmpty()) {
+                chatPartners.addAll(partners.distinct())
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error getting chat partners", e)

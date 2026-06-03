@@ -44,7 +44,9 @@ data class ChatUiState(
     val recentUsers: List<User> = emptyList(),
     val communities: List<Group> = emptyList(),
     val isLoading: Boolean = true,
-    val isUserAdmin: Boolean = false
+    val isUserAdmin: Boolean = false,
+    val unreadDirectChatIds: Set<String> = emptySet(),
+    val unreadGroupChatIds: Set<String> = emptySet()
 )
 
 @Composable
@@ -127,7 +129,11 @@ fun ChatScreen(
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         items(state.recentUsers) { user ->
-                            UserAvatar(user = user, onClick = { onUserClick(user) })
+                            UserAvatar(
+                                user = user,
+                                hasUnread = state.unreadDirectChatIds.contains(user.id),
+                                onClick = { onUserClick(user) }
+                            )
                         }
                     }
                 }
@@ -159,6 +165,7 @@ fun ChatScreen(
                     items(state.communities) { community ->
                         CommunityRow(
                             community = community,
+                            hasUnread = state.unreadGroupChatIds.contains(community.id),
                             onClick = { onCommunityClick(community) }
                         )
                     }
@@ -262,7 +269,7 @@ private fun SettingsMenu(
 }
 
 @Composable
-fun UserAvatar(user: User, onClick: () -> Unit) {
+fun UserAvatar(user: User, hasUnread: Boolean, onClick: () -> Unit) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.clickable(onClick = onClick)
@@ -279,6 +286,16 @@ fun UserAvatar(user: User, onClick: () -> Unit) {
                     .clip(CircleShape)
                     .border(BorderStroke(2.dp, Color(0xffffcc00)), CircleShape)
             )
+            if (hasUnread) {
+                Box(
+                    modifier = Modifier
+                        .size(14.dp)
+                        .clip(CircleShape)
+                        .background(Color.Red)
+                        .border(BorderStroke(2.dp, Color.White), CircleShape)
+                        .align(Alignment.TopEnd)
+                )
+            }
         }
         Spacer(Modifier.height(4.dp))
         Text(
@@ -292,7 +309,7 @@ fun UserAvatar(user: User, onClick: () -> Unit) {
 }
 
 @Composable
-fun CommunityRow(community: Group, onClick: () -> Unit) {
+fun CommunityRow(community: Group, hasUnread: Boolean, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -300,14 +317,26 @@ fun CommunityRow(community: Group, onClick: () -> Unit) {
             .padding(horizontal = 24.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Image(
-            painter = painterResource(id = R.drawable.ic_group),
-            contentDescription = community.name,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .size(60.dp)
-                .clip(CircleShape)
-        )
+        Box {
+            Image(
+                painter = painterResource(id = R.drawable.ic_group),
+                contentDescription = community.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(60.dp)
+                    .clip(CircleShape)
+            )
+            if (hasUnread) {
+                Box(
+                    modifier = Modifier
+                        .size(14.dp)
+                        .clip(CircleShape)
+                        .background(Color.Red)
+                        .border(BorderStroke(2.dp, Color.White), CircleShape)
+                        .align(Alignment.TopEnd)
+                )
+            }
+        }
         Spacer(Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(

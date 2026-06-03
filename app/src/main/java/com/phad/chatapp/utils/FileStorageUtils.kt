@@ -269,22 +269,43 @@ object FileStorageUtils {
                 documentsDir.mkdirs()
             }
             
-            // Create a unique filename based on timestamp and URL
-            val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
             val fileExtension = getFileExtensionFromUrl(url)
-            val fileName = "DOC_${timeStamp}.$fileExtension"
-            val outputFile = File(documentsDir, fileName)
             
             // Process Google Drive URL if needed - extract the file ID
             var downloadUrl = url
+            var uniqueId = hashString(url) // Default to URL hash
+            
             if (url.contains("drive.google.com/file/d/")) {
                 // Extract the file ID from the standard drive URL format
                 val fileId = url.substringAfter("/file/d/").substringBefore("/view")
                 Log.d(TAG, "Extracted Drive file ID: $fileId")
                 
+                uniqueId = fileId
+                
                 // Use direct download URL format
                 downloadUrl = "https://drive.google.com/uc?export=download&id=$fileId"
                 Log.d(TAG, "Using download URL: $downloadUrl")
+            } else if (url.contains("drive.google.com/uc?id=") || url.contains("drive.google.com/open?id=")) {
+                val fileId = url.substringAfter("id=").substringBefore("&")
+                uniqueId = fileId
+                downloadUrl = "https://drive.google.com/uc?export=download&id=$fileId"
+            }
+            
+            // Create a deterministic filename based on the unique ID
+            val fileName = "DOC_${uniqueId}.$fileExtension"
+            val outputFile = File(documentsDir, fileName)
+            
+            // CACHE CHECK: If file already exists and is not empty, return it immediately
+            if (outputFile.exists() && outputFile.length() > 0) {
+                Log.d(TAG, "Cache hit: Document already downloaded at ${outputFile.absolutePath}")
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Opening from cache...", Toast.LENGTH_SHORT).show()
+                }
+                return@withContext FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    outputFile
+                )
             }
             
             // Open connection to URL
@@ -425,6 +446,19 @@ object FileStorageUtils {
         } catch (e: Exception) {
             Log.e(TAG, "Error getting file extension from URL: $e")
             return "pdf" // Default to PDF on error
+        }
+    }
+    
+    /**
+     * Generate MD5 hash of a string
+     */
+    private fun hashString(input: String): String {
+        return try {
+            val md = java.security.MessageDigest.getInstance("MD5")
+            val bytes = md.digest(input.toByteArray())
+            bytes.joinToString("") { "%02x".format(it) }
+        } catch (e: Exception) {
+            input.hashCode().toString()
         }
     }
 } 

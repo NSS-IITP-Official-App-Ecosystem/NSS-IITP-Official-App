@@ -39,8 +39,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class MessageAdapter(private val currentUserId: String) : 
-    RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+class MessageAdapter(
+    private val currentUserId: String,
+    private val onMessageLongClick: ((Message) -> Unit)? = null
+) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     
     // Define view types
     companion object {
@@ -249,6 +251,7 @@ class MessageAdapter(private val currentUserId: String) :
         private val messageContent: TextView = itemView.findViewById(R.id.text_message_body)
         private val messageTime: TextView = itemView.findViewById(R.id.text_message_time)
         private val messageStatus: TextView = itemView.findViewById(R.id.text_message_status)
+        private val iconStatus: ImageView = itemView.findViewById(R.id.icon_message_status)
         private val imageContent: ImageView = itemView.findViewById(R.id.image_message_content)
         
         fun bind(message: Message) {
@@ -307,7 +310,7 @@ class MessageAdapter(private val currentUserId: String) :
             val time = dateFormat.format(message.timestamp.toDate())
             messageTime.text = time
             
-            // Set read status
+            // Set read status and icon
             val allParticipantsRead = message.read.all { (userId, isRead) -> 
                 userId == currentUserId || isRead
             }
@@ -318,19 +321,30 @@ class MessageAdapter(private val currentUserId: String) :
             
             val totalRecipients = message.read.size - 1 // Exclude sender
             
-            if (message.groupId.isNotEmpty()) {
-                // This is a group message
-                if (allParticipantsRead) {
-                    messageStatus.text = "Read by all"
-                } else if (hasReadBy > 0) {
-                    messageStatus.text = "Read by $hasReadBy of $totalRecipients"
-                } else {
-                    messageStatus.text = "Delivered"
-                }
+            // Set icon
+            if (message.isPending) {
+                iconStatus.setImageResource(R.drawable.ic_msg_pending)
+                iconStatus.setColorFilter(Color.parseColor("#99FFFFFF")) // Grey tinted
+            } else if (allParticipantsRead && totalRecipients > 0) {
+                iconStatus.setImageResource(R.drawable.ic_msg_read)
+                iconStatus.setColorFilter(Color.parseColor("#4FC3F7")) // Blue tick
             } else {
-                // This is a direct message
-                val otherUserRead = message.read.entries.firstOrNull { it.key != currentUserId }?.value ?: false
-                messageStatus.text = if (otherUserRead) "Read" else "Delivered"
+                iconStatus.setImageResource(R.drawable.ic_msg_sent)
+                iconStatus.setColorFilter(Color.parseColor("#99FFFFFF")) // Grey tinted single tick
+            }
+            
+            // Set text for group messages where not everyone has read it yet
+            if (message.groupId.isNotEmpty() && !allParticipantsRead && hasReadBy > 0 && !message.isPending) {
+                messageStatus.visibility = View.VISIBLE
+                messageStatus.text = "Read by $hasReadBy of $totalRecipients"
+            } else {
+                messageStatus.visibility = View.GONE
+            }
+            
+            // Add long click listener for message deletion
+            itemView.setOnLongClickListener {
+                onMessageLongClick?.invoke(message)
+                true
             }
         }
     }
@@ -427,72 +441,7 @@ class MessageAdapter(private val currentUserId: String) :
                     context.startActivity(intent)
                 }
                 "document" -> {
-                    // Show loading message
-                    Toast.makeText(context, "Downloading document...", Toast.LENGTH_SHORT).show()
-                    
-                    // Download and open the document in a coroutine
-                    CoroutineScope(Dispatchers.Main).launch {
-                        try {
-                            // Process URL for Google Drive links
-                            val processedUrl = processGoogleDriveUrl(url)
-                            Log.d(TAG, "Processed document URL: $processedUrl")
-                            
-                            // Download the document
-                            val localUri = withContext(Dispatchers.IO) {
-                                FileStorageUtils.downloadDocument(context, processedUrl)
-                            }
-                            
-                            if (localUri != null) {
-                                // Determine mime type based on URL extension
-                                val fileExtension = url.substringAfterLast('.', "").lowercase()
-                                Log.d(TAG, "Document file extension: $fileExtension")
-                                
-                                val mimeType = when (fileExtension) {
-                                    "pdf" -> "application/pdf"
-                                    "doc" -> "application/msword"
-                                    "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                                    "txt" -> "text/plain"
-                                    "xls" -> "application/vnd.ms-excel"
-                                    "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                                    "ppt" -> "application/vnd.ms-powerpoint"
-                                    "pptx" -> "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-                                    else -> "*/*" // Let the system decide
-                                }
-                                
-                                Log.d(TAG, "Using MIME type: $mimeType for document")
-                                
-                                // Create intent to open with appropriate viewer
-                                val intent = Intent(Intent.ACTION_VIEW).apply {
-                                    setDataAndType(localUri, mimeType)
-                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                }
-                                
-                                try {
-                                    context.startActivity(intent)
-                                } catch (e: Exception) {
-                                    Log.e(TAG, "Error opening document with specific mime type: ${e.message}", e)
-                                    
-                                    // Try again with generic mime type
-                                    val genericIntent = Intent(Intent.ACTION_VIEW).apply {
-                                        setDataAndType(localUri, "*/*")
-                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                    }
-                                    context.startActivity(genericIntent)
-                                }
-                            } else {
-                                // If download fails, try to open in browser as fallback
-                                Toast.makeText(context, "Opening in browser instead...", Toast.LENGTH_SHORT).show()
-                                val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(processedUrl))
-                                browserIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                context.startActivity(browserIntent)
-                            }
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Error handling document: ${e.message}", e)
-                            Toast.makeText(context, "Error opening document: ${e.message}", Toast.LENGTH_LONG).show()
-                        }
-                    }
+                    openDocument(context, url)
                 }
                 else -> {
                     // Default handler for unknown types
@@ -505,6 +454,75 @@ class MessageAdapter(private val currentUserId: String) :
         } catch (e: Exception) {
             Log.e(TAG, "Error opening media URL: ${e.message}", e)
             Toast.makeText(recyclerView.context, "Could not open media: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+    
+    private fun openDocument(context: android.content.Context, url: String) {
+        // Show loading message
+        Toast.makeText(context, "Downloading document...", Toast.LENGTH_SHORT).show()
+        
+        // Download and open the document in a coroutine
+        CoroutineScope(Dispatchers.Main).launch {
+            try {
+                // Process URL for Google Drive links
+                val processedUrl = processGoogleDriveUrl(url)
+                Log.d(TAG, "Processed document URL: $processedUrl")
+                
+                // Download the document
+                val localUri = withContext(Dispatchers.IO) {
+                    FileStorageUtils.downloadDocument(context, processedUrl)
+                }
+                
+                if (localUri != null) {
+                    // Determine mime type based on URL extension
+                    val fileExtension = url.substringAfterLast('.', "").lowercase()
+                    Log.d(TAG, "Document file extension: $fileExtension")
+                    
+                    val mimeType = when (fileExtension) {
+                        "pdf" -> "application/pdf"
+                        "doc" -> "application/msword"
+                        "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        "txt" -> "text/plain"
+                        "xls" -> "application/vnd.ms-excel"
+                        "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        "ppt" -> "application/vnd.ms-powerpoint"
+                        "pptx" -> "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                        else -> "*/*" // Let the system decide
+                    }
+                    
+                    Log.d(TAG, "Using MIME type: $mimeType for document")
+                    
+                    // Create intent to open with appropriate viewer
+                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(localUri, mimeType)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    
+                    try {
+                        context.startActivity(intent)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error opening document with specific mime type: ${e.message}", e)
+                        
+                        // Try again with generic mime type
+                        val genericIntent = Intent(Intent.ACTION_VIEW).apply {
+                            setDataAndType(localUri, "*/*")
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(genericIntent)
+                    }
+                } else {
+                    // If download fails, try to open in browser as fallback
+                    Toast.makeText(context, "Opening in browser instead...", Toast.LENGTH_SHORT).show()
+                    val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(processedUrl))
+                    browserIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(browserIntent)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error handling document: ${e.message}", e)
+                Toast.makeText(context, "Error opening document: ${e.message}", Toast.LENGTH_LONG).show()
+            }
         }
     }
     
@@ -543,28 +561,22 @@ class MessageAdapter(private val currentUserId: String) :
             Log.d(TAG, "Processing URL: $decodedUrl")
             
             // Process Google Drive links
-            when {
+            return when {
                 // Format: https://drive.google.com/file/d/FILE_ID/view?usp=drivesdk
                 decodedUrl.contains("https://drive.google.com/file/d/") -> {
                     val fileId = decodedUrl.substringAfter("https://drive.google.com/file/d/").substringBefore("/")
                     // Direct download link for better reliability
-                    return "https://drive.google.com/uc?export=download&id=$fileId"
+                    "https://drive.google.com/uc?export=download&id=$fileId"
                 }
-                // Format: https://drive.google.com/uc?id=FILE_ID
-                decodedUrl.contains("https://drive.google.com/uc?id=") -> {
+                // Format: https://drive.google.com/uc?id=FILE_ID or https://drive.google.com/open?id=FILE_ID
+                decodedUrl.contains("https://drive.google.com/uc?id=") || decodedUrl.contains("https://drive.google.com/open?id=") -> {
                     val fileId = decodedUrl.substringAfter("id=").substringBefore("&")
                     // Direct download link for better reliability
-                    return "https://drive.google.com/uc?export=download&id=$fileId"
-                }
-                // Format: https://drive.google.com/open?id=FILE_ID
-                decodedUrl.contains("https://drive.google.com/open?id=") -> {
-                    val fileId = decodedUrl.substringAfter("id=").substringBefore("&")
-                    // Direct download link for better reliability
-                    return "https://drive.google.com/uc?export=download&id=$fileId"
+                    "https://drive.google.com/uc?export=download&id=$fileId"
                 }
                 else -> {
                     // Return as is if not a recognized Google Drive URL
-                    return decodedUrl
+                    decodedUrl
                 }
             }
         } catch (e: Exception) {

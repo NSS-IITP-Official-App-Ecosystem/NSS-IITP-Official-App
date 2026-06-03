@@ -56,9 +56,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class ChatFragment : Fragment() {
 
@@ -83,12 +85,18 @@ class ChatFragment : Fragment() {
                 ChatScreen(
                     state = state,
                     onCommunityClick = { group ->
+                        // Optimistically clear the unread indicator for this group
+                        _uiState.update { it.copy(unreadGroupChatIds = it.unreadGroupChatIds - group.groupId) }
+                        
                         val intent = Intent(requireContext(), GroupChatActivity::class.java)
                         intent.putExtra("GROUP_ID", group.groupId)
                         intent.putExtra("GROUP_NAME", group.name)
                         startActivity(intent)
                     },
                     onUserClick = { user ->
+                        // Optimistically clear the unread indicator for this user
+                        _uiState.update { it.copy(unreadDirectChatIds = it.unreadDirectChatIds - user.id) }
+                        
                         val intent = Intent(requireContext(), ChatActivity::class.java).apply {
                             putExtra("currentUserRollNumber", sessionManager.fetchRollNumber())
                             putExtra("currentUserName", sessionManager.fetchUserName())
@@ -101,8 +109,8 @@ class ChatFragment : Fragment() {
                         showSearchDialog()
                     },
                     onRefreshClick = {
-                        loadRecentUsers()
-                        loadCommunities()
+                        fetchChatData()
+                        fetchUnreadIndicators()
                         if (userType.equals("Admin", ignoreCase = true)) {
                             CoroutineScope(Dispatchers.IO).launch {
                                 AttendanceStatsUpdater.updateAttendanceStatsInSession(requireContext())
@@ -121,7 +129,7 @@ class ChatFragment : Fragment() {
                     onSyncSubjectGroupsClick = {
                         SubjectSyncUtil.syncSubjectAssignments(requireContext()) { success ->
                             if (success) {
-                                loadCommunities()
+                                fetchChatData()
                             }
                         }
                     }
@@ -141,49 +149,113 @@ class ChatFragment : Fragment() {
         _uiState.update { it.copy(isUserAdmin = userType.equals("Admin", ignoreCase = true)) }
 
         // Instead, just load data:
-        loadRecentUsers()
-        loadCommunities()
+        fetchChatData()
     }
 
-    private fun loadRecentUsers() {
-        _uiState.update { it.copy(isLoading = true) }
+    override fun onResume() {
+        super.onResume()
+        fetchUnreadIndicators()
+    }
+
+    private fun fetchUnreadIndicators() {
         lifecycleScope.launch {
             try {
-                val query = if (userType.equals("Admin", ignoreCase = true)) {
-                    // If user is admin, show all users
-                    db.collection("users")
-                } else {
-                    // If user is student, show only admins
-                    db.collection("users").whereEqualTo("userType", "Admin")
-                }
-                val snapshot = query.get().await()
-                val users = snapshot.toObjects(User::class.java).filter { it.id != userRollNumber }
-                _uiState.update { it.copy(recentUsers = users) }
-                Log.d(TAG, "Loaded ${users.size} recent users for user type: $userType, current user: $userRollNumber")
-                users.forEach { user ->
-                    Log.d(TAG, "User: ${user.name}, ID: ${user.id}, RollNumber: ${user.rollNumber}, UserType: ${user.userType}")
-                }
+                val repo = UnreadMessageRepository(requireContext())
+                val (directMessages, groupMessages) = repo.fetchAllUnreadMessages()
+                
+                val unreadDirectIds = directMessages.map { it.chatPartnerId }.toSet()
+                val unreadGroupIds = groupMessages.map { it.groupId }.toSet()
+                
+                _uiState.update { it.copy(
+                    unreadDirectChatIds = unreadDirectIds,
+                    unreadGroupChatIds = unreadGroupIds
+                ) }
             } catch (e: Exception) {
-                Log.e(TAG, "Error loading user avatars", e)
-                _uiState.update { it.copy(recentUsers = emptyList()) }
+                Log.e(TAG, "Error fetching unread indicators", e)
             }
         }
     }
 
-    private fun loadCommunities() {
-        val currentUserRollNumber = sessionManager.fetchRollNumber() ?: return
-
+    private fun fetchChatData() {
+        _uiState.update { it.copy(isLoading = true) }
         lifecycleScope.launch {
             try {
-                // Load both regular and subject-based groups
-                val allGroups = groupRepository.getAllGroupsForUser(currentUserRollNumber)
-                _uiState.update { it.copy(communities = allGroups, isLoading = false) }
-                Log.d(TAG, "Loaded ${allGroups.size} total groups for user $currentUserRollNumber")
+                // Launch both concurrently
+                val usersDeferred = async { fetchRecentUsersSuspend() }
+                val communitiesDeferred = async { fetchCommunitiesSuspend() }
+                
+                val users = usersDeferred.await()
+                val communities = communitiesDeferred.await()
+                
+                _uiState.update { it.copy(
+                    recentUsers = users,
+                    communities = communities,
+                    isLoading = false
+                ) }
             } catch (e: Exception) {
-                _uiState.update { it.copy(communities = emptyList(), isLoading = false) }
-                Log.e(TAG, "Error loading communities", e)
-                Toast.makeText(requireContext(), "Failed to load communities.", Toast.LENGTH_SHORT).show()
+                Log.e(TAG, "Error loading chat data", e)
+                _uiState.update { it.copy(isLoading = false) }
             }
+        }
+    }
+
+    private suspend fun fetchRecentUsersSuspend(): List<User> {
+        return try {
+            // 1. Get all active conversations for the current user
+            val metadataSnapshot = db.collection("conversation_metadata")
+                .whereArrayContains("participants", userRollNumber)
+                .get().await()
+            
+            // 2. Sort locally and extract roll numbers
+            val otherUserRollNumbers = metadataSnapshot.documents
+                .sortedByDescending { it.getTimestamp("lastMessageTime") }
+                .mapNotNull { doc ->
+                    val participants = doc.get("participants") as? List<*>
+                    participants?.firstOrNull { it != userRollNumber }?.toString()
+                }.distinct()
+            
+            val users = mutableListOf<User>()
+            
+            // 3. Fetch user details using chunking
+            if (otherUserRollNumbers.isNotEmpty()) {
+                val chunks = otherUserRollNumbers.chunked(10)
+                for (chunk in chunks) {
+                    try {
+                        val usersSnapshot = db.collection("users")
+                            .whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
+                            .get().await()
+                        
+                        val chunkUsers: List<User> = usersSnapshot.toObjects(User::class.java)
+                        users.addAll(chunkUsers)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error fetching user details chunk", e)
+                    }
+                }
+                
+                // Sort the fetched users to match the original recent chats ordering
+                users.sortBy { otherUserRollNumbers.indexOf(it.id) }
+            }
+            
+            Log.d(TAG, "Loaded ${users.size} active chat users for $userRollNumber")
+            users.toList()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading recent chats", e)
+            emptyList()
+        }
+    }
+
+    private suspend fun fetchCommunitiesSuspend(): List<Group> {
+        val currentUserRollNumber = sessionManager.fetchRollNumber() ?: return emptyList()
+
+        return try {
+            // Load both regular and subject-based groups
+            val allGroups = groupRepository.getAllGroupsForUser(currentUserRollNumber)
+            Log.d(TAG, "Loaded ${allGroups.size} total groups for user $currentUserRollNumber")
+            allGroups
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading communities", e)
+            Toast.makeText(requireContext(), "Failed to load communities.", Toast.LENGTH_SHORT).show()
+            emptyList()
         }
     }
 
@@ -280,8 +352,12 @@ class ChatFragment : Fragment() {
         recyclerSearchResults.adapter = searchAdapter
 
         editSearch.addTextChangedListener(object : TextWatcher {
-            override fun afterTextChanged(s: Editable?) {}
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                // Not used because we only trigger search on text change
+            }
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {
+                // Not used because we only trigger search on text change
+            }
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 val query = s.toString()
                 btnClearSearch.visibility = if (query.isEmpty()) View.GONE else View.VISIBLE
@@ -322,35 +398,16 @@ class ChatFragment : Fragment() {
         noResultsText.visibility = View.GONE
         lifecycleScope.launch {
             try {
-                // Search users
-                val userQuery = if (userType.equals("Admin", ignoreCase = true)) {
-                    db.collection("users")
-                } else {
-                    db.collection("users").whereEqualTo("userType", "Admin")
-                }
-                val userSnapshot = userQuery.get().await()
-                val userResults = userSnapshot.documents.mapNotNull { document ->
-                    val user = document.toObject(User::class.java)
-                    if (user != null && user.id != userRollNumber &&
-                        (user.name.contains(query, ignoreCase = true) || user.rollNumber.contains(query, ignoreCase = true))) {
-                        ChatSearchResult.UserResult(user)
-                    } else null
-                }
-                // Search groups
-                val groupSnapshot = db.collection("groups").get().await()
-                val groupResults = groupSnapshot.documents.mapNotNull { document ->
-                    val group = document.toObject(Group::class.java)
-                    if (group != null && group.participants.contains(userRollNumber) &&
-                        (group.name.contains(query, ignoreCase = true) || group.id.contains(query, ignoreCase = true))) {
-                        ChatSearchResult.GroupResult(group)
-                    } else null
-                }
+                val userResults = searchUsersAsync(query)
+                val groupResults = searchGroupsAsync(query)
+                
                 val allResults = (userResults + groupResults).sortedWith(compareBy {
                     when (it) {
                         is ChatSearchResult.UserResult -> it.user.name
                         is ChatSearchResult.GroupResult -> it.group.name
                     }
                 })
+                
                 progressBar.visibility = View.GONE
                 if (allResults.isEmpty()) {
                     noResultsText.visibility = View.VISIBLE
@@ -366,6 +423,33 @@ class ChatFragment : Fragment() {
                 noResultsText.text = "Error searching. Try again."
                 noResultsText.visibility = View.VISIBLE
             }
+        }
+    }
+
+    private suspend fun searchUsersAsync(query: String): List<ChatSearchResult.UserResult> {
+        val userQuery = if (userType.equals("Admin", ignoreCase = true)) {
+            db.collection("users")
+        } else {
+            db.collection("users").whereEqualTo("userType", "Admin")
+        }
+        val userSnapshot = userQuery.get().await()
+        return userSnapshot.documents.mapNotNull { document ->
+            val user = document.toObject(User::class.java)
+            if (user != null && user.id != userRollNumber &&
+                (user.name.contains(query, ignoreCase = true) || user.rollNumber.contains(query, ignoreCase = true))) {
+                ChatSearchResult.UserResult(user)
+            } else null
+        }
+    }
+
+    private suspend fun searchGroupsAsync(query: String): List<ChatSearchResult.GroupResult> {
+        val groupSnapshot = db.collection("groups").get().await()
+        return groupSnapshot.documents.mapNotNull { document ->
+            val group = document.toObject(Group::class.java)
+            if (group != null && group.participants.contains(userRollNumber) &&
+                (group.name.contains(query, ignoreCase = true) || group.id.contains(query, ignoreCase = true))) {
+                ChatSearchResult.GroupResult(group)
+            } else null
         }
     }
 } 
