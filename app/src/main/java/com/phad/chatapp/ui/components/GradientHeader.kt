@@ -33,6 +33,7 @@ fun GradientHeader(
     onBackClick: (() -> Unit)? = null,
     actions: @Composable (RowScope.() -> Unit)? = null,
     isTitleCentered: Boolean = false,
+    titleFontSize: androidx.compose.ui.unit.TextUnit = 22.sp,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -60,7 +61,7 @@ fun GradientHeader(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (onBackClick != null) {
@@ -106,9 +107,8 @@ fun GradientHeader(
                     Text(
                         text = title,
                         color = Color.White,
-                        fontSize = 24.sp, 
+                        fontSize = titleFontSize, 
                         fontWeight = FontWeight.Bold,
-                        lineHeight = 28.sp,
                         textAlign = if (isTitleCentered) TextAlign.Center else TextAlign.Start
                     )
                     if (subtitle != null) {

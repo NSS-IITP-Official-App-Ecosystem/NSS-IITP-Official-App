@@ -216,8 +216,8 @@ class NssQRAttendanceFragment : Fragment() {
                     onClearError = {
                         viewModel.clearError()
                     },
-                    onCreateEvent = { name, description, location, date, openingTime, closingTime, hours, isMandatory, negativeHours, wings, visibleOnlyToPresent ->
-                        viewModel.createAttendanceEvent(name, description, location, date, openingTime, closingTime, hours, isMandatory, negativeHours, wings, visibleOnlyToPresent)
+                    onCreateEvent = { name, description, location, date, openingTime, closingTime, hours, isMandatory, negativeHours, wings, visibleOnlyToPresent, allowedAttendanceMode ->
+                        viewModel.createAttendanceEvent(name, description, location, date, openingTime, closingTime, hours, isMandatory, negativeHours, wings, visibleOnlyToPresent, allowedAttendanceMode)
                     },
                     onShowCreateDialog = {
                         viewModel.showCreateEventDialog()
@@ -240,8 +240,8 @@ class NssQRAttendanceFragment : Fragment() {
                     onHideEditDialog = {
                         viewModel.hideEditEventDialog()
                     },
-                    onUpdateEvent = { name, description, location, date, openingTime, closingTime, hours, isMandatory, negativeHours, wings, visibleOnlyToPresent, eventId ->
-                        viewModel.updateAttendanceEvent(name, description, location, date, openingTime, closingTime, hours, isMandatory, negativeHours, wings, visibleOnlyToPresent, eventId)
+                    onUpdateEvent = { name, description, location, date, openingTime, closingTime, hours, isMandatory, negativeHours, wings, visibleOnlyToPresent, allowedAttendanceMode, eventId ->
+                        viewModel.updateAttendanceEvent(name, description, location, date, openingTime, closingTime, hours, isMandatory, negativeHours, wings, visibleOnlyToPresent, allowedAttendanceMode, eventId)
                     },
                     onGeneratePDF = { event ->
                         viewModel.generateAttendancePDF(event)
@@ -313,7 +313,7 @@ fun QRAttendanceAdminScreen(
     onEndSession: () -> Unit,
     onLoadEvents: () -> Unit,
     onClearError: () -> Unit,
-    onCreateEvent: (String, String, String, Date, Date, Date, Double, Boolean, Double, List<String>, Boolean) -> Unit,
+    onCreateEvent: (String, String, String, Date, Date, Date, Double, Boolean, Double, List<String>, Boolean, String) -> Unit,
     onShowCreateDialog: () -> Unit,
     onHideCreateDialog: () -> Unit,
     onClearCreateSuccess: () -> Unit,
@@ -321,7 +321,7 @@ fun QRAttendanceAdminScreen(
     onNavigateBack: () -> Unit = {},
     onShowEditDialog: (AttendanceEvent) -> Unit, // New parameter
     onHideEditDialog: () -> Unit, // New parameter
-    onUpdateEvent: (String, String, String, Date, Date, Date, Double, Boolean, Double, List<String>, Boolean, String) -> Unit, // New parameter (added eventId)
+    onUpdateEvent: (String, String, String, Date, Date, Date, Double, Boolean, Double, List<String>, Boolean, String, String) -> Unit, // New parameter (added eventId, allowedAttendanceMode)
     onGeneratePDF: (AttendanceEvent) -> Unit, // PDF generation callback
     onClearSuccessMessage: () -> Unit, // Clear success message callback
     onDismissRollResults: () -> Unit, // Dismiss roll results dialog
@@ -998,7 +998,7 @@ fun EventSelectionScreen(
 fun EditEventDialog(
     event: AttendanceEvent,
     isUpdating: Boolean,
-    onUpdateEvent: (String, String, String, Date, Date, Date, Double, Boolean, Double, List<String>, Boolean, String) -> Unit,
+    onUpdateEvent: (String, String, String, Date, Date, Date, Double, Boolean, Double, List<String>, Boolean, String, String) -> Unit,
     onDismiss: () -> Unit,
     errorMessage: String?
 ) {
@@ -1025,6 +1025,7 @@ fun EditEventDialog(
     var negativeHours by remember { mutableStateOf(if (event.negativeHours > 0) event.negativeHours.toString() else "") }
     var selectedWings by remember { mutableStateOf(event.wings) }
     var visibleOnlyToPresent by remember { mutableStateOf(event.visibleOnlyToPresent) }
+    var allowedAttendanceMode by remember { mutableStateOf(event.allowedAttendanceMode) }
 
     // Reset error state when dialog opens or event changes
     LaunchedEffect(event) {
@@ -1042,6 +1043,7 @@ fun EditEventDialog(
         negativeHours = if (event.negativeHours > 0) com.phad.chatapp.utils.AttendanceEventUtils.formatHours(event.negativeHours) else ""
         selectedWings = event.wings
         visibleOnlyToPresent = event.visibleOnlyToPresent
+        allowedAttendanceMode = event.allowedAttendanceMode
     }
 
     // Show error if there's an error message
@@ -1394,6 +1396,42 @@ fun EditEventDialog(
                     )
                 }
 
+                // Allowed Attendance Mode
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Allowed Attendance Method",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    color = Color(0xFF333333)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val modes = listOf("BOTH" to "Both", "QR" to "QR Only", "GEO" to "Photo Only")
+                    modes.forEach { (modeValue, modeLabel) ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable(enabled = !isUpdating) { allowedAttendanceMode = modeValue }
+                                .padding(vertical = 4.dp)
+                        ) {
+                            RadioButton(
+                                selected = allowedAttendanceMode == modeValue,
+                                onClick = { allowedAttendanceMode = modeValue },
+                                enabled = !isUpdating
+                            )
+                            Text(
+                                text = modeLabel,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+
                 // Wing Selection
                 // Increased spacing before "Select Wings"
                 Spacer(modifier = Modifier.height(24.dp))
@@ -1580,7 +1618,7 @@ fun EditEventDialog(
                                 else -> {
                                     showError = false
                                     validationErrorMessage = ""
-                                    onUpdateEvent(trimmedName, eventDescription.trim(), eventLocation.trim(), selectedDate, openingTime, closingTime, hoursValue, isMandatory, negHoursValue, selectedWings, visibleOnlyToPresent, event.id)
+                                    onUpdateEvent(trimmedName, eventDescription.trim(), eventLocation.trim(), selectedDate, openingTime, closingTime, hoursValue, isMandatory, negHoursValue, selectedWings, visibleOnlyToPresent, allowedAttendanceMode, event.id)
                                 }
                             }
                         },
@@ -2380,7 +2418,7 @@ private fun isValidDecimalInput(input: String): Boolean {
 @Composable
 fun CreateEventDialog(
     isCreating: Boolean,
-    onCreateEvent: (String, String, String, Date, Date, Date, Double, Boolean, Double, List<String>, Boolean) -> Unit,
+    onCreateEvent: (String, String, String, Date, Date, Date, Double, Boolean, Double, List<String>, Boolean, String) -> Unit,
     onDismiss: () -> Unit,
     errorMessage: String?,
     initialDate: Date? = null
@@ -2406,6 +2444,7 @@ fun CreateEventDialog(
 
     var selectedWings by remember { mutableStateOf(emptyList<String>()) }
     var visibleOnlyToPresent by remember { mutableStateOf(false) }
+    var allowedAttendanceMode by remember { mutableStateOf("BOTH") }
 
     // Reset error state when dialog opens
     LaunchedEffect(Unit) {
@@ -2755,6 +2794,42 @@ fun CreateEventDialog(
                         )
                     }
 
+                    // Allowed Attendance Mode
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Allowed Attendance Method",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = Color(0xFF333333)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val modes = listOf("BOTH" to "Both", "QR" to "QR Only", "GEO" to "Photo Only")
+                        modes.forEach { (modeValue, modeLabel) ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable(enabled = !isCreating) { allowedAttendanceMode = modeValue }
+                                    .padding(vertical = 4.dp)
+                            ) {
+                                RadioButton(
+                                    selected = allowedAttendanceMode == modeValue,
+                                    onClick = { allowedAttendanceMode = modeValue },
+                                    enabled = !isCreating
+                                )
+                                Text(
+                                    text = modeLabel,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+
                     // Wing Selection
                     // Increased spacing before "Select Wings"
                     Spacer(modifier = Modifier.height(24.dp))
@@ -2935,7 +3010,7 @@ fun CreateEventDialog(
                                 else -> {
                                     showError = false
                                     validationErrorMessage = ""
-                                    onCreateEvent(trimmedName, eventDescription.trim(), eventLocation.trim(), selectedDate, openingTime, closingTime, hoursValue, isMandatory, negHoursValue, selectedWings, visibleOnlyToPresent)
+                                    onCreateEvent(trimmedName, eventDescription.trim(), eventLocation.trim(), selectedDate, openingTime, closingTime, hoursValue, isMandatory, negHoursValue, selectedWings, visibleOnlyToPresent, allowedAttendanceMode)
                                 }
                             }
                         },
@@ -3122,6 +3197,10 @@ fun PendingVerificationsScreen(
     onVerifyClick: (PhotoAttendanceManager.PendingPhotoRecord, Boolean) -> Unit
 ) {
     val context = LocalContext.current
+    
+    // State to track which event is selected for viewing details
+    var selectedEventId by remember { mutableStateOf<String?>(null) }
+    
     if (isLoading) {
         Box(
             modifier = Modifier.fillMaxSize(),
@@ -3173,137 +3252,282 @@ fun PendingVerificationsScreen(
             }
         }
     } else {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(pendingRecords) { record ->
-                val eventName = eventList.find { it.id == record.eventId }?.getEventName() ?: record.eventId
-                val formattedDate = remember(record.submittedAtMs) {
-                    val date = Date(record.submittedAtMs)
-                    val formatter = java.text.SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault())
-                    formatter.format(date)
+        // Group pending records by eventId
+        val groupedRecords = remember(pendingRecords) {
+            pendingRecords.groupBy { it.eventId }
+        }
+        
+        if (selectedEventId == null) {
+            // Render Menu of Events
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item {
+                    Text(
+                        text = "Select Event to Review Photos",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = Color.DarkGray,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
                 }
-
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Column(
+                
+                items(groupedRecords.keys.toList()) { eventId ->
+                    val eventRecords = groupedRecords[eventId] ?: emptyList()
+                    val eventObj = eventList.find { it.id == eventId }
+                    val eventName = eventObj?.getEventName() ?: eventId
+                    val eventDate = eventObj?.getFormattedEventDate() ?: ""
+                    
+                    Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp)
+                            .clickable { selectedEventId = eventId },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                     ) {
-                        // Header details
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Column {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = record.name,
+                                    text = eventName,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 16.sp,
                                     color = Color(0xFF212121)
                                 )
-                                Text(
-                                    text = "Roll: ${record.rollNumber}",
-                                    fontSize = 13.sp,
-                                    color = Color.Gray
-                                )
+                                if (eventDate.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = eventDate,
+                                        fontSize = 12.sp,
+                                        color = Color.Gray
+                                    )
+                                }
                             }
+                            
+                            // Badge showing count of pending submissions
                             Card(
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
-                                shape = RoundedCornerShape(8.dp)
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD)),
+                                shape = RoundedCornerShape(16.dp)
                             ) {
                                 Text(
-                                    text = "Pending",
-                                    color = Color(0xFFE65100),
-                                    fontSize = 11.sp,
+                                    text = "${eventRecords.size} Pending",
+                                    color = Color(0xFF1976D2),
+                                    fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                                 )
                             }
                         }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-                        HorizontalDivider(color = Color(0xFFF5F5F5))
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Event and Location info
-                        Text(
-                            text = "Event: $eventName",
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 14.sp,
-                            color = Color(0xFF2196F3)
+                    }
+                }
+            }
+        } else {
+            // Render Pending Photos for the selected event
+            val eventRecords = groupedRecords[selectedEventId] ?: emptyList()
+            
+            // Auto-navigate back to events list if all records for this event are reviewed/removed
+            LaunchedEffect(eventRecords) {
+                if (eventRecords.isEmpty()) {
+                    selectedEventId = null
+                }
+            }
+            
+            val selectedEventObj = eventList.find { it.id == selectedEventId }
+            val selectedEventName = selectedEventObj?.getEventName() ?: selectedEventId ?: ""
+            
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Detail Header with Back Button and Event Title
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { selectedEventId = null }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Go back to event list",
+                            tint = Color(0xFF2196F3)
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Submitted: $formattedDate",
-                            fontSize = 12.sp,
-                            color = Color.Gray
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.LocationOn,
-                                contentDescription = "Location",
-                                tint = Color.Gray,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Text(
-                                text = String.format("GPS: %.6f, %.6f", record.latitude, record.longitude),
-                                fontSize = 12.sp,
-                                color = Color.DarkGray
-                            )
+                    }
+                    Text(
+                        text = selectedEventName,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = Color(0xFF2196F3),
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(start = 4.dp)
+                    )
+                }
+                
+                HorizontalDivider(color = Color(0xFFF5F5F5))
+                
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(eventRecords) { record ->
+                        val formattedDate = remember(record.submittedAtMs) {
+                            val date = Date(record.submittedAtMs)
+                            val formatter = java.text.SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault())
+                            formatter.format(date)
                         }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Image display
-                        if (record.photoUrl.isNotEmpty()) {
-                            AsyncImage(
-                                model = record.photoUrl,
-                                contentDescription = "Volunteer Geo-Tagged Photo",
+                        
+                        var resolvedAddress by remember(record.latitude, record.longitude) { mutableStateOf("Loading address...") }
+                        LaunchedEffect(record.latitude, record.longitude) {
+                            resolvedAddress = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                try {
+                                    val geocoder = android.location.Geocoder(context, Locale.getDefault())
+                                    @Suppress("DEPRECATION")
+                                    val addresses = geocoder.getFromLocation(record.latitude, record.longitude, 1)
+                                    if (!addresses.isNullOrEmpty()) {
+                                        val address = addresses[0]
+                                        val fullAddress = address.getAddressLine(0)
+                                        if (!fullAddress.isNullOrEmpty()) {
+                                            val parts = fullAddress.split(",")
+                                            parts.take(3).joinToString(",").trim()
+                                        } else {
+                                            "Unknown Location"
+                                        }
+                                    } else {
+                                        "Unknown Location"
+                                    }
+                                } catch (e: Exception) {
+                                    "Unknown Location"
+                                }
+                            }
+                        }
+                        
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                        ) {
+                            Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(200.dp)
-                                    .background(Color(0xFFEEEEEE), RoundedCornerShape(8.dp)),
-                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                        }
-
-                        // Approve / Reject Actions
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            // Reject Button
-                            Button(
-                                onClick = { onVerifyClick(record, false) },
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF5350)), // Red
-                                shape = RoundedCornerShape(8.dp)
+                                    .padding(16.dp)
                             ) {
-                                Text("Reject", color = Color.White, fontWeight = FontWeight.Bold)
-                            }
-
-                            // Approve Button
-                            Button(
-                                onClick = { onVerifyClick(record, true) },
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF66BB6A)), // Green
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Text("Approve", color = Color.White, fontWeight = FontWeight.Bold)
+                                // Header details
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = record.name,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 16.sp,
+                                            color = Color(0xFF212121)
+                                        )
+                                        Text(
+                                            text = "Roll: ${record.rollNumber}",
+                                            fontSize = 13.sp,
+                                            color = Color.Gray
+                                        )
+                                    }
+                                    Card(
+                                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text(
+                                            text = "Pending",
+                                            color = Color(0xFFE65100),
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                                
+                                Spacer(modifier = Modifier.height(12.dp))
+                                HorizontalDivider(color = Color(0xFFF5F5F5))
+                                Spacer(modifier = Modifier.height(12.dp))
+                                
+                                // Submission and Location info
+                                Text(
+                                    text = "Submitted: $formattedDate",
+                                    fontSize = 12.sp,
+                                    color = Color.Gray
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.LocationOn,
+                                        contentDescription = "Location",
+                                        tint = Color.Gray,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Column {
+                                        Text(
+                                            text = String.format("GPS: %.6f, %.6f", record.latitude, record.longitude),
+                                            fontSize = 12.sp,
+                                            color = Color.DarkGray
+                                        )
+                                        Text(
+                                            text = resolvedAddress,
+                                            fontSize = 11.sp,
+                                            color = Color.Gray
+                                        )
+                                    }
+                                }
+                                
+                                Spacer(modifier = Modifier.height(12.dp))
+                                
+                                // Image display
+                                if (record.photoUrl.isNotEmpty()) {
+                                    AsyncImage(
+                                        model = record.photoUrl,
+                                        contentDescription = "Volunteer Geo-Tagged Photo",
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(200.dp)
+                                            .background(Color(0xFFEEEEEE), RoundedCornerShape(8.dp)),
+                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                }
+                                
+                                // Approve / Reject Actions
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    // Reject Button
+                                    Button(
+                                        onClick = { onVerifyClick(record, false) },
+                                        modifier = Modifier.weight(1f),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF5350)),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text("Reject", color = Color.White, fontWeight = FontWeight.Bold)
+                                    }
+                                    
+                                    // Approve Button
+                                    Button(
+                                        onClick = { onVerifyClick(record, true) },
+                                        modifier = Modifier.weight(1f),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF66BB6A)),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text("Approve", color = Color.White, fontWeight = FontWeight.Bold)
+                                    }
+                                }
                             }
                         }
                     }

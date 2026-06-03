@@ -124,8 +124,7 @@ class ChatFragment : Fragment() {
                                 loadCommunities()
                             }
                         }
-                    },
-                    currentUserRollNumber = userRollNumber
+                    }
                 )
             }
         }

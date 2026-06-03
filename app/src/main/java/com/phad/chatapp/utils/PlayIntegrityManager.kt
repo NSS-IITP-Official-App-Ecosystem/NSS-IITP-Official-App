@@ -34,9 +34,23 @@ object PlayIntegrityManager {
     private const val TAG = "PlayIntegrityManager"
     
     // Cloud Function URL for integrity verification
-    // Production project: nssiitp-app
-    private const val VERIFY_INTEGRITY_URL = 
-        "https://asia-south1-nssiitp-app.cloudfunctions.net/verifyPlayIntegrity"
+    private val VERIFY_INTEGRITY_URL: String
+        get() {
+            val projId = try {
+                com.google.firebase.FirebaseApp.getInstance().options.projectId
+            } catch (e: Exception) {
+                null
+            } ?: "nssiitp-app"
+            return if (com.phad.chatapp.BuildConfig.DEBUG) {
+                val isEmulator = android.os.Build.FINGERPRINT.startsWith("generic") || 
+                                 android.os.Build.MODEL.contains("google_sdk") || 
+                                 android.os.Build.MODEL.contains("Emulator")
+                val host = if (isEmulator) "10.0.2.2" else "127.0.0.1"
+                "http://$host:5001/$projId/asia-south1/verifyPlayIntegrity"
+            } else {
+                "https://asia-south1-$projId.cloudfunctions.net/verifyPlayIntegrity"
+            }
+        }
 
     // Shared Preferences for Integrity Cache
     private const val PREFS_NAME = "nss_integrity_prefs"

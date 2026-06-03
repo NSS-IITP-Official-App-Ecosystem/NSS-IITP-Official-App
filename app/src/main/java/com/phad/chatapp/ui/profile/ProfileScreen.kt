@@ -31,6 +31,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -119,6 +120,7 @@ fun ProfileScreen(
     onScheduleClick: () -> Unit,
     // New admin-only export button
     onExportAttendanceClick: () -> Unit = {},
+    onSyncToGoogleSheetsClick: () -> Unit = {},
     onEventHistoryClick: () -> Unit = {},
     onManageStudentsClick: () -> Unit = {},
     onChangeSubjectsClick: () -> Unit = {},
@@ -312,6 +314,7 @@ fun ProfileScreen(
                                     onSwitchUser = onSwitchInterfaceClick,
                                     onRefresh = onRefreshClick,
                                     onExportAttendance = onExportAttendanceClick,
+                                    onSyncToGoogleSheets = onSyncToGoogleSheetsClick,
                                     onEventHistory = onEventHistoryClick,
                                     onManageStudents = onManageStudentsClick,
                                     onChangeSubjects = onChangeSubjectsClick,
@@ -989,6 +992,7 @@ fun ProfileMenu(
     onSwitchUser: () -> Unit,
     onRefresh: () -> Unit,
     onExportAttendance: () -> Unit,
+    onSyncToGoogleSheets: () -> Unit,
     onEventHistory: () -> Unit,
     onManageStudents: () -> Unit,
     onChangeSubjects: () -> Unit,
@@ -1017,6 +1021,24 @@ fun ProfileMenu(
                 leadingIcon = {
                     Icon(
                         painter = painterResource(id = R.drawable.ic_download),
+                        contentDescription = null,
+                        tint = Color(0xFF444343)
+                    )
+                }
+            )
+        }
+
+        // Sync to Google Sheets - only for admins in NSS interface
+        if (isAdmin && currentInterface == "NSS") {
+            DropdownMenuItem(
+                text = { Text("Sync to Google Sheets", color = Color(0xFF444343)) },
+                onClick = {
+                    onSyncToGoogleSheets()
+                    onDismiss()
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
                         contentDescription = null,
                         tint = Color(0xFF444343)
                     )

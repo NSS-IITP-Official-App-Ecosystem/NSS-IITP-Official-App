@@ -70,6 +70,9 @@ import android.graphics.Paint
 import android.media.ExifInterface
 import android.provider.MediaStore
 import android.os.Build
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.filled.ExpandMore
@@ -142,6 +145,11 @@ class NssQRScanFragment : Fragment() {
     
     // State for showing location dialog
     private var showLocationDialog by mutableStateOf(false)
+
+    // Captured photo state for previewing before upload
+    private var capturedPhotoBitmap by mutableStateOf<Bitmap?>(null)
+    private var capturedLocation by mutableStateOf<android.location.Location?>(null)
+    private var capturedImageBytes by mutableStateOf<ByteArray?>(null)
     
     // State for Play Integrity verification
     private var integrityCheckState by mutableStateOf<PlayIntegrityManager.IntegrityResult?>(null)
@@ -233,7 +241,7 @@ class NssQRScanFragment : Fragment() {
             when (attendanceMode) {
                 AttendanceMode.SELECT -> {
                     ModeSelectionScreen(
-                        studentName = sessionManager.fetchUserName() ?: "Student",
+                        studentName = sessionManager.fetchUserName(),
                         onModeSelected = { mode ->
                             if (mode == AttendanceMode.CAPTURE_PHOTO) {
                                 viewModel.loadAvailableEvents()
@@ -247,42 +255,57 @@ class NssQRScanFragment : Fragment() {
                         ProcessingOverlayWithHomeBackground()
                     } else {
                         QRScanOverlay(
-                            uiState = uiState,
-                            onRetryClick = {
-                                viewModel.clearError()
-                                startCamera()
-                            }
+                            uiState = uiState
                         )
                     }
                 }
                 AttendanceMode.CAPTURE_PHOTO -> {
-                    PhotoCaptureOverlay(
-                        availableEvents = adminState.availableEvents,
-                        selectedEvent = selectedEventForPhoto,
-                        onEventSelected = { selectedEventForPhoto = it },
-                        onCaptureClick = {
-                            selectedEventForPhoto?.let { event ->
-                                captureAndUploadPhoto(event)
+                    val capturedBitmap = capturedPhotoBitmap
+                    if (capturedBitmap != null) {
+                        PhotoPreviewOverlay(
+                            bitmap = capturedBitmap,
+                            selectedEvent = selectedEventForPhoto,
+                            isUploading = isUploadingPhoto,
+                            uploadError = uploadErrorMsg,
+                            onClearError = { uploadErrorMsg = null },
+                            onRetakeClick = { retakePhoto() },
+                            onSubmitClick = {
+                                selectedEventForPhoto?.let { event ->
+                                    submitCapturedPhoto(event)
+                                }
+                            },
+                            onBackClick = {
+                                retakePhoto()
                             }
-                        },
-                        onBackClick = {
-                            onModeChanged(AttendanceMode.SELECT)
-                        },
-                        isLoadingEvents = adminState.isLoading,
-                        isUploading = isUploadingPhoto,
-                        uploadError = uploadErrorMsg,
-                        onClearError = { uploadErrorMsg = null },
-                        mockDetected = mockLocationDetected,
-                        onDismissMockDialog = { mockLocationDetected = false },
-                        isFrontCamera = isFrontCamera,
-                        onSwitchCamera = { toggleCamera() },
-                        flashMode = flashMode,
-                        onFlashModeChanged = { cycleFlashMode() },
-                        currentZoomLevel = uiState.currentZoomLevel,
-                        minZoomLevel = uiState.minZoomLevel,
-                        maxZoomLevel = uiState.maxZoomLevel,
-                        onZoomChanged = { viewModel.updateZoomLevel(it) }
-                    )
+                        )
+                    } else {
+                        PhotoCaptureOverlay(
+                            availableEvents = adminState.availableEvents.filter { it.allowedAttendanceMode == "GEO" || it.allowedAttendanceMode == "BOTH" },
+                            selectedEvent = selectedEventForPhoto,
+                            onEventSelected = { selectedEventForPhoto = it },
+                            onCaptureClick = {
+                                selectedEventForPhoto?.let {
+                                    capturePhoto()
+                                }
+                            },
+                            onBackClick = {
+                                onModeChanged(AttendanceMode.SELECT)
+                            },
+                            isLoadingEvents = adminState.isLoading,
+                            isUploading = isUploadingPhoto,
+                            uploadError = uploadErrorMsg,
+                            onClearError = { uploadErrorMsg = null },
+                            mockDetected = mockLocationDetected,
+                            onDismissMockDialog = { mockLocationDetected = false },
+                            onSwitchCamera = { toggleCamera() },
+                            flashMode = flashMode,
+                            onFlashModeChanged = { cycleFlashMode() },
+                            currentZoomLevel = uiState.currentZoomLevel,
+                            minZoomLevel = uiState.minZoomLevel,
+                            maxZoomLevel = uiState.maxZoomLevel,
+                            onZoomChanged = { viewModel.updateZoomLevel(it) }
+                        )
+                    }
                 }
             }
         }
@@ -573,7 +596,7 @@ class NssQRScanFragment : Fragment() {
                 camera?.let { cam ->
                     try {
                         val cameraControl = cam.cameraControl
-                        val zoomFuture = cameraControl.setZoomRatio(state.currentZoomLevel)
+                        cameraControl.setZoomRatio(state.currentZoomLevel)
                         Log.d(TAG, "Zoom level applied: ${String.format("%.1f", state.currentZoomLevel)}x")
                     } catch (e: Exception) {
                         Log.e(TAG, "Error applying zoom level: ${state.currentZoomLevel}", e)
@@ -589,7 +612,7 @@ class NssQRScanFragment : Fragment() {
     fun handleZoomGesture(scaleFactor: Float) {
         Log.d(TAG, "handleZoomGesture called with scaleFactor: $scaleFactor")
 
-        camera?.let { cam ->
+        if (camera != null) {
             val currentState = viewModel.studentUiState.value
             val currentZoom = currentState.currentZoomLevel
             val newZoom = (currentZoom * scaleFactor).coerceIn(
@@ -607,7 +630,7 @@ class NssQRScanFragment : Fragment() {
             } else {
                 Log.d(TAG, "Zoom level unchanged: ${String.format("%.1f", currentZoom)}x")
             }
-        } ?: run {
+        } else {
             Log.w(TAG, "handleZoomGesture called but camera is null")
         }
     }
@@ -655,7 +678,7 @@ class NssQRScanFragment : Fragment() {
         Log.d(TAG, "Preview view gesture detection set up")
     }
 
-    private fun captureAndUploadPhoto(event: AttendanceEvent) {
+    private fun capturePhoto() {
         val imageCaptureObj = imageCapture ?: run {
             Toast.makeText(requireContext(), "Camera not initialized", Toast.LENGTH_SHORT).show()
             return
@@ -702,37 +725,18 @@ class NssQRScanFragment : Fragment() {
                                 val address = getAddressFromLocation(requireContext(), location.latitude, location.longitude)
                                 val watermarkedBitmap = applyWatermark(bitmap, location.latitude, location.longitude, address)
 
-                                savePhotoToGallery(watermarkedBitmap)
-
                                 val bos = ByteArrayOutputStream()
                                 watermarkedBitmap.compress(Bitmap.CompressFormat.JPEG, 85, bos)
                                 val imageBytes = bos.toByteArray()
 
-                                bitmap.recycle()
-                                watermarkedBitmap.recycle()
+                                bitmap.recycle() // Recycle unwatermarked temporary bitmap
                                 if (tempFile.exists()) tempFile.delete()
 
-                                val rollNo = sessionManager.fetchRollNumber() ?: "unknown"
-                                Log.d(TAG, "Uploading photo attendance. User: $rollNo, Event: ${event.id}")
-                                val result = PhotoAttendanceManager.submitPhotoAttendance(
-                                    userId = rollNo,
-                                    eventId = event.id,
-                                    latitude = location.latitude,
-                                    longitude = location.longitude,
-                                    imageBytes = imageBytes
-                                )
-
+                                // Save to state variables for preview
+                                capturedPhotoBitmap = watermarkedBitmap
+                                capturedLocation = location
+                                capturedImageBytes = imageBytes
                                 isUploadingPhoto = false
-                                result.fold(
-                                    onSuccess = {
-                                        Log.d(TAG, "Photo attendance submitted successfully")
-                                        navigateToSuccessScreen("Geo-tagged photo submitted successfully!\nVerification pending admin approval.")
-                                    },
-                                    onFailure = { error ->
-                                        Log.e(TAG, "Photo attendance submission failed", error)
-                                        uploadErrorMsg = error.message ?: "Failed to upload photo"
-                                    }
-                                )
                             } catch (e: Exception) {
                                 Log.e(TAG, "Error processing captured photo", e)
                                 isUploadingPhoto = false
@@ -749,6 +753,60 @@ class NssQRScanFragment : Fragment() {
                 }
             )
         }
+    }
+
+    private fun submitCapturedPhoto(event: AttendanceEvent) {
+        val imageBytes = capturedImageBytes ?: return
+        val location = capturedLocation ?: return
+        val bitmap = capturedPhotoBitmap ?: return
+
+        isUploadingPhoto = true
+        uploadErrorMsg = null
+
+        lifecycleScope.launch {
+            try {
+                // Save photo to gallery
+                savePhotoToGallery(bitmap)
+
+                val rollNo = sessionManager.fetchRollNumber() ?: "unknown"
+                Log.d(TAG, "Uploading photo attendance. User: $rollNo, Event: ${event.id}")
+                val result = PhotoAttendanceManager.submitPhotoAttendance(
+                    userId = rollNo,
+                    eventId = event.id,
+                    latitude = location.latitude,
+                    longitude = location.longitude,
+                    imageBytes = imageBytes
+                )
+
+                isUploadingPhoto = false
+                result.fold(
+                    onSuccess = {
+                        Log.d(TAG, "Photo attendance submitted successfully")
+                        resetCapturedPhoto()
+                        navigateToSuccessScreen("Geo-tagged photo submitted successfully!\nVerification pending admin approval.")
+                    },
+                    onFailure = { error ->
+                        Log.e(TAG, "Photo attendance submission failed", error)
+                        uploadErrorMsg = error.message ?: "Failed to upload photo"
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Error submitting captured photo", e)
+                isUploadingPhoto = false
+                uploadErrorMsg = "Failed to submit photo: ${e.message}"
+            }
+        }
+    }
+
+    private fun resetCapturedPhoto() {
+        capturedPhotoBitmap?.recycle()
+        capturedPhotoBitmap = null
+        capturedLocation = null
+        capturedImageBytes = null
+    }
+
+    private fun retakePhoto() {
+        resetCapturedPhoto()
     }
 
     private fun rotateBitmapIfRequired(bitmap: Bitmap, imagePath: String): Bitmap {
@@ -859,6 +917,7 @@ class NssQRScanFragment : Fragment() {
 
     override fun onDestroyView() {
         super.onDestroyView()
+        resetCapturedPhoto()
         val bottomNav = requireActivity().findViewById<View>(R.id.bottom_nav_container)
         bottomNav?.visibility = View.VISIBLE
         cameraProvider?.unbindAll()
@@ -942,8 +1001,7 @@ private class QRCodeAnalyzer(
 
 @Composable
 fun QRScanOverlay(
-    uiState: com.phad.chatapp.viewmodels.StudentQRUiState,
-    onRetryClick: () -> Unit
+    uiState: com.phad.chatapp.viewmodels.StudentQRUiState
 ) {
     Box(
         modifier = Modifier.fillMaxSize()
@@ -1449,7 +1507,6 @@ fun PhotoCaptureOverlay(
     onClearError: () -> Unit,
     mockDetected: Boolean,
     onDismissMockDialog: () -> Unit,
-    isFrontCamera: Boolean,
     onSwitchCamera: () -> Unit,
     flashMode: Int,
     onFlashModeChanged: (Int) -> Unit,
@@ -1554,9 +1611,10 @@ fun PhotoCaptureOverlay(
         GradientHeader(
             title = "Capture Geotagged Photo",
             subtitle = currentEvent?.let { "Event: ${it.getEventName()}" } ?: "Select Event Below",
-            icon = Icons.Default.CameraAlt,
+            icon = null,
             onBackClick = onBackClick,
-            isTitleCentered = true,
+            isTitleCentered = false,
+            titleFontSize = 18.sp,
             actions = headerActions
         )
 
@@ -1855,6 +1913,158 @@ fun PhotoCaptureOverlay(
                 },
                 text = {
                     Text(uploadError, fontSize = 14.sp)
+                },
+                confirmButton = {
+                    Button(
+                        onClick = onClearError,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2196F3))
+                    ) {
+                        Text("Try Again")
+                    }
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun PhotoPreviewOverlay(
+    bitmap: Bitmap,
+    selectedEvent: AttendanceEvent?,
+    isUploading: Boolean,
+    uploadError: String?,
+    onClearError: () -> Unit,
+    onRetakeClick: () -> Unit,
+    onSubmitClick: () -> Unit,
+    onBackClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        // Full screen dark background
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        )
+
+        // Watermarked photo preview
+        Image(
+            bitmap = bitmap.asImageBitmap(),
+            contentDescription = "Photo Preview",
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = 80.dp, bottom = 120.dp)
+        )
+
+        // Gradient Header
+        GradientHeader(
+            title = "Preview Attendance Photo",
+            subtitle = selectedEvent?.let { "Event: ${it.getEventName()}" } ?: "",
+            icon = null,
+            onBackClick = onBackClick,
+            isTitleCentered = false,
+            titleFontSize = 18.sp
+        )
+
+        // Buttons at the bottom
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .background(Color.Black.copy(alpha = 0.6f))
+                .padding(bottom = 40.dp, top = 20.dp, start = 24.dp, end = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Retake Button
+            Button(
+                onClick = onRetakeClick,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(50.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.Transparent,
+                    contentColor = Color.White
+                ),
+                border = androidx.compose.foundation.BorderStroke(2.dp, Color.White),
+                shape = RoundedCornerShape(25.dp),
+                enabled = !isUploading
+            ) {
+                Text("Retake", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
+
+            // Submit Button
+            Button(
+                onClick = onSubmitClick,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(50.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF4CAF50),
+                    contentColor = Color.White
+                ),
+                shape = RoundedCornerShape(25.dp),
+                enabled = !isUploading
+            ) {
+                Text("Submit", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
+        }
+
+        // Uploading Overlay
+        if (isUploading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.7f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    modifier = Modifier.padding(32.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        CircularProgressIndicator(color = Color(0xFF4CAF50))
+                        Text(
+                            text = "Uploading Photo Attendance",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = Color.Black
+                        )
+                        Text(
+                            text = "Please wait, embedding GPS coordinates and syncing with server...",
+                            fontSize = 12.sp,
+                            color = Color.Gray,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+        }
+
+        // Upload Error Dialog
+        if (uploadError != null) {
+            AlertDialog(
+                onDismissRequest = onClearError,
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.Error,
+                        contentDescription = "Upload Error",
+                        tint = Color.Red,
+                        modifier = Modifier.size(56.dp)
+                    )
+                },
+                title = {
+                    Text("Submission Failed", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Color.Black)
+                },
+                text = {
+                    Text(uploadError, fontSize = 14.sp, color = Color.Black)
                 },
                 confirmButton = {
                     Button(

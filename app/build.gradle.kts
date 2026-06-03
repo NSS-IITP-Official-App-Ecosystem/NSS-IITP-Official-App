@@ -297,3 +297,27 @@ dependencies {
     
     // Remove explicit SoLoader dependency; not needed and may introduce misaligned native libs
 }
+
+// Automatically configure adb reverse tcp:5001 tcp:5001 on all connected devices on build/run
+tasks.register("adbReverse") {
+    doLast {
+        try {
+            val process = ProcessBuilder("adb", "devices").start()
+            val output = process.inputStream.bufferedReader().readText()
+            output.lineSequence().forEach { line ->
+                val trimmed = line.trim()
+                if (trimmed.endsWith("device") && !trimmed.startsWith("List of")) {
+                    val serial = trimmed.split(Regex("\\s+"))[0]
+                    logger.lifecycle("Setting up adb reverse tcp:5001 tcp:5001 for device: $serial")
+                    ProcessBuilder("adb", "-s", serial, "reverse", "tcp:5001", "tcp:5001").start().waitFor()
+                }
+            }
+        } catch (e: Exception) {
+            logger.warn("Failed to automatically run adb reverse: ${e.message}")
+        }
+    }
+}
+
+tasks.named("preBuild") {
+    dependsOn("adbReverse")
+}

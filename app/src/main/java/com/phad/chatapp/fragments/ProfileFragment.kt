@@ -71,6 +71,7 @@ class ProfileFragment : Fragment() {
                     onChatClick = {},
                     onScheduleClick = {},
                     onExportAttendanceClick = { exportAttendanceMatrix() },
+                    onSyncToGoogleSheetsClick = { syncAttendanceMatrixToGoogleSheets() },
                     onEventHistoryClick = { openEventHistory() },
                     onSwitchInterfaceClick = {
                         // Switch to NSS interface (user is currently in Teaching Wing)
@@ -221,6 +222,84 @@ class ProfileFragment : Fragment() {
                 Toast.makeText(requireContext(), "File system error. Please try again.", Toast.LENGTH_LONG).show()
             } catch (e: Exception) {
                 Log.e(TAG, "Error exporting attendance matrix", e)
+                Toast.makeText(requireContext(), "Error: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun syncAttendanceMatrixToGoogleSheets() {
+        val userType = sessionManager.fetchUserType()
+        if (!userType.equals("Admin", ignoreCase = true)) {
+            Toast.makeText(requireContext(), "Only admins can sync attendance", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        lifecycleScope.launch {
+            try {
+                Toast.makeText(requireContext(), "Syncing to Google Sheets...", Toast.LENGTH_SHORT).show()
+                val db = FirebaseFirestore.getInstance()
+
+                // Fetch all events to build dynamic columns
+                val eventsSnapshot = db.collection("NSS_Events_Attendence").get().await()
+                val events = eventsSnapshot.documents.mapNotNull { it.toObject(AttendanceEvent::class.java) }
+                    .sortedBy { it.getEventDateAsDate().time }
+
+                // Fetch all students (case-insensitive userType)
+                val usersSnapshot = db.collection("users")
+                    .whereIn("userType", listOf("Student", "student"))
+                    .get()
+                    .await()
+
+                val students = usersSnapshot.documents.map { doc ->
+                    val user = doc.toObject(User::class.java) ?: User()
+                    if (user.rollNumber.isEmpty()) user.apply { rollNumber = doc.id } else user
+                }.sortedWith(compareBy({ it.name.lowercase() }, { it.rollNumber }))
+
+                val perStudentEventHours: MutableMap<String, MutableMap<String, Double>> = mutableMapOf()
+                val totalHoursPerStudent: MutableMap<String, Double> = mutableMapOf()
+
+                val eventHoursById = events.associate { it.id to it.hours }
+
+                usersSnapshot.documents.forEach { doc ->
+                    val roll = doc.id
+                    @Suppress("UNCHECKED_CAST")
+                    val eventsList = doc.get("eventsList") as? List<String> ?: emptyList()
+                    val totalHours = (doc.getDouble("hours") ?: 0.0)
+                    totalHoursPerStudent[roll] = totalHours
+                    val perEvent = perStudentEventHours.getOrPut(roll) { mutableMapOf() }
+                    
+                    // Add hours for attended events
+                    eventsList.forEach { eventId ->
+                        eventHoursById[eventId]?.let { hours -> perEvent[eventId] = hours }
+                    }
+                    
+                    // Add negative hours for mandatory events where student is absent
+                    events.forEach { event ->
+                        if (event.isMandatory && event.id !in eventsList) {
+                            perEvent[event.id] = -event.negativeHours
+                        }
+                    }
+                }
+
+                val result = com.phad.chatapp.utils.GoogleSheetsSync.sync(
+                    context = requireContext(),
+                    students = students,
+                    events = events,
+                    perStudentEventHours = perStudentEventHours,
+                    totalHoursPerStudent = totalHoursPerStudent
+                )
+
+                result.fold(
+                    onSuccess = {
+                        Toast.makeText(requireContext(), "Google Sheet updated successfully!", Toast.LENGTH_LONG).show()
+                    },
+                    onFailure = { error ->
+                        Log.e(TAG, "Failed to sync to Google Sheets", error)
+                        Toast.makeText(requireContext(), "Sync failed: ${error.message}", Toast.LENGTH_LONG).show()
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Error syncing to Google Sheets", e)
                 Toast.makeText(requireContext(), "Error: ${e.message}", Toast.LENGTH_LONG).show()
             }
         }

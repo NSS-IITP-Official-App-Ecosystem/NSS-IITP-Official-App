@@ -74,6 +74,9 @@ data class AttendanceEvent(
     @PropertyName("visibleOnlyToPresent")
     val visibleOnlyToPresent: Boolean = false, // If true, only visible to attendees
 
+    @PropertyName("allowedAttendanceMode")
+    val allowedAttendanceMode: String = "BOTH", // Allowed attendance methods: "QR", "GEO", "BOTH"
+
     // Use a private backing field to prevent automatic serialization of 'live' field
     @PropertyName("isLive")
     private val _isLive: Boolean = true // Default to true for new events
@@ -138,6 +141,7 @@ data class AttendanceEvent(
         closedAt = null,
         liveCount = 1,
         visibleOnlyToPresent = false,
+        allowedAttendanceMode = "BOTH",
         _isLive = true
     )
 

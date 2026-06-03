@@ -364,8 +364,8 @@ class NssCalendarFragment : Fragment() {
                     val preselected = java.util.Date.from(selectedDate.atStartOfDay(ZoneId.systemDefault()).toInstant())
                     CreateEventDialog(
                         isCreating = adminUi.isCreatingEvent,
-                        onCreateEvent = { name, desc, location, date, open, close, hours, isMandatory, negativeHours, wings, visibleOnlyToPresent ->
-                            viewModel.createAttendanceEvent(name, desc, location, date, open, close, hours, isMandatory, negativeHours, wings, visibleOnlyToPresent)
+                        onCreateEvent = { name, desc, location, date, open, close, hours, isMandatory, negativeHours, wings, visibleOnlyToPresent, allowedAttendanceMode ->
+                            viewModel.createAttendanceEvent(name, desc, location, date, open, close, hours, isMandatory, negativeHours, wings, visibleOnlyToPresent, allowedAttendanceMode)
                         },
                         onDismiss = { viewModel.hideCreateEventDialog() },
                         errorMessage = adminUi.errorMessage,
