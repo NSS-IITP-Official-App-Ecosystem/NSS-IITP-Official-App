@@ -428,12 +428,7 @@ class ChatFragment : Fragment() {
     }
 
     private suspend fun searchUsersAsync(query: String): List<ChatSearchResult.UserResult> {
-        val userQuery = if (userType.equals("Admin", ignoreCase = true)) {
-            db.collection("users")
-        } else {
-            db.collection("users").whereEqualTo("userType", "Admin")
-        }
-        val userSnapshot = userQuery.get().await()
+        val userSnapshot = db.collection("users").get().await()
         return userSnapshot.documents.mapNotNull { document ->
             val user = document.toObject(User::class.java)
             if (user != null && user.id != userRollNumber &&
