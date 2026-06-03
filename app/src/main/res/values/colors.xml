@@ -38,6 +38,10 @@
     <color name="ui_blue">#006BFF</color>
     <color name="ui_dark">#0D0302</color>
     <color name="ui_gold">#FFCC00</color>
+    <color name="ui_gray_light">#DDDDDD</color>
+    <color name="ui_gray">#AAAAAA</color>
+    <color name="ui_gray_dark">#444444</color>
+    <color name="ui_surface">#1A1A1A</color>
     
     <!-- New color scheme -->
     <color name="primary">#006BFF</color>
