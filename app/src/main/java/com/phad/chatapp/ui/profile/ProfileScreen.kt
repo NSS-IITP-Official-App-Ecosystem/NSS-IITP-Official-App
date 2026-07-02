@@ -73,6 +73,9 @@ import androidx.compose.runtime.LaunchedEffect
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.phad.chatapp.R
+import androidx.compose.foundation.lazy.items
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 
 data class ProfileUiState(
     val name: String = "Loading...",
@@ -780,29 +783,29 @@ fun ProfileScreen(
                     androidx.compose.material3.CircularProgressIndicator(color = Color(0xFFE53935))
                 } else if (resultMessage.isNotEmpty()) {
                     Text(resultMessage, color = Color.White)
-                    } else {
-                        androidx.compose.foundation.lazy.LazyColumn {
+                } else {
+                    androidx.compose.foundation.lazy.LazyColumn {
                         items(closedEvents) { event ->
                             val isSelected = selectedEvent?.id == event.id
                             androidx.compose.material3.Card(
                                 modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp)
-                                .clickable { selectedEvent = event },
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                                    .clickable { selectedEvent = event },
                                 colors = androidx.compose.material3.CardDefaults.cardColors(
                                     containerColor = if (isSelected) Color(0xFFE53935) else Color(0xFF2E2E2E)
                                 )
-                        )   {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Text(event.getEventName(), color = Color.White, fontWeight = FontWeight.Bold)
-                                Text(event.eventDate, color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(event.getEventName(), color = Color.White, fontWeight = FontWeight.Bold)
+                                    Text(event.eventDate, color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                                }
                             }
                         }
                     }
                 }
-            }
-        },
-        confirmButton = {
+            },
+    confirmButton = {
             TextButton(
                 onClick = {
                     selectedEvent?.let { event ->
@@ -824,8 +827,8 @@ fun ProfileScreen(
                 Text("Close", color = Color.White.copy(alpha = 0.7f))
             }
         }
-    )
-}
+        )
+    }
 }
 
 @Composable
@@ -1087,7 +1090,7 @@ fun RefreshButton(
 @Preview(showBackground = true)
 @Composable
 fun ProfileMenuButton(
-    onMenuClick: () -> Unit,
+    onMenuClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     IconButton(
