@@ -91,6 +91,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
 import com.phad.chatapp.ui.components.GradientHeader
+import com.phad.chatapp.ui.attendance.VolunteerPenaltyDialog
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.material.icons.filled.Edit
@@ -257,6 +258,9 @@ class NssQRAttendanceFragment : Fragment() {
                     },
                     onMarkAbsent = { event, rollNumbers ->
                         viewModel.markStudentsAbsent(event.id, rollNumbers)
+                    },
+                    onApplyPenalty = {
+                        viewModel.refreshAvailableEvents()
                     }
                 )
             }
@@ -326,7 +330,8 @@ fun QRAttendanceAdminScreen(
     onClearSuccessMessage: () -> Unit, // Clear success message callback
     onDismissRollResults: () -> Unit, // Dismiss roll results dialog
     onAddManualAttendance: (AttendanceEvent, String) -> Unit, // Manual attendance callback
-    onMarkAbsent: (AttendanceEvent, String) -> Unit // Mark absent callback
+    onMarkAbsent: (AttendanceEvent, String) -> Unit, // Mark absent callback
+    onApplyPenalty: () -> Unit
 ) {
     // Scroll state for events list (hoisted to persist across navigation/dialogs)
     val eventsListState = rememberLazyListState()
@@ -335,6 +340,12 @@ fun QRAttendanceAdminScreen(
     var pendingPhotos by remember { mutableStateOf<List<PhotoAttendanceManager.PendingPhotoRecord>>(emptyList()) }
     var isLoadingPending by remember { mutableStateOf(false) }
     var pendingFetchError by remember { mutableStateOf<String?>(null) }
+    var penaltyEvent by remember { mutableStateOf<AttendanceEvent?>(null) }
+    val penaltyViewModel: com.phad.chatapp.viewmodels.AttendanceViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+        factory = com.phad.chatapp.viewmodels.AttendanceViewModelFactory(
+            LocalContext.current.applicationContext as android.app.Application
+        )
+    )
 
     LaunchedEffect(selectedTab) {
         if (selectedTab == 1) {
@@ -402,6 +413,20 @@ fun QRAttendanceAdminScreen(
             title = uiState.rollProgressTitle ?: "Processing Rolls",
             processed = uiState.rollProgressProcessed,
             total = uiState.rollProgressTotal
+        )
+    }
+
+    penaltyEvent?.let { event ->
+        VolunteerPenaltyDialog(
+            eventId = event.id,
+            eventName = event.getEventName(),
+            viewModel = penaltyViewModel,
+            onDismiss = { penaltyEvent = null },
+            onSuccess = { message ->
+                penaltyEvent = null
+                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                onApplyPenalty()
+            }
         )
     }
 
@@ -535,6 +560,7 @@ fun QRAttendanceAdminScreen(
                                 onGeneratePDF = onGeneratePDF, // Pass PDF generation callback
                                 onAddManualAttendance = onAddManualAttendance, // Pass manual attendance callback
                                 onMarkAbsent = onMarkAbsent, // Pass mark absent callback
+                                onApplyPenalty = { event -> penaltyEvent = event },
                                 listState = eventsListState
                             )
                         } else {
@@ -584,6 +610,7 @@ fun EventSelectionScreen(
     onGeneratePDF: (AttendanceEvent) -> Unit,
     onAddManualAttendance: (AttendanceEvent, String) -> Unit,
     onMarkAbsent: (AttendanceEvent, String) -> Unit,
+    onApplyPenalty: (AttendanceEvent) -> Unit,
     listState: androidx.compose.foundation.lazy.LazyListState // Added list state
 ) {
     // State for Search and Filters
@@ -983,7 +1010,8 @@ fun EventSelectionScreen(
                         onLongPress = onShowEditDialog,
                         onDownloadPDF = onGeneratePDF,
                         onAddManualAttendance = onAddManualAttendance,
-                        onMarkAbsent = onMarkAbsent
+                        onMarkAbsent = onMarkAbsent,
+                        onApplyPenalty = onApplyPenalty
                     )
                 }
             }
@@ -1688,7 +1716,8 @@ fun EventCard(
     onLongPress: ((AttendanceEvent) -> Unit)? = null, // New parameter
     onDownloadPDF: ((AttendanceEvent) -> Unit)? = null, // PDF download callback
     onAddManualAttendance: ((AttendanceEvent, String) -> Unit)? = null, // Manual attendance callback
-    onMarkAbsent: ((AttendanceEvent, String) -> Unit)? = null // Mark absent callback
+    onMarkAbsent: ((AttendanceEvent, String) -> Unit)? = null, // Mark absent callback
+    onApplyPenalty: ((AttendanceEvent) -> Unit)? = null
 ) {
     var isDescriptionExpanded by remember { mutableStateOf(false) }
     var showManualRollDialog by remember { mutableStateOf(false) }
@@ -2036,6 +2065,37 @@ fun EventCard(
                                 text = "Attendance log",
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+                
+                if (event.isMandatory && event.negativeHours > 0 && onApplyPenalty != null) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 2.dp),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Button(
+                            onClick = { onApplyPenalty(event) },
+                            enabled = !event.absentPenaltyApplied,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFE53935),
+                                disabledContainerColor = Color(0xFFE0E0E0),
+                                contentColor = Color.White,
+                                disabledContentColor = Color(0xFF616161)
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .height(46.dp)
+                                .widthIn(min = 172.dp),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
+                        ) {
+                            Text(
+                                text = if (event.absentPenaltyApplied) "Penalty Applied" else "Apply Penalty",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
                             )
                         }
                     }
