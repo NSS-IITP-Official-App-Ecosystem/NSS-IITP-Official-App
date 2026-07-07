@@ -290,37 +290,157 @@ class AttendanceViewModel(private val application: Application) : ViewModel() {
         return currentUser.uid
     }
 
-    suspend fun applyAbsentPenalty(eventId: String): Result<String> {
-    return try {
-        val auth = FirebaseAuth.getInstance()
-        val idToken = auth.currentUser?.getIdToken(false)?.await()?.token
-            ?: return Result.failure(Exception("Not authenticated"))
+    suspend fun applyAbsentPenalty(
+        eventId: String,
+        positiveRollNumbers: List<String>? = null,
+        negativeRollNumbers: List<String>? = null,
+        zeroRollNumbers: List<String>? = null
+    ): Result<String> {
+        return try {
+            val auth = FirebaseAuth.getInstance()
+            val idToken = auth.currentUser?.getIdToken(false)?.await()?.token
+                ?: return Result.failure(Exception("Not authenticated"))
 
-       // TODO: Replace with actual NSS IITP Functions URL after deployment
-        val url = "https://asia-south1-chatapp-24fae.cloudfunctions.net/applyAbsentPenalty"
-        
-        val client = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-        client.requestMethod = "POST"
-        client.setRequestProperty("Content-Type", "application/json")
-        client.setRequestProperty("Authorization", "Bearer $idToken")
-        client.doOutput = true
+            // TODO: Replace with actual NSS IITP Functions URL after deployment
+            val url = "https://asia-south1-chatapp-24fae.cloudfunctions.net/applyAbsentPenalty"
+            
+            val client = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+            client.requestMethod = "POST"
+            client.setRequestProperty("Content-Type", "application/json")
+            client.setRequestProperty("Authorization", "Bearer $idToken")
+            client.doOutput = true
 
-        val body = """{"eventId": "$eventId"}"""
-        client.outputStream.write(body.toByteArray())
+            // Build JSON request manually to avoid external serialization dependencies
+            val bodyBuilder = java.lang.StringBuilder()
+            bodyBuilder.append("{")
+            bodyBuilder.append("\"eventId\":\"$eventId\"")
+            
+            if (positiveRollNumbers != null) {
+                val posArray = positiveRollNumbers.joinToString(prefix = "[", postfix = "]", separator = ",") { "\"$it\"" }
+                bodyBuilder.append(",\"positiveRollNumbers\":$posArray")
+            }
+            if (negativeRollNumbers != null) {
+                val negArray = negativeRollNumbers.joinToString(prefix = "[", postfix = "]", separator = ",") { "\"$it\"" }
+                bodyBuilder.append(",\"negativeRollNumbers\":$negArray")
+            }
+            if (zeroRollNumbers != null) {
+                val zeroArray = zeroRollNumbers.joinToString(prefix = "[", postfix = "]", separator = ",") { "\"$it\"" }
+                bodyBuilder.append(",\"zeroRollNumbers\":$zeroArray")
+            }
+            bodyBuilder.append("}")
 
-        val responseCode = client.responseCode
-        val response = client.inputStream.bufferedReader().readText()
-        
-        Log.d(TAG, "applyAbsentPenalty response: $response")
-        
-        if (responseCode == 200) {
-            Result.success("Penalty applied successfully!")
-        } else {
-            Result.failure(Exception("Failed: $response"))
+            val body = bodyBuilder.toString()
+            client.outputStream.write(body.toByteArray())
+
+            val responseCode = client.responseCode
+            val response = if (responseCode == 200) {
+                client.inputStream.bufferedReader().readText()
+            } else {
+                client.errorStream?.bufferedReader()?.readText() ?: "Error code: $responseCode"
+            }
+            
+            Log.d(TAG, "applyAbsentPenalty response ($responseCode): $response")
+            
+            if (responseCode == 200) {
+                Result.success("Penalty settings applied successfully!")
+            } else {
+                Result.failure(Exception("Failed: $response"))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error applying penalty", e)
+            Result.failure(e)
         }
-    } catch (e: Exception) {
-        Log.e(TAG, "Error applying penalty", e)
-        Result.failure(e)
+    }
+
+    suspend fun getVolunteersForPenalty(eventId: String): List<VolunteerPenaltyState> {
+        return try {
+            Log.d(TAG, "=== getVolunteersForPenalty() START for event: $eventId ===")
+            
+            // 1. Fetch the target event document
+            val eventDoc = db.collection("NSS_Events_Attendence").document(eventId).get().await()
+            if (!eventDoc.exists()) {
+                Log.e(TAG, "Event not found for penalty calculation: $eventId")
+                return emptyList()
+            }
+            
+            // Extract event wings list
+            val eventWings = (eventDoc.get("wings") as? List<*>)?.filterIsInstance<String>() ?: emptyList()
+            Log.d(TAG, "Event Wings extracted: $eventWings")
+            
+            // 2. Fetch matching users from Firestore (Optimized Query with Fallback)
+            val usersSnap = try {
+                val query = if (eventWings.isNotEmpty()) {
+                    Log.d(TAG, "Querying users with array-contains-any in wings: $eventWings")
+                    db.collection("users").whereArrayContainsAny("wings", eventWings)
+                } else {
+                    Log.d(TAG, "Event wings is empty. Querying all students.")
+                    db.collection("users").whereEqualTo("userType", "Student")
+                }
+                query.get().await()
+            } catch (queryEx: Exception) {
+                Log.w(TAG, "Optimized wing query failed, falling back to full users scan", queryEx)
+                db.collection("users").get().await()
+            }
+            Log.d(TAG, "Fetched ${usersSnap.documents.size} raw users from Firestore")
+            
+            // 3. Fetch all attendance documents for this event
+            val attendanceSnap = db.collection("NSS_Events_Attendence").document(eventId)
+                .collection("attendance").get().await()
+            val attendedRollNumbers = attendanceSnap.documents.map { it.id.toUpperCase() }.toSet()
+            Log.d(TAG, "Attended roll numbers: $attendedRollNumbers")
+            
+            val volunteers = mutableListOf<VolunteerPenaltyState>()
+            
+            for (doc in usersSnap.documents) {
+                val userType = doc.getString("userType") ?: "Student"
+                if (userType.equals("Admin", ignoreCase = true)) {
+                    Log.d(TAG, "Skipping admin user: ${doc.id}")
+                    continue
+                }
+                
+                val rollNumber = doc.id.toUpperCase()
+                val name = doc.getString("name") ?: "Unknown Student"
+                val userWings = (doc.get("wings") as? List<*>)?.filterIsInstance<String>() ?: emptyList()
+                
+                // Extra double-check filtering in memory (just in case fallback was triggered or query returned dirty records)
+                if (eventWings.isNotEmpty()) {
+                    val isInWing = userWings.any { it in eventWings }
+                    if (!isInWing) {
+                        Log.d(TAG, "Skipping student $rollNumber ($name) because wings $userWings does not match event wings $eventWings")
+                        continue
+                    }
+                }
+                
+                val isAbsent = !attendedRollNumbers.contains(rollNumber)
+                val defaultSelection = if (isAbsent) PenaltySelection.NEGATIVE else PenaltySelection.POSITIVE
+                
+                Log.d(TAG, "Adding volunteer: rollNumber=$rollNumber, name=$name, isAbsent=$isAbsent, selection=$defaultSelection")
+                
+                volunteers.add(
+                    VolunteerPenaltyState(
+                        rollNumber = rollNumber,
+                        name = name,
+                        isAbsent = isAbsent,
+                        selection = defaultSelection
+                    )
+                )
+            }
+            
+            val sortedList = volunteers.sortedBy { it.rollNumber }
+            Log.d(TAG, "=== getVolunteersForPenalty() COMPLETE: Returning ${sortedList.size} volunteers ===")
+            sortedList
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in getVolunteersForPenalty", e)
+            emptyList()
+        }
     }
 }
-}
+
+enum class PenaltySelection { POSITIVE, ZERO, NEGATIVE }
+
+data class VolunteerPenaltyState(
+    val rollNumber: String,
+    val name: String,
+    val isAbsent: Boolean,
+    val selection: PenaltySelection
+)

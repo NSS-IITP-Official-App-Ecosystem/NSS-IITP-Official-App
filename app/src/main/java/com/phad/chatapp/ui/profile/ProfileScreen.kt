@@ -30,7 +30,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
@@ -73,9 +72,6 @@ import androidx.compose.runtime.LaunchedEffect
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.phad.chatapp.R
-import androidx.compose.foundation.lazy.items
-import kotlinx.coroutines.launch
-import androidx.compose.runtime.rememberCoroutineScope
 
 data class ProfileUiState(
     val name: String = "Loading...",
@@ -143,9 +139,9 @@ fun ProfileScreen(
     val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
+    var showClassesDialog by remember { mutableStateOf(false) }
     var showPenaltyDialog by remember { mutableStateOf(false) }
     var showEventSelectDialog by remember { mutableStateOf(false) }
-    var showClassesDialog by remember { mutableStateOf(false) }
     
     // Determine user type
     val isAdmin = !state.isStudent
@@ -1119,7 +1115,7 @@ fun ProfileMenu(
     onChangeSubjects: () -> Unit,
     onFaqs: () -> Unit,
     onLogout: () -> Unit,
-    onApplyPenalty: () -> Unit,
+    onApplyPenalty: () -> Unit = {},
     isTeachingWing: Boolean,
     isAdmin: Boolean,
     currentInterface: String,
