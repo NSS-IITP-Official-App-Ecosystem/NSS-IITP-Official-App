@@ -823,6 +823,7 @@ fun ProfileScreen(
         )
     }
 }
+}
 
 @Composable
 fun StatItem(label: String, value: String, size: androidx.compose.ui.unit.TextUnit = 32.sp, color: Color) {
@@ -1143,7 +1144,10 @@ fun ProfileMenu(
         }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+>>>>>>> origin/Sourav-Mondal
         // Sync to Google Sheets - only for admins in NSS interface
         if (isAdmin && currentInterface == "NSS") {
             DropdownMenuItem(
@@ -1162,8 +1166,8 @@ fun ProfileMenu(
             )
         }
 
-// Apply Absent Penalty - only for admins in NSS interface
 
+<<<<<<< HEAD
 if (isAdmin && currentInterface == "NSS") {
     DropdownMenuItem(
         text = { Text("Apply Absent Penalty", color = Color(0xFFE53935)) },
@@ -1182,6 +1186,8 @@ if (isAdmin && currentInterface == "NSS") {
 }
 
 >>>>>>> origin/ayush
+=======
+>>>>>>> origin/Sourav-Mondal
         // Event History - only for admins in NSS interface
         if (isAdmin && currentInterface == "NSS") {
             DropdownMenuItem(
