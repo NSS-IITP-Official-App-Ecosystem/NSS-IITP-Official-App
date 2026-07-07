@@ -65,6 +65,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -1134,6 +1135,10 @@ fun EditEventDialog(
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !isUpdating,
                     isError = showError && eventName.trim().isEmpty(),
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Sentences,
+                        keyboardType = KeyboardType.Text
+                    ),
                     supportingText = {
                         if (showError && eventName.trim().isEmpty()) {
                             Text(
@@ -2571,6 +2576,10 @@ fun CreateEventDialog(
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !isCreating,
                         isError = showError && eventName.trim().isEmpty(),
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.Sentences,
+                            keyboardType = KeyboardType.Text
+                        ),
                         supportingText = {
                             if (showError && eventName.trim().isEmpty()) {
                                 Text(
