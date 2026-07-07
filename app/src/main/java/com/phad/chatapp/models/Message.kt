@@ -18,5 +18,8 @@ data class Message(
     var taggedUsers: List<String> = emptyList(),
     var groupId: String = "",
     var receiver: String = "",
-    var contentType: String = ""  // "image", "audio", "document" for Drive files
+    var contentType: String = "",  // "image", "audio", "document" for Drive files
+    
+    @get:com.google.firebase.firestore.Exclude
+    var isPending: Boolean = false
 ) 

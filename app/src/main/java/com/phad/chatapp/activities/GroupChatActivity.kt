@@ -52,7 +52,9 @@ import com.phad.chatapp.utils.Constants
 import com.phad.chatapp.utils.AttachmentHandler
 import com.phad.chatapp.utils.FileTypeEnum
 import com.phad.chatapp.activities.ManagePermissionsActivity
-
+import com.phad.chatapp.utils.NetworkConnectivityObserver
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 
 class GroupChatActivity : AppCompatActivity() {
     private lateinit var binding: ActivityGroupChatBinding
@@ -79,6 +81,7 @@ class GroupChatActivity : AppCompatActivity() {
     
     companion object {
         private const val TAG = "GroupChatActivity"
+        private const val GROUP_NOT_FOUND_MSG = "Group not found"
     }
     
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -138,6 +141,14 @@ class GroupChatActivity : AppCompatActivity() {
             }
         }
         
+        // Observe network connectivity
+        val networkObserver = NetworkConnectivityObserver(this)
+        lifecycleScope.launch {
+            networkObserver.networkStatus.collect { isConnected ->
+                binding.bannerOffline.visibility = if (isConnected) View.GONE else View.VISIBLE
+            }
+        }
+        
         // Check if user is allowed to access this group
         checkGroupAccess()
     }
@@ -150,7 +161,7 @@ class GroupChatActivity : AppCompatActivity() {
         WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = false
         
         // Set status bar color to black
-        window.statusBarColor = resources.getColor(android.R.color.black, theme)
+        window.statusBarColor = androidx.core.content.ContextCompat.getColor(this, android.R.color.black)
     }
     
     private fun checkGroupAccess() {
@@ -180,8 +191,8 @@ class GroupChatActivity : AppCompatActivity() {
                         showAccessDeniedDialog()
                     }
                 } else {
-                    Log.d(TAG, "Group not found")
-                    Toast.makeText(this, "Group not found", Toast.LENGTH_SHORT).show()
+                    Log.d(TAG, GROUP_NOT_FOUND_MSG)
+                    Toast.makeText(this, GROUP_NOT_FOUND_MSG, Toast.LENGTH_SHORT).show()
                     finish()
                 }
             }
@@ -316,7 +327,7 @@ class GroupChatActivity : AppCompatActivity() {
     
     private fun setupSearch() {
         // Set up close button for search
-        binding.clearSearchButton.setOnClickListener { view ->
+        binding.clearSearchButton.setOnClickListener { _ ->
             Log.d(TAG, "Clear search button clicked")
             // Close the entire search box instead of just clearing text
             toggleSearch(false)
@@ -324,7 +335,9 @@ class GroupChatActivity : AppCompatActivity() {
         
         // Setup text change listener
         binding.searchEditText.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {
+                // Not used
+            }
             
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 // Debounce to avoid too many refreshes
@@ -335,7 +348,9 @@ class GroupChatActivity : AppCompatActivity() {
                 binding.clearSearchButton.visibility = if (s?.isNotEmpty() == true) View.VISIBLE else View.GONE
             }
             
-            override fun afterTextChanged(s: Editable?) {}
+            override fun afterTextChanged(s: Editable?) {
+                // Not used
+            }
         })
         
         // Handle search action from keyboard
@@ -410,24 +425,6 @@ class GroupChatActivity : AppCompatActivity() {
     private fun resetSearchResults() {
         // Restore original message list
         messageAdapter.updateMessages(allMessages)
-    }
-    
-    private fun loadGroupDetails() {
-        db.collection("groups").document(groupId)
-            .get()
-            .addOnSuccessListener { document ->
-                if (document != null && document.exists()) {
-                    currentGroup = document.toObject(Group::class.java)?.apply {
-                        id = document.id
-                    }
-                    Log.d(TAG, "Group loaded: ${currentGroup?.name}, admins: ${currentGroup?.admins}")
-                } else {
-                    Log.d(TAG, "Group not found")
-                }
-            }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "Error loading group: ${e.message}", e)
-            }
     }
     
     private fun showPopupMenu(view: View) {
@@ -711,8 +708,12 @@ class GroupChatActivity : AppCompatActivity() {
     
     private fun setupMessageInput() {
         binding.messageInput.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {
+                // Not used
+            }
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                // Not used
+            }
             override fun afterTextChanged(s: Editable?) {
                 binding.sendButton.isEnabled = !s.isNullOrBlank()
             }
@@ -783,13 +784,6 @@ class GroupChatActivity : AppCompatActivity() {
         // Initialize read status as false for all participants except the sender
         participants.forEach { participantId ->
             readStatusMap[participantId] = participantId == currentUserId // Only sender has read = true
-        }
-        
-        // Create a display text based on media type
-        val displayText = when (fileType) {
-            "image" -> "[Image]"
-            "document" -> "[Document]"
-            else -> "[File]"
         }
         
         // Create message object with current timestamp
@@ -865,13 +859,25 @@ class GroupChatActivity : AppCompatActivity() {
             }
     }
     
+    private fun parseMessage(doc: com.google.firebase.firestore.DocumentSnapshot): Message? {
+        return try {
+            doc.toObject(Message::class.java)?.apply {
+                id = doc.id
+                isPending = doc.metadata.hasPendingWrites()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error parsing message: ${e.message}")
+            null
+        }
+    }
+
     private fun loadMessages() {
         // Show loading progress
         binding.loadingProgress.visibility = View.VISIBLE
         
         // Listen for new messages
         messageRepository.getMessagesForGroup(groupId)
-            .addSnapshotListener { snapshot, e ->
+            .addSnapshotListener(com.google.firebase.firestore.MetadataChanges.INCLUDE) { snapshot, e ->
             if (e != null) {
                     Log.e(TAG, "Listen failed.", e)
                     binding.loadingProgress.visibility = View.GONE
@@ -883,22 +889,16 @@ class GroupChatActivity : AppCompatActivity() {
             
                     // Process the documents
                 for (doc in snapshot.documents) {
-                    try {
-                            val message = doc.toObject(Message::class.java)
-                            if (message != null) {
-                                // Ensure message has an ID
-                                message.id = doc.id
-                                messages.add(message)
-                                
-                                // If we don't have the sender's name, fetch it
-                                if (!senderNames.containsKey(message.sender)) {
-                                    fetchUserName(message.sender)
-                                }
-                            }
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Error parsing message: ${e.message}")
+                    val message = parseMessage(doc)
+                    if (message != null) {
+                        messages.add(message)
+                        
+                        // If we don't have the sender's name, fetch it
+                        if (!senderNames.containsKey(message.sender)) {
+                            fetchUserName(message.sender)
                         }
                     }
+                }
                     
                     // Sort messages by timestamp (newest at the bottom)
                     messages.sortBy { it.timestamp }
@@ -1087,7 +1087,7 @@ class GroupChatActivity : AppCompatActivity() {
             .whereEqualTo("read.$currentUserId", false)
             .get()
             .addOnSuccessListener { querySnapshot ->
-                val unreadDocs = querySnapshot.documents
+                val unreadDocs = querySnapshot.documents.toList()
                 
                 if (unreadDocs.isEmpty()) return@addOnSuccessListener
                 
@@ -1140,7 +1140,7 @@ class GroupChatActivity : AppCompatActivity() {
         if (isSearchActive) {
             toggleSearch(false)
         } else {
-            super.onBackPressed()
+            onBackPressedDispatcher.onBackPressed()
         }
     }
 } 

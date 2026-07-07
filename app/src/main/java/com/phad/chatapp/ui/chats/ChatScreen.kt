@@ -28,6 +28,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -60,12 +61,11 @@ fun ChatScreen(
     onCreateGroupClick: () -> Unit,
     onRemoveGroupClick: () -> Unit,
     onUnreadMessagesClick: () -> Unit,
-    onSyncSubjectGroupsClick: () -> Unit,
-    currentUserRollNumber: String
+    onSyncSubjectGroupsClick: () -> Unit
 ) {
-    val backgroundColor = Color(0xff0d0302)
+    val backgroundColor = colorResource(id = R.color.ui_dark)
     val surfaceColor = Color.White
-    val isAdmin = currentUserRollNumber == "2301MC51" || currentUserRollNumber == "2301CS16"
+    val isAdmin = state.isUserAdmin
 
     Column(
         modifier = modifier
@@ -193,7 +193,7 @@ fun ChatScreen(
             Box(modifier = Modifier.fillMaxSize()) {
                 FloatingActionButton(
                     onClick = onSyncSubjectGroupsClick,
-                    containerColor = Color(0xffffcc00),
+                    containerColor = colorResource(id = R.color.ui_gold),
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(16.dp)
@@ -285,7 +285,7 @@ fun UserAvatar(user: User, hasUnread: Boolean, onClick: () -> Unit) {
                 modifier = Modifier
                     .size(64.dp)
                     .clip(CircleShape)
-                    .border(BorderStroke(2.dp, Color(0xffffcc00)), CircleShape)
+                    .border(BorderStroke(2.dp, colorResource(id = R.color.ui_gold)), CircleShape)
             )
             if (hasUnread) {
                 Box(
@@ -381,7 +381,6 @@ private fun ChatScreenPreview() {
         onCreateGroupClick = {},
         onRemoveGroupClick = {},
         onUnreadMessagesClick = {},
-        onSyncSubjectGroupsClick = {},
-        currentUserRollNumber = "2301MC51"
+        onSyncSubjectGroupsClick = {}
     )
 }

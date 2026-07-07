@@ -5,29 +5,29 @@
     android:layout_height="wrap_content"
     app:cardCornerRadius="10dp"
     app:cardElevation="8dp"
-    app:cardBackgroundColor="#0D0302">
+    app:cardBackgroundColor="@color/ui_dark">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp"
-        android:background="#0D0302">
+        android:padding="@dimen/spacing_xlarge"
+        android:background="@color/ui_dark">
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Unread Messages"
             android:textStyle="bold"
-            android:textColor="#FFFFFF"
+            android:textColor="@color/ui_white"
             android:textSize="18sp"
             android:gravity="center"
-            android:paddingBottom="8dp" />
+            android:paddingBottom="@dimen/spacing_medium" />
 
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:background="#444444" />
+            android:background="@color/ui_gray_dark" />
 
         <!-- Direct Messages Section -->
         <TextView
@@ -35,10 +35,10 @@
             android:layout_height="wrap_content"
             android:text="Direct Messages"
             android:textStyle="bold"
-            android:textColor="#006BFF"
-            android:textSize="16sp"
-            android:layout_marginTop="12dp"
-            android:layout_marginBottom="4dp" />
+            android:textColor="@color/ui_blue"
+            android:textSize="@dimen/text_large"
+            android:layout_marginTop="@dimen/spacing_large"
+            android:layout_marginBottom="@dimen/spacing_small" />
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recycler_direct_messages"
@@ -52,19 +52,19 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="No unread direct messages"
-            android:textColor="#AAAAAA"
-            android:textSize="14sp"
+            android:textColor="@color/ui_gray"
+            android:textSize="@dimen/text_medium"
             android:gravity="center"
             android:visibility="gone"
-            android:layout_marginTop="4dp"
-            android:layout_marginBottom="12dp" />
+            android:layout_marginTop="@dimen/spacing_small"
+            android:layout_marginBottom="@dimen/spacing_large" />
 
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:background="#444444"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="8dp" />
+            android:background="@color/ui_gray_dark"
+            android:layout_marginTop="@dimen/spacing_medium"
+            android:layout_marginBottom="@dimen/spacing_medium" />
 
         <!-- Group Messages Section -->
         <TextView
@@ -72,10 +72,10 @@
             android:layout_height="wrap_content"
             android:text="Group Messages"
             android:textStyle="bold"
-            android:textColor="#FFCC00"
-            android:textSize="16sp"
-            android:layout_marginTop="4dp"
-            android:layout_marginBottom="4dp" />
+            android:textColor="@color/ui_gold"
+            android:textSize="@dimen/text_large"
+            android:layout_marginTop="@dimen/spacing_small"
+            android:layout_marginBottom="@dimen/spacing_small" />
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recycler_group_messages"
@@ -89,11 +89,11 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="No unread group messages"
-            android:textColor="#AAAAAA"
-            android:textSize="14sp"
+            android:textColor="@color/ui_gray"
+            android:textSize="@dimen/text_medium"
             android:gravity="center"
             android:visibility="gone"
-            android:layout_marginTop="4dp" />
+            android:layout_marginTop="@dimen/spacing_small" />
 
     </LinearLayout>
 

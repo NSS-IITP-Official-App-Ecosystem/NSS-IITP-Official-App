@@ -738,7 +738,8 @@ class AttendanceQRRepository {
                 "mandatory" to event.isMandatory,
                 "negativeHours" to event.negativeHours,
                 "wings" to event.wings,
-                "visibleOnlyToPresent" to event.visibleOnlyToPresent
+                "visibleOnlyToPresent" to event.visibleOnlyToPresent,
+                "allowedAttendanceMode" to event.allowedAttendanceMode
             )
             batch.update(eventDocRef, eventUpdates)
 
@@ -1001,6 +1002,7 @@ class AttendanceQRRepository {
                 "closedAt" to newEvent.closedAt,
                 "is_live" to newEvent.isLive,
                 "visibleOnlyToPresent" to newEvent.visibleOnlyToPresent, // Also added this field
+                "allowedAttendanceMode" to newEvent.allowedAttendanceMode,
                 "total_marked" to oldEvent.attendees.size // Preserve the total count
             )
             

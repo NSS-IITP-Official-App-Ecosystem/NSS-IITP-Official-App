@@ -36,10 +36,19 @@ import com.phad.chatapp.utils.SessionManager
 import java.util.Date
 import java.util.regex.Pattern
 import androidx.appcompat.widget.PopupMenu
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
+import com.phad.chatapp.utils.NetworkConnectivityObserver
+import com.bumptech.glide.Glide
+import com.phad.chatapp.R
 
 class ChatActivity : AppCompatActivity() {
     private val TAG = "ChatActivity"
+    
+    companion object {
+        const val COULD_NOT_DETERMINE_ID_MSG = "Could not determine other user's ID"
+    }
+    
     private lateinit var binding: ActivityChatBinding
     private lateinit var adapter: MessageAdapter
     private lateinit var sessionManager: SessionManager
@@ -69,7 +78,8 @@ class ChatActivity : AppCompatActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         
         // Set status bar color to black
-        window.statusBarColor = resources.getColor(android.R.color.black, theme)
+        @Suppress("DEPRECATION")
+        window.statusBarColor = ContextCompat.getColor(this, android.R.color.black)
         
         // Make status bar icons light for better visibility on dark background
         WindowCompat.getInsetsController(window, window.decorView).apply {
@@ -83,119 +93,30 @@ class ChatActivity : AppCompatActivity() {
         sessionManager = SessionManager(this)
         
         // Initialize adapter early to avoid null reference
-        adapter = MessageAdapter(sessionManager.fetchUserId()) { message ->
-            // Only allow deleting own messages
-            if (message.sender == currentUserRollNumber) {
-                androidx.appcompat.app.AlertDialog.Builder(this)
-                    .setTitle("Delete Message")
-                    .setMessage("Are you sure you want to delete this message for everyone?")
-                    .setPositiveButton("Delete") { _, _ ->
-                        // Delete from current user's collection
-                        db.collection("user_conversations")
-                            .document(currentUserRollNumber)
-                            .collection(otherUserRollNumber)
-                            .document(message.id)
-                            .delete()
-                        
-                        // Delete from other user's collection
-                        db.collection("user_conversations")
-                            .document(otherUserRollNumber)
-                            .collection(currentUserRollNumber)
-                            .document(message.id)
-                            .delete()
-                            
-                        Toast.makeText(this, "Message deleted", Toast.LENGTH_SHORT).show()
-                    }
-                    .setNegativeButton("Cancel", null)
-                    .show()
-            }
-        }
+        initAdapter()
         
         // Extract user info from intent
         val intent = intent
-        otherUserName = intent.getStringExtra("otherUserName") ?: "Chat"
-        otherUserRollNumber = intent.getStringExtra("otherUserRollNumber") ?: ""
         
-        // Setup window insets
+        // Observe network connectivity
+        val networkObserver = NetworkConnectivityObserver(this)
+        lifecycleScope.launch {
+            networkObserver.networkStatus.collect { isConnected ->
+                binding.bannerOffline.visibility = if (isConnected) View.GONE else View.VISIBLE
+            }
+        }
+        
+        // Handle incoming datas
         setupWindowInsets()
         
         // Get data from intent
         currentUserRollNumber = intent.getStringExtra("currentUserRollNumber") ?: ""
+        otherUserRollNumber = intent.getStringExtra("otherUserRollNumber") ?: ""
+        otherUserName = intent.getStringExtra("otherUserName") ?: "Chat"
         conversationId = generateConversationId(currentUserRollNumber, otherUserRollNumber)
         
         // Validate roll numbers
-        if (currentUserRollNumber.isEmpty() || otherUserRollNumber.isEmpty()) {
-            // If roll numbers aren't directly available, try to get them
-            val currentUser = auth.currentUser
-            if (currentUser != null) {
-                // Try to extract roll number from display name
-                val displayName = currentUser.displayName
-                if (!displayName.isNullOrEmpty() && displayName.contains("|")) {
-                    // Format is "UserType|RollNumber"
-                    val parts = displayName.split("|")
-                    if (parts.size >= 2) {
-                        currentUserRollNumber = parts[1].trim()
-                        Log.d(TAG, "Extracted roll number from display name: $currentUserRollNumber")
-                        
-                        // Only continue if we have the other user's roll number
-                        if (otherUserRollNumber.isNotEmpty()) {
-                            userInfoLoaded = true
-                            continueSetup()
-                        } else {
-                            showToast("Could not determine other user's ID")
-                            finish()
-                        }
-                        return
-                    }
-                }
-                
-                // If still empty, try email
-                if (currentUserRollNumber.isEmpty() && !currentUser.email.isNullOrEmpty()) {
-                    // Assuming email format like "rollnumber@domain.com"
-                    val email = currentUser.email!!
-                    currentUserRollNumber = email.substring(0, email.indexOf('@'))
-                    Log.d(TAG, "Extracted potential roll number from email: $currentUserRollNumber")
-                    
-                    // Only continue if we have the other user's roll number
-                    if (otherUserRollNumber.isNotEmpty()) {
-                        userInfoLoaded = true
-                        continueSetup()
-                    } else {
-                        showToast("Could not determine other user's ID")
-                        finish()
-                    }
-                    return
-                }
-                
-                // As last resort, check Firestore
-                fetchUserRollNumber(currentUser.uid) { fetchedRollNumber ->
-                    if (fetchedRollNumber.isNotEmpty()) {
-                        currentUserRollNumber = fetchedRollNumber
-                        Log.d(TAG, "Current user roll number fetched from Firestore: $currentUserRollNumber")
-                        
-                        // Only continue if we have the other user's roll number
-                        if (otherUserRollNumber.isNotEmpty()) {
-                            userInfoLoaded = true
-                            continueSetup()
-                        } else {
-                            showToast("Could not determine other user's ID")
-                            finish()
-                        }
-                    } else {
-                        showToast("Could not determine your user ID")
-                        finish()
-                    }
-                }
-            } else {
-                showToast("You are not logged in")
-                finish()
-                return
-            }
-        } else {
-            // Roll numbers are already available
-            userInfoLoaded = true
-            Log.d(TAG, "Chat initialization with roll numbers - Current user: $currentUserRollNumber, Other user: $otherUserRollNumber ($otherUserName)")
-        }
+        determineUserRollNumbers()
         
         // Setup toolbar with the user's name
         binding.textTitle.text = otherUserName
@@ -235,10 +156,98 @@ class ChatActivity : AppCompatActivity() {
                 }
             }
         }
-        
-        // If user info is already loaded, continue with setup
-        if (userInfoLoaded) {
+    }
+    
+    private fun initAdapter() {
+        adapter = MessageAdapter(sessionManager.fetchUserId()) { message ->
+            // Only allow deleting own messages
+            if (message.sender == currentUserRollNumber) {
+                androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle("Delete Message")
+                    .setMessage("Are you sure you want to delete this message for everyone?")
+                    .setPositiveButton("Delete") { _, _ ->
+                        // Delete from current user's collection
+                        db.collection("user_conversations")
+                            .document(currentUserRollNumber)
+                            .collection(otherUserRollNumber)
+                            .document(message.id)
+                            .delete()
+                        
+                        // Delete from other user's collection
+                        db.collection("user_conversations")
+                            .document(otherUserRollNumber)
+                            .collection(currentUserRollNumber)
+                            .document(message.id)
+                            .delete()
+                            
+                        Toast.makeText(this, "Message deleted", Toast.LENGTH_SHORT).show()
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+        }
+    }
+
+    private fun determineUserRollNumbers() {
+        if (currentUserRollNumber.isNotEmpty() && otherUserRollNumber.isNotEmpty()) {
+            // Roll numbers are already available
+            userInfoLoaded = true
+            Log.d(TAG, "Chat initialization with roll numbers - Current user: $currentUserRollNumber, Other user: $otherUserRollNumber ($otherUserName)")
+            
+            // Proceed to load data since user info is available
             continueSetup()
+            return
+        }
+
+        // If roll numbers aren't directly available, try to get them
+        val currentUser = auth.currentUser
+        if (currentUser == null) {
+            showToast("You are not logged in")
+            finish()
+            return
+        }
+
+        // Try to extract roll number from display name
+        val displayName = currentUser.displayName
+        if (!displayName.isNullOrEmpty() && displayName.contains("|")) {
+            val parts = displayName.split("|")
+            if (parts.size >= 2) {
+                currentUserRollNumber = parts[1].trim()
+                Log.d(TAG, "Extracted roll number from display name: $currentUserRollNumber")
+                checkOtherUserAndContinue()
+                return
+            }
+        }
+        
+        // If still empty, try email
+        if (currentUserRollNumber.isEmpty() && !currentUser.email.isNullOrEmpty()) {
+            val email = currentUser.email!!
+            currentUserRollNumber = email.substring(0, email.indexOf('@'))
+            Log.d(TAG, "Extracted potential roll number from email: $currentUserRollNumber")
+            checkOtherUserAndContinue()
+            return
+        }
+        
+        // As last resort, check Firestore
+        fetchUserRollNumber(currentUser.uid) { fetchedRollNumber ->
+            if (fetchedRollNumber.isNotEmpty()) {
+                currentUserRollNumber = fetchedRollNumber
+                Log.d(TAG, "Current user roll number fetched from Firestore: $currentUserRollNumber")
+                checkOtherUserAndContinue()
+            } else {
+                showToast("Could not determine your user ID")
+                finish()
+            }
+        }
+    }
+
+    private fun checkOtherUserAndContinue() {
+        if (otherUserRollNumber.isNotEmpty()) {
+            userInfoLoaded = true
+            continueSetup()
+        } else {
+            showToast(COULD_NOT_DETERMINE_ID_MSG)
+            finish()
         }
     }
     
@@ -375,25 +384,6 @@ class ChatActivity : AppCompatActivity() {
     }
     
     /**
-     * Extract mentioned users from a message text
-     * This method is kept for compatibility with group chats but not used in 1-1 messages
-     */
-    private fun extractMentionedUsers(text: String): List<String> {
-        val mentions = mutableListOf<String>()
-        val pattern = Pattern.compile("@([a-zA-Z0-9]+)\\b")
-        val matcher = pattern.matcher(text)
-        
-        while (matcher.find()) {
-            val mentionedUser = matcher.group(1)
-            if (mentionedUser != null && mentionedUser != "everyone") {
-                mentions.add(mentionedUser)
-            }
-        }
-        
-        return mentions
-    }
-    
-    /**
      * Generate a consistent conversation ID from two user IDs
      */
     private fun generateConversationId(userId1: String, userId2: String): String {
@@ -419,7 +409,7 @@ class ChatActivity : AppCompatActivity() {
             .get()
             .addOnSuccessListener { querySnapshot ->
                 // The query already filters for unread messages for this user
-                val unreadDocs = querySnapshot.documents
+                val unreadDocs = querySnapshot.documents.toList()
                 
                 val messageCount = unreadDocs.size
                 if (messageCount == 0) {
@@ -505,7 +495,7 @@ class ChatActivity : AppCompatActivity() {
             .document(currentUserRollNumber)
             .collection(otherUserRollNumber)
             .orderBy("timestamp", Query.Direction.ASCENDING)
-            .addSnapshotListener { snapshot, e ->
+            .addSnapshotListener(com.google.firebase.firestore.MetadataChanges.INCLUDE) { snapshot, e ->
                 if (e != null) {
                     Log.e(TAG, "Listen failed for messages: ${e.message}", e)
                     return@addSnapshotListener
@@ -581,7 +571,8 @@ class ChatActivity : AppCompatActivity() {
                     mediaUrl = mediaUrl,
                     mediaType = mediaType,
                     contentType = contentType,
-                    receiver = data["receiver"] as? String ?: ""
+                    receiver = data["receiver"] as? String ?: "",
+                    isPending = doc.metadata.hasPendingWrites()
                 )
                 messages.add(message)
                 Log.d(TAG, "Message parsed: ID=${message.id}, Text=${message.text}, From=${message.sender}, ReadStatus=${message.read}, MediaType=${message.mediaType}")
@@ -611,6 +602,7 @@ class ChatActivity : AppCompatActivity() {
     
     private fun setupWindowInsets() {
         // Set status bar color to transparent
+        @Suppress("DEPRECATION")
         window.statusBarColor = ContextCompat.getColor(this, android.R.color.transparent)
         
         // Make status bar icons dark or light based on theme
@@ -620,8 +612,12 @@ class ChatActivity : AppCompatActivity() {
     private fun setupMessageInput() {
         // Enable/disable send button based on message content
         binding.messageInput.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {
+                // Not used
+            }
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                // Not used
+            }
             override fun afterTextChanged(s: Editable?) {
                 binding.buttonSend.isEnabled = !s.isNullOrEmpty()
             }
@@ -668,6 +664,30 @@ class ChatActivity : AppCompatActivity() {
         
         // Mark messages as read initially
         markMessagesAsRead()
+        
+        // Load other user's profile picture
+        loadOtherUserProfilePic()
+    }
+    
+    private fun loadOtherUserProfilePic() {
+        if (otherUserRollNumber.isNotEmpty()) {
+            db.collection("users").document(otherUserRollNumber).get()
+                .addOnSuccessListener { document ->
+                    if (document != null && document.exists()) {
+                        val profileImageUrl = document.getString("profileImageUrl")
+                        if (!profileImageUrl.isNullOrEmpty() && !isFinishing && !isDestroyed) {
+                            Glide.with(this)
+                                .load(profileImageUrl)
+                                .placeholder(R.drawable.ic_profile)
+                                .error(R.drawable.ic_profile)
+                                .into(binding.userProfilePic)
+                        }
+                    }
+                }
+                .addOnFailureListener { e ->
+                    Log.e(TAG, "Error fetching profile pic", e)
+                }
+        }
     }
     
     private fun markSpecificMessagesAsRead(messages: List<com.google.firebase.firestore.DocumentSnapshot>) {
@@ -820,7 +840,7 @@ class ChatActivity : AppCompatActivity() {
                 }
                 
                 // Update last message in conversation
-                updateLastMessage("[${fileType.capitalize()}]")
+                updateLastMessage("[${fileType.replaceFirstChar { it.uppercase() }}]")
             }
             .addOnFailureListener { e ->
                 Log.e(TAG, "Error sending media message", e)

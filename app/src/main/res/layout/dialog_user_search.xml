@@ -5,8 +5,8 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:background="#0D0302"
-    android:padding="16dp">
+    android:background="@color/ui_dark"
+    android:padding="@dimen/spacing_xlarge">
 
     <!-- Search Input -->
     <LinearLayout
@@ -18,11 +18,11 @@
         android:padding="8dp">
 
         <ImageView
-            android:layout_width="24dp"
-            android:layout_height="24dp"
+            android:layout_width="@dimen/spacing_xxlarge"
+            android:layout_height="@dimen/spacing_xxlarge"
             android:src="@drawable/ic_search"
-            android:tint="#AAAAAA"
-            android:layout_marginEnd="8dp" />
+            app:tint="@color/ui_gray"
+            android:layout_marginEnd="@dimen/spacing_medium" />
 
         <EditText
             android:id="@+id/edit_search"
@@ -31,19 +31,19 @@
             android:layout_weight="1"
             android:background="@android:color/transparent"
             android:hint="Search users..."
-            android:textColorHint="#AAAAAA"
-            android:textColor="#FFFFFF"
+            android:textColorHint="@color/ui_gray"
+            android:textColor="@color/ui_white"
             android:inputType="text"
             android:maxLines="1"
             android:imeOptions="actionSearch" />
 
         <ImageButton
             android:id="@+id/btn_clear_search"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
+            android:layout_width="@dimen/spacing_xxlarge"
+            android:layout_height="@dimen/spacing_xxlarge"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@android:drawable/ic_menu_close_clear_cancel"
-            android:tint="#AAAAAA"
+            app:tint="@color/ui_gray"
             android:visibility="gone" />
     </LinearLayout>
 
@@ -61,7 +61,7 @@
         android:id="@+id/recycler_search_results"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="@dimen/spacing_xlarge"
         android:maxHeight="350dp"
         app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
         tools:listitem="@layout/item_search_result"
@@ -72,10 +72,10 @@
         android:id="@+id/text_no_results"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="@dimen/spacing_xlarge"
         android:gravity="center"
         android:text="No users found"
-        android:textColor="#AAAAAA"
-        android:textSize="16sp"
+        android:textColor="@color/ui_gray"
+        android:textSize="@dimen/text_large"
         android:visibility="gone" />
 </LinearLayout> 

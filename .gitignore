@@ -115,7 +115,4 @@ web/
 showcase/
 
 # Agent Files
-ast.json
-ddg.json
-refactoring_issues.json
-agent_directives.md
+.ai/

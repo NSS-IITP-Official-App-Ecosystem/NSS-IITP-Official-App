@@ -66,16 +66,12 @@ class ChatSearchAdapter(
     override fun getItemCount(): Int = results.size
 
     inner class UserViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        private val imageAvatar: ImageView = itemView.findViewById(R.id.image_user_avatar)
         private val textName: TextView = itemView.findViewById(R.id.text_user_name)
         private val textUserType: TextView = itemView.findViewById(R.id.text_user_type)
-        private val adminBorder: View = itemView.findViewById(R.id.view_admin_border)
 
         fun bind(user: User) {
             textName.text = user.name
             textUserType.text = user.userType
-        adminBorder.visibility = if (user.userType.equals("Admin", ignoreCase = true)) View.VISIBLE else View.GONE
-            imageAvatar.setImageResource(R.drawable.ic_profile)
             itemView.setOnClickListener {
                 onUserClick?.invoke(user)
             }
@@ -83,16 +79,12 @@ class ChatSearchAdapter(
     }
 
     inner class GroupViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        private val imageAvatar: ImageView = itemView.findViewById(R.id.image_user_avatar)
         private val textName: TextView = itemView.findViewById(R.id.text_user_name)
         private val textUserType: TextView = itemView.findViewById(R.id.text_user_type)
-        private val adminBorder: View = itemView.findViewById(R.id.view_admin_border)
 
         fun bind(group: Group) {
             textName.text = group.name
             textUserType.text = "Group"
-            adminBorder.visibility = View.GONE
-            imageAvatar.setImageResource(R.drawable.ic_group)
             itemView.setOnClickListener {
                 onGroupClick?.invoke(group)
             }

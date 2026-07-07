@@ -18,10 +18,26 @@ import java.util.concurrent.TimeUnit
 object PhotoAttendanceManager {
     private const val TAG = "PhotoAttendanceManager"
     
-    private const val BASE_URL = "https://asia-south1-nssiitp-app.cloudfunctions.net/attendance"
-    private const val SUBMIT_URL = "$BASE_URL/api/attendance/submit-photo"
-    private const val PENDING_URL = "$BASE_URL/api/attendance/pending-photos"
-    private const val VERIFY_URL = "$BASE_URL/api/attendance/verify" // will append /:id
+    private val BASE_URL: String
+        get() {
+            val projId = try {
+                com.google.firebase.FirebaseApp.getInstance().options.projectId
+            } catch (e: Exception) {
+                null
+            } ?: "nssiitp-app"
+            return if (com.phad.chatapp.BuildConfig.DEBUG) {
+                val isEmulator = android.os.Build.FINGERPRINT.startsWith("generic") || 
+                                 android.os.Build.MODEL.contains("google_sdk") || 
+                                 android.os.Build.MODEL.contains("Emulator")
+                val host = if (isEmulator) "10.0.2.2" else "127.0.0.1"
+                "http://$host:5001/$projId/asia-south1/attendance"
+            } else {
+                "https://asia-south1-$projId.cloudfunctions.net/attendance"
+            }
+        }
+    private val SUBMIT_URL get() = "$BASE_URL/api/attendance/submit-photo"
+    private val PENDING_URL get() = "$BASE_URL/api/attendance/pending-photos"
+    private val VERIFY_URL get() = "$BASE_URL/api/attendance/verify" // will append /:id
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
@@ -135,6 +151,14 @@ object PhotoAttendanceManager {
                         val seconds = submittedAtObj?.optLong("_seconds") ?: 0L
                         val timestampMs = seconds * 1000
                         
+                        val rawPhotoUrl = obj.optString("photo_url", "")
+                        val finalPhotoUrl = if (com.phad.chatapp.BuildConfig.DEBUG && rawPhotoUrl.isNotEmpty()) {
+                            val filename = rawPhotoUrl.substringAfterLast("/")
+                            "$BASE_URL/api/attendance/photo/$filename"
+                        } else {
+                            rawPhotoUrl
+                        }
+
                         records.add(
                             PendingPhotoRecord(
                                 id = obj.optString("id"),
@@ -143,7 +167,7 @@ object PhotoAttendanceManager {
                                 eventId = obj.optString("eventId"),
                                 latitude = obj.optDouble("latitude", 0.0),
                                 longitude = obj.optDouble("longitude", 0.0),
-                                photoUrl = obj.optString("photo_url", ""),
+                                photoUrl = finalPhotoUrl,
                                 status = obj.optString("verification_status", "Pending"),
                                 submittedAtMs = timestampMs
                             )

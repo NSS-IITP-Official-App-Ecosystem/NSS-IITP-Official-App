@@ -24,6 +24,7 @@ const { onDocumentCreated, onDocumentDeleted } = require("firebase-functions/v2/
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 admin.initializeApp();
+const { Timestamp, FieldValue, GeoPoint } = require('firebase-admin/firestore');
 
 // Utilities for HTTPS endpoints
 const crypto = require('crypto');
@@ -78,6 +79,13 @@ exports.verifyPlayIntegrity = onRequest({ region: 'asia-south1' }, async (req, r
     }
 
     console.log(`[PlayIntegrity] Verifying integrity for user: ${userId}`);
+
+    // Bypass integrity check when running in the local Firebase Emulator
+    if (process.env.FUNCTIONS_EMULATOR === 'true') {
+      console.log(`[PlayIntegrity] Emulator environment detected. Bypassing validation for user: ${userId}`);
+      res.json({ allowed: true, reason: 'Bypassed in emulator mode' });
+      return;
+    }
 
     // Decode the integrity token using Google's API
     const auth = new GoogleAuth({
@@ -234,7 +242,7 @@ exports.getDeviceBindChallenge = onRequest({ region: 'asia-south1' }, async (req
     const db = admin.firestore();
     await assertUserIdentityMatches(db, rollNumber, decodedToken = decoded);
     const nonce = generateNonce();
-    const expiresAt = admin.firestore.Timestamp.fromDate(new Date(Date.now() + 5 * 60 * 1000));
+    const expiresAt = Timestamp.fromDate(new Date(Date.now() + 5 * 60 * 1000));
     await db.collection('users').doc(rollNumber)
       .collection('deviceChallenges').doc('bind')
       .set({ nonce, expiresAt }, { merge: true });
@@ -284,8 +292,8 @@ exports.bindDevice = onRequest({ region: 'asia-south1' }, async (req, res) => {
         publicKey: publicKeyPem,
         fingerprint: crypto.createHash('sha256').update(pubKey.export({ type: 'spki', format: 'der' })).digest('hex'),
         status: 'active',
-        registeredAt: admin.firestore.FieldValue.serverTimestamp(),
-        lastVerifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+        registeredAt: FieldValue.serverTimestamp(),
+        lastVerifiedAt: FieldValue.serverTimestamp(),
       };
       tx.set(userRef, { deviceBinding: binding }, { merge: true });
       tx.delete(challengeDocRef);
@@ -315,7 +323,7 @@ exports.getAttendanceChallenge = onRequest({ region: 'asia-south1' }, async (req
       throw Object.assign(new Error('No active device binding'), { status: 403 });
     }
     const nonce = generateNonce();
-    const expiresAt = admin.firestore.Timestamp.fromDate(new Date(Date.now() + 2 * 60 * 1000));
+    const expiresAt = Timestamp.fromDate(new Date(Date.now() + 2 * 60 * 1000));
     await userRef.collection('deviceChallenges').doc(`attendance_${eventId}`)
       .set({ nonce, expiresAt }, { merge: true });
     res.json({ nonce, expiresAt: expiresAt.toMillis() });
@@ -360,12 +368,12 @@ exports.markAttendance = onRequest({ region: 'asia-south1' }, async (req, res) =
     // Build normalized attendee object (server authoritative timestamp)
     let scanLocation = null;
     if (attendee && attendee.scan_location && typeof attendee.scan_location.latitude === 'number' && typeof attendee.scan_location.longitude === 'number') {
-      scanLocation = new admin.firestore.GeoPoint(attendee.scan_location.latitude, attendee.scan_location.longitude);
+      scanLocation = new GeoPoint(attendee.scan_location.latitude, attendee.scan_location.longitude);
     }
 
     const normalizedAttendee = Object.assign({}, attendee, {
       roll_number: rollNumber.toUpperCase(),
-      scan_timestamp: admin.firestore.Timestamp.now(),
+      scan_timestamp: Timestamp.now(),
       ...(scanLocation ? { scan_location: scanLocation } : {}),
     });
 
@@ -375,16 +383,45 @@ exports.markAttendance = onRequest({ region: 'asia-south1' }, async (req, res) =
 
     await db.runTransaction(async (tx) => {
       const eventSnap = await tx.get(eventRef);
-      if (!eventSnap.exists) throw Object.assign(new Error('Event not found'), { status: 404 });
+      if (!eventSnap.exists) {
+        if (process.env.FUNCTIONS_EMULATOR === 'true') {
+          const parts = eventId.split('_');
+          const eventName = parts.length >= 3 ? parts.slice(2).join(' ').replace(/_/g, ' ') : eventId;
+          const eventDate = parts.length >= 2 ? `${parts[0]} ${parts[1]} 2026` : '31 May 2026';
+          
+          const mockEvent = {
+            description: 'Auto-created mock event for local debugging',
+            createdBy: 'SYSTEM',
+            creatorName: 'System Admin',
+            eventDate: eventDate,
+            eventTime: '10:00 AM - 11:00 AM',
+            hours: 1.5,
+            mandatory: false,
+            negativeHours: 0.0,
+            location: 'IIT Patna',
+            createdAt: Timestamp.now(),
+            attendees: [],
+            closedAt: null,
+            liveCount: 1,
+            wings: [],
+            visibleOnlyToPresent: false,
+            isLive: true,
+            total_marked: 0
+          };
+          tx.set(eventRef, mockEvent);
+        } else {
+          throw Object.assign(new Error('Event not found'), { status: 404 });
+        }
+      }
       tx.set(attendanceDocRef, normalizedAttendee);
       tx.update(eventRef, {
-        attendees: admin.firestore.FieldValue.arrayUnion(normalizedAttendee),
-        total_marked: admin.firestore.FieldValue.increment(1),
+        attendees: FieldValue.arrayUnion(normalizedAttendee),
+        total_marked: FieldValue.increment(1),
       });
     });
 
     await challengeRef.delete();
-    await userRef.set({ deviceBinding: { ...deviceBinding, lastVerifiedAt: admin.firestore.FieldValue.serverTimestamp() } }, { merge: true });
+    await userRef.set({ deviceBinding: { ...deviceBinding, lastVerifiedAt: FieldValue.serverTimestamp() } }, { merge: true });
 
     res.json({ ok: true });
   } catch (err) {
@@ -411,7 +448,7 @@ exports.onAttendanceCreate = onDocumentCreated(
       const hours = Number(event.hours) || 0;
       const eventDate = event.eventDate || '';
 
-      await eventRef.update({ total_marked: admin.firestore.FieldValue.increment(1) });
+      await eventRef.update({ total_marked: FieldValue.increment(1) });
 
       // Ensure meta.totalEvents exists and is equal to number of events documents
       // Increment events count only when event document is newly created elsewhere.
@@ -422,23 +459,36 @@ exports.onAttendanceCreate = onDocumentCreated(
         // Expecting format like "dd MMM yyyy"; fallback to 0 if unknown
         try {
           const parts = eventDate.split(' ');
+          if (parts.length < 3) return 0;
+          const day = parseInt(parts[0], 10);
           const month = parts[1];
-          const year = parseInt(parts[2], 10);
           const monthIndex = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(month);
-          if ((year === 2025 && monthIndex >= 6) || (year === 2026 && monthIndex <= 4)) {
-            return year === 2025 ? 1 : 2;
+          if (monthIndex === -1) return 0;
+          
+          const month1Based = monthIndex + 1;
+          // Semester 1: July 1 - December 10
+          if (month1Based >= 7 && month1Based <= 11) {
+            return 1;
+          } else if (month1Based === 12 && day <= 10) {
+            return 1;
+          }
+          // Semester 2: December 11 - June 30
+          else if (month1Based === 12 && day >= 11) {
+            return 2;
+          } else if (month1Based >= 1 && month1Based <= 6) {
+            return 2;
           }
         } catch (e) { }
         return 0;
       })();
 
       const updates = {
-        eventsAttended: admin.firestore.FieldValue.increment(1),
-        hours: admin.firestore.FieldValue.increment(hours),
-        eventsList: admin.firestore.FieldValue.arrayUnion(eventId)
+        eventsAttended: FieldValue.increment(1),
+        hours: FieldValue.increment(hours),
+        eventsList: FieldValue.arrayUnion(eventId)
       };
-      if (semester === 1) updates.sem1Hours = admin.firestore.FieldValue.increment(hours);
-      if (semester === 2) updates.sem2Hours = admin.firestore.FieldValue.increment(hours);
+      if (semester === 1) updates.sem1Hours = FieldValue.increment(hours);
+      if (semester === 2) updates.sem2Hours = FieldValue.increment(hours);
 
       await userRef.set(updates, { merge: true });
 
@@ -461,7 +511,7 @@ exports.onEventWrite = onDocumentCreated(
       const db = admin.firestore();
       const metaRef = db.collection('meta').doc('statistics');
       await metaRef.set({
-        totalEvents: admin.firestore.FieldValue.increment(1)
+        totalEvents: FieldValue.increment(1)
       }, { merge: true });
       return null;
     } catch (e) {
@@ -478,7 +528,7 @@ exports.onEventDelete = onDocumentDeleted(
       const db = admin.firestore();
       const metaRef = db.collection('meta').doc('statistics');
       await metaRef.set({
-        totalEvents: admin.firestore.FieldValue.increment(-1)
+        totalEvents: FieldValue.increment(-1)
       }, { merge: true });
       return null;
     } catch (e) {
@@ -671,9 +721,10 @@ exports.applyAbsentPenalty = onRequest({ region: 'asia-south1' }, async (req, re
 
 const express = require('express');
 const cors = require('cors');
-const multer = require('multer');
+const Busboy = require('busboy');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 
 const app = express();
 
@@ -681,14 +732,78 @@ const app = express();
 app.use(cors({ origin: true }));
 app.use(express.json());
 
-// Configure Multer to upload to /tmp (the only writable directory in Firebase Functions)
-const upload = multer({ dest: '/tmp/' });
+
+
+// Custom multipart parser middleware for Firebase Functions
+const parseMultipart = (req, res, next) => {
+  if (req.method !== 'POST') {
+    return next();
+  }
+
+  const contentType = req.headers['content-type'] || '';
+  if (!contentType.includes('multipart/form-data')) {
+    return next();
+  }
+
+  try {
+    const busboy = Busboy({ headers: req.headers });
+    req.body = req.body || {};
+
+    busboy.on('field', (fieldname, val) => {
+      req.body[fieldname] = val;
+    });
+
+    busboy.on('file', (fieldname, file, fileInfo) => {
+      let filename, mimeType;
+      if (fileInfo && typeof fileInfo === 'object') {
+        filename = fileInfo.filename;
+        mimeType = fileInfo.mimeType;
+      } else {
+        filename = arguments[2];
+        mimeType = arguments[4];
+      }
+
+      const uniqueFilename = crypto.randomBytes(16).toString('hex') + path.extname(filename || '.jpg');
+      const tempFilePath = path.join(os.tmpdir(), uniqueFilename);
+
+      const writeStream = fs.createWriteStream(tempFilePath);
+      file.pipe(writeStream);
+
+      req.file = {
+        fieldname: fieldname,
+        originalname: filename,
+        encoding: fileInfo?.encoding || '7bit',
+        mimetype: mimeType || 'image/jpeg',
+        destination: os.tmpdir(),
+        filename: uniqueFilename,
+        path: tempFilePath,
+        size: 0
+      };
+    });
+
+    busboy.on('finish', () => {
+      next();
+    });
+
+    busboy.on('error', (err) => {
+      next(err);
+    });
+
+    if (req.rawBody) {
+      busboy.end(req.rawBody);
+    } else {
+      req.pipe(busboy);
+    }
+  } catch (err) {
+    next(err);
+  }
+};
 
 /**
  * Endpoint: POST /api/attendance/submit-photo
  * Accept multipart/form-data with fields: userId, eventId, latitude, longitude and file: image
  */
-app.post('/api/attendance/submit-photo', upload.single('image'), async (req, res) => {
+app.post('/api/attendance/submit-photo', parseMultipart, async (req, res) => {
   try {
     console.log('[submit-photo] Received request');
     const decoded = await verifyAuthToken(req);
@@ -715,7 +830,14 @@ app.post('/api/attendance/submit-photo', upload.single('image'), async (req, res
     const userName = userData.name || 'Unknown Student';
 
     // Construct photo url to serve this image from /tmp
-    const photoUrl = `https://asia-south1-nssiitp-app.cloudfunctions.net/attendance/api/attendance/photo/${file.filename}`;
+    const projectId = process.env.GCLOUD_PROJECT || 'nssiitp-app';
+    let photoUrl;
+    if (process.env.FUNCTIONS_EMULATOR === 'true') {
+      const incomingHost = req.get('host') || '127.0.0.1:5001';
+      photoUrl = `http://${incomingHost}/${projectId}/asia-south1/attendance/api/attendance/photo/${file.filename}`;
+    } else {
+      photoUrl = `https://asia-south1-${projectId}.cloudfunctions.net/attendance/api/attendance/photo/${file.filename}`;
+    }
 
     const docId = `${eventId}_${rollNoUpper}`;
     const logData = {
@@ -729,7 +851,7 @@ app.post('/api/attendance/submit-photo', upload.single('image'), async (req, res
       photo_filename: file.filename, // Store filename to make deletion easy
       verification_status: 'Pending',
       attendance_method: 'Photo_GPS',
-      submittedAt: admin.firestore.Timestamp.now()
+      submittedAt: Timestamp.now()
     };
 
     await db.collection('PhotoAttendanceLog').doc(docId).set(logData);
@@ -748,13 +870,13 @@ app.post('/api/attendance/submit-photo', upload.single('image'), async (req, res
 
 /**
  * Endpoint: GET /api/attendance/photo/:filename
- * Serves the temporary uploaded image from /tmp
+ * Serves the temporary uploaded image from os.tmpdir()
  */
 app.get('/api/attendance/photo/:filename', (req, res) => {
   try {
     const filename = req.params.filename;
     const safeFilename = path.basename(filename);
-    const filePath = path.join('/tmp', safeFilename);
+    const filePath = path.join(os.tmpdir(), safeFilename);
 
     if (fs.existsSync(filePath)) {
       res.sendFile(filePath);
@@ -780,12 +902,18 @@ app.get('/api/attendance/pending-photos', async (req, res) => {
     const db = admin.firestore();
     const snap = await db.collection('PhotoAttendanceLog')
       .where('verification_status', '==', 'Pending')
-      .orderBy('submittedAt', 'desc')
       .get();
 
     const results = [];
     snap.forEach(doc => {
       results.push(doc.data());
+    });
+
+    // Sort in memory by submittedAt descending
+    results.sort((a, b) => {
+      const aTime = a.submittedAt ? (typeof a.submittedAt.toMillis === 'function' ? a.submittedAt.toMillis() : (a.submittedAt.seconds * 1000 || 0)) : 0;
+      const bTime = b.submittedAt ? (typeof b.submittedAt.toMillis === 'function' ? b.submittedAt.toMillis() : (b.submittedAt.seconds * 1000 || 0)) : 0;
+      return bTime - aTime;
     });
 
     console.log(`[pending-photos] Found ${results.length} pending records`);
@@ -830,27 +958,12 @@ app.put('/api/attendance/verify/:id', async (req, res) => {
 
     const { rollNumber, name, eventId, latitude, longitude, photo_filename } = logData;
 
-    // 1. Delete physical photo from /tmp
-    if (photo_filename) {
-      const filePath = path.join('/tmp', path.basename(photo_filename));
-      try {
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-          console.log(`[verify] Deleted file: ${filePath}`);
-        } else {
-          console.warn(`[verify] File not found for deletion: ${filePath}`);
-        }
-      } catch (fileErr) {
-        console.error(`[verify] Failed to delete file ${filePath}:`, fileErr);
-      }
-    }
-
     // 2. If Approved, write to the main event attendance subcollection
     if (status === 'Approved') {
       const eventRef = db.collection('NSS_Events_Attendence').doc(eventId);
       const attendanceDocRef = eventRef.collection('attendance').doc(rollNumber);
 
-      const gpLocation = new admin.firestore.GeoPoint(latitude, longitude);
+      const gpLocation = new GeoPoint(latitude, longitude);
       const scannedFromObj = {
         adminRollNumber: adminRollNumber || adminRoll,
         adminName: adminName || 'Admin'
@@ -860,8 +973,8 @@ app.put('/api/attendance/verify/:id', async (req, res) => {
         rollNumber: rollNumber,
         roll_number: rollNumber,
         name: name,
-        scanTimestamp: admin.firestore.Timestamp.now(),
-        scan_timestamp: admin.firestore.Timestamp.now(),
+        scanTimestamp: Timestamp.now(),
+        scan_timestamp: Timestamp.now(),
         scannedFrom: scannedFromObj,
         deviceId: 'Photo_GPS',
         scanLocation: gpLocation,
@@ -879,11 +992,40 @@ app.put('/api/attendance/verify/:id', async (req, res) => {
 
       await db.runTransaction(async (tx) => {
         const eventSnap = await tx.get(eventRef);
-        if (!eventSnap.exists) throw Object.assign(new Error('Event not found'), { status: 404 });
+        if (!eventSnap.exists) {
+          if (process.env.FUNCTIONS_EMULATOR === 'true') {
+            const parts = eventId.split('_');
+            const eventName = parts.length >= 3 ? parts.slice(2).join(' ').replace(/_/g, ' ') : eventId;
+            const eventDate = parts.length >= 2 ? `${parts[0]} ${parts[1]} 2026` : '31 May 2026';
+            
+            const mockEvent = {
+              description: 'Auto-created mock event for local debugging',
+              createdBy: 'SYSTEM',
+              creatorName: 'System Admin',
+              eventDate: eventDate,
+              eventTime: '10:00 AM - 11:00 AM',
+              hours: 1.5,
+              mandatory: false,
+              negativeHours: 0.0,
+              location: 'IIT Patna',
+              createdAt: Timestamp.now(),
+              attendees: [],
+              closedAt: null,
+              liveCount: 1,
+              wings: [],
+              visibleOnlyToPresent: false,
+              isLive: true,
+              total_marked: 0
+            };
+            tx.set(eventRef, mockEvent);
+          } else {
+            throw Object.assign(new Error('Event not found'), { status: 404 });
+          }
+        }
         tx.set(attendanceDocRef, normalizedAttendee);
         tx.update(eventRef, {
-          attendees: admin.firestore.FieldValue.arrayUnion(normalizedAttendee),
-          total_marked: admin.firestore.FieldValue.increment(1),
+          attendees: FieldValue.arrayUnion(normalizedAttendee),
+          total_marked: FieldValue.increment(1),
         });
       });
       console.log(`[verify] Approved attendance written to consolidated event ${eventId} for ${rollNumber}`);
@@ -893,9 +1035,24 @@ app.put('/api/attendance/verify/:id', async (req, res) => {
     await logRef.update({
       photo_url: null,
       verification_status: status,
-      verifiedAt: admin.firestore.Timestamp.now(),
+      verifiedAt: Timestamp.now(),
       verifiedBy: adminRollNumber || adminRoll
     });
+
+    // 4. Delete physical photo from os.tmpdir() ONLY after DB transaction/update succeeds
+    if (photo_filename) {
+      const filePath = path.join(os.tmpdir(), path.basename(photo_filename));
+      try {
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+          console.log(`[verify] Deleted file: ${filePath}`);
+        } else {
+          console.warn(`[verify] File not found for deletion: ${filePath}`);
+        }
+      } catch (fileErr) {
+        console.error(`[verify] Failed to delete file ${filePath}:`, fileErr);
+      }
+    }
 
     console.log(`[verify] Log updated to status: ${status}`);
     res.status(200).json({ ok: true, status });
