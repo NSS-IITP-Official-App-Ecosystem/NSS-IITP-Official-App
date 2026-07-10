@@ -43,6 +43,25 @@
         android:label="QR Attendance Result" />
 
     <!-- Add other NSS-specific fragments as needed -->
+    <fragment
+        android:id="@+id/nssHelpFragment"
+        android:name="com.phad.chatapp.fragments.HelpFragment"
+        android:label="Help">
+        <action
+            android:id="@+id/action_nssHelpFragment_to_issueTrackingFragment"
+            app:destination="@id/issueTrackingFragment" />
+        <action
+            android:id="@+id/action_nssHelpFragment_to_adminIssueTrackingFragment"
+            app:destination="@id/adminIssueTrackingFragment" />
+    </fragment>
 
+    <fragment
+        android:id="@+id/issueTrackingFragment"
+        android:name="com.phad.chatapp.fragments.IssueTrackingFragment"
+        android:label="Issue Tracking" />
 
+    <fragment
+        android:id="@+id/adminIssueTrackingFragment"
+        android:name="com.phad.chatapp.fragments.AdminIssueTrackingFragment"
+        android:label="Resolve Issues" />
 </navigation>
