@@ -710,119 +710,6 @@ fun ProfileScreen(
             }
         )
     }
-    // Apply Absent Penalty Dialog
-    if (showPenaltyDialog) {
-        AlertDialog(
-            onDismissRequest = { showPenaltyDialog = false },
-            containerColor = Color(0xFF1E1E1E),
-            titleContentColor = Color.White,
-            textContentColor = Color.White,
-            title = {
-                Text(
-                    text = "Apply Absent Penalty",
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFFE53935)
-                )
-            },
-            text = {
-                Text(
-                    text = "Select an event to apply penalty to absent volunteers. This action cannot be undone.",
-                    color = Color.White.copy(alpha = 0.9f)
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showPenaltyDialog = false
-                        showEventSelectDialog = true
-                    }
-                )  {
-                Text("Apply", color = Color(0xFFE53935), fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showPenaltyDialog = false }) {
-                    Text("Cancel", color = Color.White.copy(alpha = 0.7f))
-                }
-            }
-        )
-    }
-    // Event Select Dialog
-    if (showEventSelectDialog) {
-        val viewModel: com.phad.chatapp.viewmodels.AttendanceViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
-            factory = com.phad.chatapp.viewmodels.AttendanceViewModelFactory(LocalContext.current.applicationContext as android.app.Application)
-        )
-        var closedEvents by remember { mutableStateOf<List<com.phad.chatapp.models.AttendanceEvent>>(emptyList()) }
-        var selectedEvent by remember { mutableStateOf<com.phad.chatapp.models.AttendanceEvent?>(null) }
-        var isLoading by remember { mutableStateOf(true) }
-        var resultMessage by remember { mutableStateOf("") }
-        val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
-
-        LaunchedEffect(Unit) {
-            closedEvents = viewModel.getClosedEvents()
-            isLoading = false
-        }
-
-        AlertDialog(
-            onDismissRequest = { showEventSelectDialog = false },
-            containerColor = Color(0xFF1E1E1E),
-            titleContentColor = Color.White,
-            textContentColor = Color.White,
-            title = {
-                Text("Select Event", fontWeight = FontWeight.Bold, color = Color(0xFFE53935))
-            },
-            text = {
-                if (isLoading) {
-                    androidx.compose.material3.CircularProgressIndicator(color = Color(0xFFE53935))
-                } else if (resultMessage.isNotEmpty()) {
-                    Text(resultMessage, color = Color.White)
-                } else {
-                    androidx.compose.foundation.lazy.LazyColumn {
-                        items(closedEvents) { event ->
-                            val isSelected = selectedEvent?.id == event.id
-                            androidx.compose.material3.Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp)
-                                    .clickable { selectedEvent = event },
-                                colors = androidx.compose.material3.CardDefaults.cardColors(
-                                    containerColor = if (isSelected) Color(0xFFE53935) else Color(0xFF2E2E2E)
-                                )
-                            ) {
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                    Text(event.getEventName(), color = Color.White, fontWeight = FontWeight.Bold)
-                                    Text(event.eventDate, color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-    confirmButton = {
-            TextButton(
-                onClick = {
-                    selectedEvent?.let { event ->
-                        coroutineScope.launch {
-                            isLoading = true
-                            val result = viewModel.applyAbsentPenalty(event.id)
-                            resultMessage = result.getOrElse { it.message ?: "Error" }
-                            isLoading = false
-                        }
-                    }
-                },
-                enabled = selectedEvent != null
-            ) {
-                Text("Apply", color = Color(0xFFE53935), fontWeight = FontWeight.Bold)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = { showEventSelectDialog = false }) {
-                Text("Close", color = Color.White.copy(alpha = 0.7f))
-            }
-        }
-        )
-    }
-}
 }
 
 @Composable
@@ -1143,11 +1030,6 @@ fun ProfileMenu(
             )
         }
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-=======
->>>>>>> origin/Sourav-Mondal
         // Sync to Google Sheets - only for admins in NSS interface
         if (isAdmin && currentInterface == "NSS") {
             DropdownMenuItem(
@@ -1166,28 +1048,6 @@ fun ProfileMenu(
             )
         }
 
-
-<<<<<<< HEAD
-if (isAdmin && currentInterface == "NSS") {
-    DropdownMenuItem(
-        text = { Text("Apply Absent Penalty", color = Color(0xFFE53935)) },
-        onClick = {
-            onApplyPenalty()
-            onDismiss()
-        },
-        leadingIcon = {
-            Icon(
-                imageVector = Icons.Default.Info,
-                contentDescription = null,
-                tint = Color(0xFFE53935)
-            )
-        }
-    )
-}
-
->>>>>>> origin/ayush
-=======
->>>>>>> origin/Sourav-Mondal
         // Event History - only for admins in NSS interface
         if (isAdmin && currentInterface == "NSS") {
             DropdownMenuItem(

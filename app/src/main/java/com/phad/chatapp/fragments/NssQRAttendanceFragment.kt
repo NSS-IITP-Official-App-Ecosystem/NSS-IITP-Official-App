@@ -1477,8 +1477,7 @@ fun EditEventDialog(
                     Spacer(modifier = Modifier.height(8.dp))
                     val wings = listOf(
                         "Teaching and Technical Wing",
-                        "Chetna Wing",
-                        "Prayatna Wing",
+                        "Prerna Wing",
                         "Rural Development Wing",
                         "Environmental Wing",
                         "Design and Curation Wing"
@@ -2911,8 +2910,7 @@ fun CreateEventDialog(
                         Spacer(modifier = Modifier.height(8.dp))
                         val wings = listOf(
                             "Teaching and Technical Wing",
-                            "Chetna Wing",
-                            "Prayatna Wing",
+                            "Prerna Wing",
                             "Rural Development Wing",
                             "Environmental Wing",
                             "Design and Curation Wing"

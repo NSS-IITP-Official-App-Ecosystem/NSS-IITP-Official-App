@@ -96,8 +96,7 @@ data class AttendanceEvent(
         // All available wings
         val ALL_WINGS = setOf(
             "Teaching and Technical Wing",
-            "Chetna Wing",
-            "Prayatna Wing",
+            "Prerna Wing",
             "Rural Development Wing",
             "Environmental Wing",
             "Design and Curation Wing"

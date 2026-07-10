@@ -172,9 +172,8 @@ object GoogleSheetsSync {
 
             // Generate Wing Sheets
             val specificWings = listOf(
-                "Chetna Wing",
                 "Environmental Wing",
-                "Prayatna Wing",
+                "Prerna Wing",
                 "Rural Development Wing",
                 "Teaching and Technical Wing"
             )

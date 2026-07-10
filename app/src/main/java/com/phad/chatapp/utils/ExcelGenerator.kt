@@ -28,9 +28,8 @@ class ExcelGenerator(private val context: Context) {
         // Wing Constants
         private const val DNC_WING = "Design and Curation Wing"
         private val SPECIFIC_WINGS = listOf(
-            "Chetna Wing",
             "Environmental Wing",
-            "Prayatna Wing",
+            "Prerna Wing",
             "Rural Development Wing",
             "Teaching and Technical Wing"
         )
