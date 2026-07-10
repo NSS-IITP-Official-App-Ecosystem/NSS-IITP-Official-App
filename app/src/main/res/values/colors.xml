@@ -42,6 +42,8 @@
     <color name="ui_gray">#AAAAAA</color>
     <color name="ui_gray_dark">#444444</color>
     <color name="ui_surface">#1A1A1A</color>
+    <color name="issue_admin_primary">#E65100</color>
+    <color name="issue_success">#4CAF50</color>
     
     <!-- New color scheme -->
     <color name="primary">#006BFF</color>

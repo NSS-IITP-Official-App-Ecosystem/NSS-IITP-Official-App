@@ -1475,14 +1475,7 @@ fun EditEventDialog(
                         fontSize = 14.sp
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    val wings = listOf(
-                        "Teaching and Technical Wing",
-                        "Chetna Wing",
-                        "Prayatna Wing",
-                        "Rural Development Wing",
-                        "Environmental Wing",
-                        "Design and Curation Wing"
-                    )
+                    val wings = com.phad.chatapp.utils.Constants.NSS_WINGS
                     
                     // Select All Checkbox
                     Row(
@@ -2909,14 +2902,7 @@ fun CreateEventDialog(
                             fontSize = 14.sp
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        val wings = listOf(
-                            "Teaching and Technical Wing",
-                            "Chetna Wing",
-                            "Prayatna Wing",
-                            "Rural Development Wing",
-                            "Environmental Wing",
-                            "Design and Curation Wing"
-                        )
+                        val wings = com.phad.chatapp.utils.Constants.NSS_WINGS
                         
                         // Select All Checkbox
                         Row(

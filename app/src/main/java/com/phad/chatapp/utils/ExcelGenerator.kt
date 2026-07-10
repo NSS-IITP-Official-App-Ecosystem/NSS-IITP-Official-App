@@ -26,13 +26,13 @@ class ExcelGenerator(private val context: Context) {
         private const val TAG = "ExcelGenerator"
         
         // Wing Constants
-        private const val DNC_WING = "Design and Curation Wing"
+        private const val DNC_WING = com.phad.chatapp.utils.Constants.WING_DCW
         private val SPECIFIC_WINGS = listOf(
-            "Chetna Wing",
-            "Environmental Wing",
-            "Prayatna Wing",
-            "Rural Development Wing",
-            "Teaching and Technical Wing"
+            com.phad.chatapp.utils.Constants.WING_CHN,
+            com.phad.chatapp.utils.Constants.WING_ENV,
+            com.phad.chatapp.utils.Constants.WING_PRY,
+            com.phad.chatapp.utils.Constants.WING_RDW,
+            com.phad.chatapp.utils.Constants.WING_TTW
         )
     }
     

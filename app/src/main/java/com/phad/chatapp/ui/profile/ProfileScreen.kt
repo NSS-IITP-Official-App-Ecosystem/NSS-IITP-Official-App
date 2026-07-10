@@ -32,6 +32,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -140,6 +141,8 @@ fun ProfileScreen(
     var showMenu by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
     var showClassesDialog by remember { mutableStateOf(false) }
+    var showPenaltyDialog by remember { mutableStateOf(false) }
+    var showEventSelectDialog by remember { mutableStateOf(false) }
     
     // Determine user type
     val isAdmin = !state.isStudent
@@ -322,6 +325,7 @@ fun ProfileScreen(
                                     onChangeSubjects = onChangeSubjectsClick,
                                     onFaqs = onFaqsClick,
                                     onLogout = { showLogoutDialog = true },
+                                    onApplyPenalty = { showPenaltyDialog = true },
                                     isTeachingWing = teachingWing,
                                     isAdmin = isAdmin,
                                     currentInterface = currentInterface
@@ -711,7 +715,7 @@ fun ProfileScreen(
         )
     }
 }
-}
+
 
 @Composable
 fun StatItem(label: String, value: String, size: androidx.compose.ui.unit.TextUnit = 32.sp, color: Color) {
@@ -1001,6 +1005,7 @@ fun ProfileMenu(
     onChangeSubjects: () -> Unit,
     onFaqs: () -> Unit,
     onLogout: () -> Unit,
+    onApplyPenalty: () -> Unit = {},
     isTeachingWing: Boolean,
     isAdmin: Boolean,
     currentInterface: String,
@@ -1048,6 +1053,8 @@ fun ProfileMenu(
                 }
             )
         }
+
+
 
 
         // Event History - only for admins in NSS interface

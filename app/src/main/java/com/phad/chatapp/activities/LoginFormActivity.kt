@@ -411,7 +411,7 @@ class LoginFormActivity : AppCompatActivity() {
         val email = doc.getString("instituteOutlookId") ?: ""
         val wings = doc.get("wings") as? List<*> ?: emptyList<Any>()
         val wingsList = wings.mapNotNull { it as? String }
-        val isTeachingWing = wingsList.any { it.equals("Teaching and Technical Wing", ignoreCase = true) }
+        val isTeachingWing = wingsList.any { it.equals(com.phad.chatapp.utils.Constants.WING_TTW, ignoreCase = true) }
         return ProfileUiState(
             name = name,
             location = "N/A",
@@ -437,7 +437,7 @@ class LoginFormActivity : AppCompatActivity() {
         val email = doc.getString("instituteOutlookId") ?: ""
         val wings = doc.get("wings") as? List<*> ?: emptyList<Any>()
         val wingsList = wings.mapNotNull { it as? String }
-        val isTeachingWing = wingsList.any { it.equals("Teaching and Technical Wing", ignoreCase = true) }
+        val isTeachingWing = wingsList.any { it.equals(com.phad.chatapp.utils.Constants.WING_TTW, ignoreCase = true) }
         return ProfileUiState(
             name = name,
             location = "N/A",

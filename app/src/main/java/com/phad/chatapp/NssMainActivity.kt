@@ -300,6 +300,7 @@ class NssMainActivity : AppCompatActivity() {
         val btnCalendar = findViewById<ImageButton>(R.id.btn_calendar)
         val btnQRAttendance = findViewById<ImageButton>(R.id.btn_qr_attendance)
         val btnProfile = findViewById<ImageButton>(R.id.btn_profile)
+        val btnHelp = findViewById<ImageButton>(R.id.btn_help)
 
         // Set initial selection
         btnHome.setColorFilter(ContextCompat.getColor(this, R.color.blue))
@@ -324,6 +325,11 @@ class NssMainActivity : AppCompatActivity() {
             resetNavButtonColors()
             btnProfile.setColorFilter(ContextCompat.getColor(this, R.color.blue))
         }
+        btnHelp.setOnClickListener {
+            navController.navigate(R.id.nssHelpFragment)
+            resetNavButtonColors()
+            btnHelp.setColorFilter(ContextCompat.getColor(this, R.color.blue))
+        }
     }
 
     private fun resetNavButtonColors() {
@@ -331,6 +337,7 @@ class NssMainActivity : AppCompatActivity() {
         findViewById<ImageButton>(R.id.btn_calendar).clearColorFilter()
         findViewById<ImageButton>(R.id.btn_qr_attendance).clearColorFilter()
         findViewById<ImageButton>(R.id.btn_profile).clearColorFilter()
+        findViewById<ImageButton>(R.id.btn_help).clearColorFilter()
     }
 
     /**
@@ -373,6 +380,12 @@ class NssMainActivity : AppCompatActivity() {
                         ContextCompat.getColor(this, R.color.blue)
                     )
                     Log.d("NssMainActivity", "Profile button selected")
+                }
+                R.id.nssHelpFragment -> {
+                    findViewById<ImageButton>(R.id.btn_help).setColorFilter(
+                        ContextCompat.getColor(this, R.color.blue)
+                    )
+                    Log.d("NssMainActivity", "Help button selected")
                 }
                 else -> {
                     // For other destinations (like QRAttendanceResultFragment),
