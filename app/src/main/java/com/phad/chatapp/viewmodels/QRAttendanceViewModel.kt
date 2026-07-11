@@ -2243,8 +2243,61 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
             .filter { it.isNotBlank() }
             .distinct()
     }
-}
 
+    suspend fun notifyEvent(eventId: String, title: String, body: String, targetWings: List<String>): Result<String> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                val eventRef = db.collection("NSS_Events_Attendence").document(eventId)
+
+                // 1. Enforce 10-minute cooldown via Firestore transaction
+                db.runTransaction { tx ->
+                    val snap = tx.get(eventRef)
+                    val lastNotifiedAt = snap.getTimestamp("lastNotifiedAt")
+                    if (lastNotifiedAt != null) {
+                        val diffMins = (System.currentTimeMillis() - lastNotifiedAt.toDate().time) / (1000.0 * 60)
+                        if (diffMins < 10) {
+                            val remaining = Math.ceil(10 - diffMins).toLong()
+                            throw Exception("Please wait $remaining more minute(s) before sending another notification.")
+                        }
+                    }
+                    // Update timestamp inside the transaction
+                    tx.update(eventRef, "lastNotifiedAt", com.google.firebase.Timestamp.now())
+                    null
+                }.await()
+
+                // 2. Determine topics to notify
+                val topicsToSend = if (targetWings.isEmpty() || targetWings.contains("all")) {
+                    listOf("all")
+                } else {
+                    targetWings.map { wing ->
+                        "wing_" + wing.lowercase()
+                            .replace(" ", "_")
+                            .replace("&", "and")
+                    }
+                }
+
+                // 3. Send via existing Vercel FCM backend (same as all other notifications in the app)
+                for (topic in topicsToSend) {
+                    com.phad.chatapp.utils.FcmSender.sendToTopic(
+                        topic = topic,
+                        title = title,
+                        body = body,
+                        data = mapOf("eventId" to eventId, "type" to "event_notification")
+                    )
+                }
+
+                Result.success("Notification sent successfully to ${topicsToSend.joinToString(", ")}!")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error notifying event", e)
+                // Roll back lastNotifiedAt if send failed? Not critical — the cooldown
+                // will naturally expire in 10 minutes anyway.
+                Result.failure(e)
+            }
+        }
+    }
+
+}
 /**
  * UI State for Admin QR Attendance interface
  */

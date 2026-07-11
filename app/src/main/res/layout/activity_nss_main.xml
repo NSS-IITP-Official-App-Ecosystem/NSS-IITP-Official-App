@@ -79,9 +79,9 @@
                 android:layout_height="48dp"
                 android:layout_weight="1"
                 android:layout_marginHorizontal="2dp"
-                android:src="@drawable/ic_qr_code"
+                android:src="@drawable/ic_attendance"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="QR Attendance" />
+                android:contentDescription="Attendance" />
 
             <ImageButton
                 android:id="@+id/btn_profile"
