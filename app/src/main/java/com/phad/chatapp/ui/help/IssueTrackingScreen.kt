@@ -13,6 +13,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Attachment
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
@@ -21,6 +24,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -35,6 +40,23 @@ import com.phad.chatapp.models.IssueStatus
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+
+private val PaddingScreen = 16.dp
+private val PaddingDialog = 20.dp
+private val PaddingCardContent = 16.dp
+private val SpacingBtwDialogElements = 16.dp
+private val SpacingBtwCardElements = 8.dp
+private val SpacingBtwCardTextLines = 4.dp
+private val SpacingBeforeDialogButtons = 24.dp
+private val SpacingBottomList = 100.dp
+private val SpacingBtwListItems = 12.dp
+private val CornerRadiusDialog = 16.dp
+private val CornerRadiusCard = 12.dp
+private val CornerRadiusLoading = 8.dp
+private val ButtonHeightSmall = 32.dp
+private val IconSizeSmall = 16.dp
+private val LoadingOverlaySize = 100.dp
+private val FabBottomPadding = 72.dp
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -129,8 +151,8 @@ fun IssueTrackingScreen(
             FloatingActionButton(
                 onClick = { showComposeDialog = true },
                 containerColor = primaryColor,
-                contentColor = Color.White,
-                modifier = Modifier.padding(bottom = 72.dp)
+                contentColor = colorResource(id = R.color.ui_white),
+                modifier = Modifier.padding(bottom = FabBottomPadding)
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Compose Issue")
             }
@@ -158,8 +180,8 @@ fun IssueTrackingScreen(
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 100.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        contentPadding = PaddingValues(start = PaddingScreen, top = PaddingScreen, end = PaddingScreen, bottom = SpacingBottomList),
+                        verticalArrangement = Arrangement.spacedBy(SpacingBtwListItems)
                     ) {
                         items(issues) { issue ->
                             IssueItem(
@@ -179,12 +201,13 @@ fun IssueTrackingScreen(
         if (showComposeDialog) {
             ComposeIssueDialog(
                 onDismiss = { showComposeDialog = false },
-                onSubmit = { issue, uri ->
-                    viewModel.submitIssue(issue, uri)
+                onSubmit = { issue, uri, mimeType ->
+                    viewModel.submitIssue(issue, uri, mimeType)
                 },
                 userName = userName,
                 userRollNumber = userRollNumber,
                 userWings = userWings,
+                addressedToOptions = uiState.addressedToOptions,
                 isSubmitting = uiState.isSubmitting
             )
         }
@@ -216,8 +239,8 @@ fun IssueTrackingScreen(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(100.dp)
-                        .background(Color.White, shape = RoundedCornerShape(8.dp)),
+                        .size(LoadingOverlaySize)
+                        .background(colorResource(id = R.color.ui_white), shape = RoundedCornerShape(CornerRadiusLoading)),
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator(color = primaryColor)
@@ -243,10 +266,10 @@ fun IssueItem(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick(issue) },
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(CornerRadiusCard),
         colors = CardDefaults.cardColors(containerColor = surfaceColor)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(PaddingCardContent)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -264,7 +287,7 @@ fun IssueItem(
                     fontSize = 12.sp
                 )
             }
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(SpacingBtwCardElements))
             Text(
                 text = issue.subject,
                 color = onSurfaceColor,
@@ -273,7 +296,7 @@ fun IssueItem(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(SpacingBtwCardTextLines))
             Text(
                 text = if (issue.status == IssueStatus.CLOSED && issue.resolveComment != null) "Comment: ${issue.resolveComment}" else issue.description,
                 color = secondaryTextColor,
@@ -281,28 +304,32 @@ fun IssueItem(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(SpacingBtwCardElements))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "To: ${issue.addressedTo}",
                     color = secondaryTextColor,
                     fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
                 )
-                Spacer(modifier = Modifier.weight(1f))
+                Spacer(modifier = Modifier.width(8.dp))
                 if (issue.photoUrl != null) {
                     Icon(
                         Icons.Default.Attachment,
                         contentDescription = "Has Attachment",
                         tint = secondaryTextColor,
-                        modifier = Modifier.size(16.dp).padding(end = 8.dp)
+                        modifier = Modifier.size(20.dp)
                     )
+                    Spacer(modifier = Modifier.width(8.dp))
                 }
                 if (issue.status == IssueStatus.OPEN) {
                     OutlinedButton(
                         onClick = { onCloseIssue(issue) },
-                        modifier = Modifier.height(32.dp),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                        modifier = Modifier.height(ButtonHeightSmall),
+                        contentPadding = PaddingValues(horizontal = SpacingBtwListItems, vertical = 0.dp)
                     ) {
                         Text("Close", fontSize = 12.sp)
                     }
@@ -322,46 +349,75 @@ fun StudentIssueDetailDialog(
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(CornerRadiusDialog),
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(20.dp)
+                    .padding(PaddingDialog)
             ) {
                 Text(issue.category, fontSize = 12.sp, color = colorResource(id = R.color.ui_blue), fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(SpacingBtwCardElements))
                 
                 Text(issue.subject, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(SpacingBtwCardTextLines))
                 
-                Text(dateString, fontSize = 12.sp, color = Color.Gray)
-                Spacer(modifier = Modifier.height(16.dp))
+                Text(dateString, fontSize = 12.sp, color = colorResource(id = R.color.ui_gray))
+                Spacer(modifier = Modifier.height(SpacingBtwDialogElements))
                 
-                Text("Description", fontSize = 12.sp, color = Color.Gray)
+                Text("Description", fontSize = 12.sp, color = colorResource(id = R.color.ui_gray))
                 Text(issue.description, fontSize = 14.sp)
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(SpacingBtwDialogElements))
 
                 Text("Addressed To: ${issue.addressedTo}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 
-                if (issue.status == IssueStatus.CLOSED) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Divider(color = Color.LightGray, thickness = 1.dp)
-                    Spacer(modifier = Modifier.height(16.dp))
+                if (issue.photoUrl != null) {
+                    Spacer(modifier = Modifier.height(SpacingBtwDialogElements))
+                    val isPdf = issue.attachmentType?.contains("pdf") == true
+                    val isImage = issue.attachmentType?.startsWith("image/") == true || issue.attachmentType == null
+                    val context = LocalContext.current
                     
-                    Text("Resolution Details", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF4CAF50))
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = {
+                            if (isPdf) {
+                                com.phad.chatapp.utils.DownloadUtils.downloadAttachment(context, issue.photoUrl, isPdf = true, isImage = false)
+                            } else {
+                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(issue.photoUrl))
+                                context.startActivity(intent)
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = colorResource(id = R.color.ui_gray_light)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = if (isPdf) Icons.Default.PictureAsPdf else if (isImage) Icons.Default.Image else Icons.Default.InsertDriveFile,
+                            contentDescription = "View Attachment",
+                            modifier = Modifier.size(16.dp),
+                            tint = colorResource(id = R.color.ui_dark)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(if (isImage) "View Attached Photo" else "View Attached File", color = colorResource(id = R.color.ui_dark))
+                    }
+                }
+                
+                if (issue.status == IssueStatus.CLOSED) {
+                    Spacer(modifier = Modifier.height(SpacingBtwDialogElements))
+                    Divider(color = colorResource(id = R.color.ui_gray_light), thickness = 1.dp)
+                    Spacer(modifier = Modifier.height(SpacingBtwDialogElements))
+                    
+                    Text("Resolution Details", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = colorResource(id = R.color.issue_success))
+                    Spacer(modifier = Modifier.height(SpacingBtwCardElements))
                     
                     val closedByName = if (issue.resolvedByRollNumber == issue.rollNumber) "Self" else (issue.resolvedByName ?: "An Admin")
                     Text("Closed by: $closedByName", fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(SpacingBtwCardElements))
                     
-                    Text("Comment", fontSize = 12.sp, color = Color.Gray)
+                    Text("Comment", fontSize = 12.sp, color = colorResource(id = R.color.ui_gray))
                     Text(issue.resolveComment ?: "No comment provided.", fontSize = 14.sp)
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(SpacingBeforeDialogButtons))
                 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -388,18 +444,18 @@ fun CloseIssueDialog(
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(CornerRadiusDialog),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(PaddingScreen)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(20.dp)
+                    .padding(PaddingDialog)
             ) {
                 Text("Close Issue", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(SpacingBtwDialogElements))
 
                 OutlinedTextField(
                     value = comment,
@@ -415,16 +471,16 @@ fun CloseIssueDialog(
                     supportingText = { if (showError) Text("Please provide a reason") }
                 )
                 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(SpacingBeforeDialogButtons))
                 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
                     TextButton(onClick = onDismiss) {
-                        Text("Cancel", color = Color.Gray)
+                        Text("Cancel", color = colorResource(id = R.color.ui_gray))
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(SpacingBtwCardElements))
                     Button(
                         onClick = {
                             if (comment.isNotBlank()) {

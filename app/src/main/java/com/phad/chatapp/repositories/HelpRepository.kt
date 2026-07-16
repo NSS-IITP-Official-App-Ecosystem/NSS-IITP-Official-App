@@ -7,7 +7,7 @@ import com.phad.chatapp.models.ContactPerson
 import com.phad.chatapp.utils.Constants
 import kotlinx.coroutines.tasks.await
 
-class HelpRepository {
+object HelpRepository {
     private val firestore = FirebaseFirestore.getInstance()
     private val helpContactsCollection = firestore.collection("help_contacts")
     
@@ -41,6 +41,22 @@ class HelpRepository {
             } else {
                 Result.failure(e)
             }
+        }
+    }
+
+    private var cachedAllowedAddressedToDocs: List<String>? = null
+
+    suspend fun getAllowedIssueContactIds(forceRefresh: Boolean = false): List<String>? {
+        if (!forceRefresh && cachedAllowedAddressedToDocs != null) {
+            return cachedAllowedAddressedToDocs
+        }
+        return try {
+            val snapshot = firestore.collection("meta").document("issue_config").get().await()
+            val allowedIds = snapshot.get("allowedAddressedToDocs") as? List<String>
+            cachedAllowedAddressedToDocs = allowedIds
+            allowedIds
+        } catch (e: Exception) {
+            null
         }
     }
 

@@ -25,6 +25,21 @@ object FileStorageUtils {
     private const val TAG = "FileStorageUtils"
     
     /**
+     * Get the base media directory for the app like WhatsApp (Android/media/com.phad.chatapp/NSS App/)
+     */
+    private fun getMediaDir(context: Context, folderName: String): File {
+        val baseMediaDir = context.externalMediaDirs.firstOrNull()?.let {
+            File(it, "NSS App").apply { mkdirs() }
+        } ?: context.getExternalFilesDir(null)
+        
+        val specificDir = File(baseMediaDir, "Media/$folderName")
+        if (!specificDir.exists()) {
+            specificDir.mkdirs()
+        }
+        return specificDir
+    }
+    
+    /**
      * Upload an image to Google Drive
      *
      * @param context The context
@@ -239,14 +254,8 @@ object FileStorageUtils {
         val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
         val imageFileName = "JPEG_${timeStamp}_"
         
-        // Get the directory for storing images
-        val storageDir = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
-        val imageDir = File(storageDir, "ChatApp")
-        
-        // Ensure the directory exists
-        if (!imageDir.exists()) {
-            imageDir.mkdirs()
-        }
+        // Get the directory for storing images (Android/media/...)
+        val imageDir = getMediaDir(context, "NSS App Images")
         
         // Create the temporary file in the images directory
         return File.createTempFile(
@@ -263,11 +272,8 @@ object FileStorageUtils {
         try {
             Log.d(TAG, "Downloading document from: $url")
             
-            // Create directory for documents if it doesn't exist
-            val documentsDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "ChatApp")
-            if (!documentsDir.exists()) {
-                documentsDir.mkdirs()
-            }
+            // Create directory for documents if it doesn't exist (Android/media/...)
+            val documentsDir = getMediaDir(context, "NSS App Documents")
             
             val fileExtension = getFileExtensionFromUrl(url)
             
