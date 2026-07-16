@@ -827,6 +827,8 @@ fun ProfileScreen(
         )
     }
 }
+}
+
 
 @Composable
 fun StatItem(label: String, value: String, size: androidx.compose.ui.unit.TextUnit = 32.sp, color: Color) {
@@ -1183,6 +1185,8 @@ if (isAdmin && currentInterface == "NSS") {
         }
     )
 }
+
+
 
         // Event History - only for admins in NSS interface
         if (isAdmin && currentInterface == "NSS") {

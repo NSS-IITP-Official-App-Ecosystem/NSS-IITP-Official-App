@@ -65,6 +65,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -1134,6 +1135,10 @@ fun EditEventDialog(
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !isUpdating,
                     isError = showError && eventName.trim().isEmpty(),
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Sentences,
+                        keyboardType = KeyboardType.Text
+                    ),
                     supportingText = {
                         if (showError && eventName.trim().isEmpty()) {
                             Text(
@@ -1470,7 +1475,17 @@ fun EditEventDialog(
                         fontSize = 14.sp
                     )
                     Spacer(modifier = Modifier.height(8.dp))
+<<<<<<< HEAD
+                    val wings = listOf(
+                        "Teaching and Technical Wing",
+                        "Prerna Wing",
+                        "Rural Development Wing",
+                        "Environmental Wing",
+                        "Design and Curation Wing"
+                    )
+=======
                     val wings = com.phad.chatapp.utils.Constants.NSS_WINGS
+>>>>>>> a840bfda95bbd6c15108c1beb52c041581fb4689
                     
                     // Select All Checkbox
                     Row(
@@ -2564,6 +2579,10 @@ fun CreateEventDialog(
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !isCreating,
                         isError = showError && eventName.trim().isEmpty(),
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.Sentences,
+                            keyboardType = KeyboardType.Text
+                        ),
                         supportingText = {
                             if (showError && eventName.trim().isEmpty()) {
                                 Text(
@@ -2893,7 +2912,17 @@ fun CreateEventDialog(
                             fontSize = 14.sp
                         )
                         Spacer(modifier = Modifier.height(8.dp))
+<<<<<<< HEAD
+                        val wings = listOf(
+                            "Teaching and Technical Wing",
+                            "Prerna Wing",
+                            "Rural Development Wing",
+                            "Environmental Wing",
+                            "Design and Curation Wing"
+                        )
+=======
                         val wings = com.phad.chatapp.utils.Constants.NSS_WINGS
+>>>>>>> a840bfda95bbd6c15108c1beb52c041581fb4689
                         
                         // Select All Checkbox
                         Row(
