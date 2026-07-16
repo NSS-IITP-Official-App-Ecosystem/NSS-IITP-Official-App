@@ -17,10 +17,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.QrCode
+import androidx.compose.material.icons.filled.AssignmentTurnedIn
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.People
-import androidx.compose.material.icons.filled.Refresh
 
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Category
@@ -48,8 +47,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import androidx.compose.material3.*
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+
 import androidx.compose.ui.window.Dialog
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -96,6 +94,8 @@ import com.phad.chatapp.ui.attendance.VolunteerPenaltyDialog
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.runtime.rememberCoroutineScope
 
 /**
  * Fragment for Admin QR Attendance - Take Attendance functionality
@@ -168,6 +168,8 @@ class NssQRAttendanceFragment : Fragment() {
         return ComposeView(requireContext()).apply {
             setContent {
                 val uiState by viewModel.adminUiState.collectAsState()
+                var eventToNotify by remember { mutableStateOf<AttendanceEvent?>(null) }
+                val coroutineScope = rememberCoroutineScope()
                 
                 // Show location dialog if needed
                 if (showLocationDialog) {
@@ -179,6 +181,33 @@ class NssQRAttendanceFragment : Fragment() {
                         onDismiss = {
                             showLocationDialog = false
                             pendingStartEvent = null
+                        }
+                    )
+                }
+                
+                if (eventToNotify != null) {
+                    NotifyEventDialog(
+                        event = eventToNotify!!,
+                        onDismiss = { eventToNotify = null },
+                        onSend = { title, body ->
+                            val event = eventToNotify!!
+                            eventToNotify = null
+                            coroutineScope.launch {
+                                val result = viewModel.notifyEvent(
+                                    eventId = event.id,
+                                    title = title,
+                                    body = body,
+                                    targetWings = event.wings
+                                )
+                                result.fold(
+                                    onSuccess = { msg ->
+                                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                    },
+                                    onFailure = { err ->
+                                        Toast.makeText(context, err.message ?: "Failed to notify", Toast.LENGTH_LONG).show()
+                                    }
+                                )
+                            }
                         }
                     )
                 }
@@ -262,6 +291,9 @@ class NssQRAttendanceFragment : Fragment() {
                     },
                     onApplyPenalty = {
                         viewModel.refreshAvailableEvents()
+                    },
+                    onNotifyEvent = { event ->
+                        eventToNotify = event
                     }
                 )
             }
@@ -332,7 +364,8 @@ fun QRAttendanceAdminScreen(
     onDismissRollResults: () -> Unit, // Dismiss roll results dialog
     onAddManualAttendance: (AttendanceEvent, String) -> Unit, // Manual attendance callback
     onMarkAbsent: (AttendanceEvent, String) -> Unit, // Mark absent callback
-    onApplyPenalty: () -> Unit
+    onApplyPenalty: () -> Unit,
+    onNotifyEvent: (AttendanceEvent) -> Unit
 ) {
     // Scroll state for events list (hoisted to persist across navigation/dialogs)
     val eventsListState = rememberLazyListState()
@@ -439,7 +472,8 @@ fun QRAttendanceAdminScreen(
                 FloatingActionButton(
                     onClick = onShowCreateDialog,
                     containerColor = Color(0xFF2196F3),
-                    contentColor = Color.White
+                    contentColor = Color.White,
+                    modifier = Modifier.padding(bottom = 80.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Add,
@@ -449,70 +483,68 @@ fun QRAttendanceAdminScreen(
             }
         }
     ) { paddingValues ->
-        val pullRefreshState = rememberPullToRefreshState()
-        val refreshScope = rememberCoroutineScope()
+        val coroutineScope = rememberCoroutineScope()
+        val pullRefreshState = androidx.compose.material3.pulltorefresh.rememberPullToRefreshState()
         var isRefreshing by remember { mutableStateOf(false) }
 
         val onRefresh: () -> Unit = {
             isRefreshing = true
-            refreshScope.launch {
+            coroutineScope.launch {
                 onLoadEvents()
+                // Give Firestore listener time to push updated data before hiding spinner
+                kotlinx.coroutines.delay(1500)
                 isRefreshing = false
             }
         }
 
-        PullToRefreshBox(
-            isRefreshing = isRefreshing,
-            onRefresh = onRefresh,
-            state = pullRefreshState,
+        Column(
             modifier = Modifier
                 .fillMaxSize()
+                .background(Color(0xFFF5F5F5))
                 .padding(bottom = paddingValues.calculateBottomPadding())
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color(0xFFF5F5F5))
-                    // Removed parent padding(16.dp) to extend header
-            ) {
-                // Header with back button - Full Width
-                GradientHeader(
-                    title = "QR Attendance",
-                    icon = Icons.Default.QrCode,
-                    onBackClick = null,
-                    isTitleCentered = true
-                    // Removed refresh action
-                )
+            // Header stays OUTSIDE PullToRefreshBox — indicator will never overlap it
+            GradientHeader(
+                title = "Attendance",
+                icon = Icons.Default.AssignmentTurnedIn,
+                onBackClick = null,
+                isTitleCentered = true
+            )
 
-                if (!uiState.isSessionActive) {
-                    TabRow(
-                        selectedTabIndex = selectedTab,
-                        containerColor = Color.White,
-                        contentColor = Color(0xFF2196F3)
-                    ) {
-                        Tab(
-                            selected = selectedTab == 0,
-                            onClick = { selectedTab = 0 },
-                            text = { Text("Events", fontWeight = FontWeight.Bold) }
-                        )
-                        Tab(
-                            selected = selectedTab == 1,
-                            onClick = { selectedTab = 1 },
-                            text = { Text("Pending Photos", fontWeight = FontWeight.Bold) }
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp)) // Increased spacing below header
-
-                // Content container with padding
-                Column(
-                     modifier = Modifier
-                         .fillMaxWidth()
-                         .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
+            if (!uiState.isSessionActive) {
+                TabRow(
+                    selectedTabIndex = selectedTab,
+                    containerColor = Color.White,
+                    contentColor = Color(0xFF2196F3)
                 ) {
-                    // Spacer removed
-    
+                    Tab(
+                        selected = selectedTab == 0,
+                        onClick = { selectedTab = 0 },
+                        text = { Text("Events", fontWeight = FontWeight.Bold) }
+                    )
+                    Tab(
+                        selected = selectedTab == 1,
+                        onClick = { selectedTab = 1 },
+                        text = { Text("Pending Photos", fontWeight = FontWeight.Bold) }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // PullToRefreshBox wraps only the content area below header+tabs
+            // so its spinner appears there, never over the header
+            androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+                isRefreshing = isRefreshing,
+                onRefresh = onRefresh,
+                state = pullRefreshState,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
+                ) {
                     if (selectedTab == 1 && !uiState.isSessionActive) {
                         PendingVerificationsScreen(
                             pendingRecords = pendingPhotos,
@@ -520,7 +552,7 @@ fun QRAttendanceAdminScreen(
                             error = pendingFetchError,
                             eventList = uiState.availableEvents,
                             onVerifyClick = { record, isApprove ->
-                                refreshScope.launch {
+                                coroutineScope.launch {
                                     isLoadingPending = true
                                     val res = PhotoAttendanceManager.verifyPhoto(
                                         logId = record.id,
@@ -562,6 +594,7 @@ fun QRAttendanceAdminScreen(
                                 onAddManualAttendance = onAddManualAttendance, // Pass manual attendance callback
                                 onMarkAbsent = onMarkAbsent, // Pass mark absent callback
                                 onApplyPenalty = { event -> penaltyEvent = event },
+                                onNotifyEvent = onNotifyEvent,
                                 listState = eventsListState
                             )
                         } else {
@@ -574,7 +607,6 @@ fun QRAttendanceAdminScreen(
                     }
                 }
             }
-            
         }
     }
 
@@ -612,6 +644,7 @@ fun EventSelectionScreen(
     onAddManualAttendance: (AttendanceEvent, String) -> Unit,
     onMarkAbsent: (AttendanceEvent, String) -> Unit,
     onApplyPenalty: (AttendanceEvent) -> Unit,
+    onNotifyEvent: (AttendanceEvent) -> Unit,
     listState: androidx.compose.foundation.lazy.LazyListState // Added list state
 ) {
     // State for Search and Filters
@@ -1012,7 +1045,8 @@ fun EventSelectionScreen(
                         onDownloadPDF = onGeneratePDF,
                         onAddManualAttendance = onAddManualAttendance,
                         onMarkAbsent = onMarkAbsent,
-                        onApplyPenalty = onApplyPenalty
+                        onApplyPenalty = onApplyPenalty,
+                        onNotify = onNotifyEvent
                     )
                 }
             }
@@ -1763,7 +1797,8 @@ fun EventCard(
     onDownloadPDF: ((AttendanceEvent) -> Unit)? = null, // PDF download callback
     onAddManualAttendance: ((AttendanceEvent, String) -> Unit)? = null, // Manual attendance callback
     onMarkAbsent: ((AttendanceEvent, String) -> Unit)? = null, // Mark absent callback
-    onApplyPenalty: ((AttendanceEvent) -> Unit)? = null
+    onApplyPenalty: ((AttendanceEvent) -> Unit)? = null,
+    onNotify: ((AttendanceEvent) -> Unit)? = null
 ) {
     var isDescriptionExpanded by remember { mutableStateOf(false) }
     var showManualRollDialog by remember { mutableStateOf(false) }
@@ -2109,6 +2144,36 @@ fun EventCard(
                         ) {
                             Text(
                                 text = "Attendance log",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+                
+                // Third row: Notify Users
+                if (event.getEventStatus() == AttendanceEvent.STATUS_LIVE && onNotify != null) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 2.dp),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Button(
+                            onClick = { onNotify(event) },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF673AB7)),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.height(48.dp),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.NotificationsActive,
+                                contentDescription = "Notify",
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Notify Users",
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Medium
                             )
@@ -3610,5 +3675,84 @@ fun PendingVerificationsScreen(
             }
         }
     }
+}
+
+
+@Composable
+fun NotifyEventDialog(
+    event: AttendanceEvent,
+    onDismiss: () -> Unit,
+    onSend: (String, String) -> Unit
+) {
+    var title by remember { mutableStateOf("NSS Event Reminder") }
+    // Clean up event ID to be readable
+    val displayEventName = event.id.split("_").let { parts ->
+        if (parts.size >= 3) parts.drop(2).joinToString(" ") else event.id
+    }
+    
+    var body by remember { mutableStateOf("Reminder: $displayEventName is currently live. Please mark your attendance.") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(text = "Send Notification", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "A push notification will be sent to users of: ${if (event.wings.isEmpty()) "All Wings" else event.getDisplayWings()}.",
+                    fontSize = 14.sp,
+                    color = Color.Gray,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Notification Title") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = body,
+                    onValueChange = { body = it },
+                    label = { Text("Notification Message") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3,
+                    maxLines = 5
+                )
+                
+                if (event.lastNotifiedAt != null) {
+                    val lastTime = event.lastNotifiedAt.toDate().time
+                    val diffMins = (System.currentTimeMillis() - lastTime) / (1000 * 60)
+                    if (diffMins < 10) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Warning: Last notification was sent ${diffMins}m ago. The server enforces a 10-minute cooldown.",
+                            color = Color.Red,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (title.isNotBlank() && body.isNotBlank()) {
+                        onSend(title.trim(), body.trim())
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF673AB7))
+            ) {
+                Text("Send")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = Color.Gray)
+            }
+        }
+    )
 }
 

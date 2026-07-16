@@ -802,20 +802,19 @@ const parseMultipart = (req, res, next) => {
 /**
  * Endpoint: POST /api/attendance/submit-photo
  * Accept multipart/form-data with fields: userId, eventId, latitude, longitude and file: image
+ * Photos are uploaded to Firebase Storage (permanent) instead of /tmp (ephemeral).
  */
 app.post('/api/attendance/submit-photo', parseMultipart, async (req, res) => {
   try {
     console.log('[submit-photo] Received request');
     const decoded = await verifyAuthToken(req);
-    
+
     const { userId, eventId, latitude, longitude } = req.body;
     const file = req.file;
 
     if (!userId || !eventId || !latitude || !longitude || !file) {
       console.warn('[submit-photo] Missing required fields or file');
-      if (file && fs.existsSync(file.path)) {
-        fs.unlinkSync(file.path);
-      }
+      if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
       return res.status(400).json({ error: 'Missing required fields (userId, eventId, latitude, longitude) or image file' });
     }
 
@@ -823,20 +822,49 @@ app.post('/api/attendance/submit-photo', parseMultipart, async (req, res) => {
     console.log(`[submit-photo] User: ${rollNoUpper}, Event: ${eventId}, Lat: ${latitude}, Lon: ${longitude}`);
 
     const db = admin.firestore();
+    const projectId = process.env.GCLOUD_PROJECT || 'nssiitp-app';
 
-    // Fetch user's name from Firestore users collection
+    // Fetch user's name from Firestore
     const userSnap = await db.collection('users').doc(rollNoUpper).get();
     const userData = userSnap.data() || {};
     const userName = userData.name || 'Unknown Student';
 
-    // Construct photo url to serve this image from /tmp
-    const projectId = process.env.GCLOUD_PROJECT || 'nssiitp-app';
     let photoUrl;
+    let storagePath = null;
+
     if (process.env.FUNCTIONS_EMULATOR === 'true') {
+      // In emulator: serve from /tmp as before (Storage emulator may not be running)
       const incomingHost = req.get('host') || '127.0.0.1:5001';
       photoUrl = `http://${incomingHost}/${projectId}/asia-south1/attendance/api/attendance/photo/${file.filename}`;
+      console.log('[submit-photo] Emulator mode: using /tmp photo URL');
     } else {
-      photoUrl = `https://asia-south1-${projectId}.cloudfunctions.net/attendance/api/attendance/photo/${file.filename}`;
+      // Production: upload to Firebase Storage for permanent storage
+      console.log(`[submit-photo] Uploading photo to Firebase Storage for ${rollNoUpper}`);
+      const bucket = admin.storage().bucket(`${projectId}.appspot.com`);
+      const storageDest = `photo_attendance/${eventId}/${rollNoUpper}_${file.filename}`;
+      storagePath = storageDest;
+
+      await bucket.upload(file.path, {
+        destination: storageDest,
+        metadata: {
+          contentType: file.mimetype || 'image/jpeg',
+          metadata: {
+            uploadedBy: rollNoUpper,
+            eventId: eventId
+          }
+        }
+      });
+
+      // Generate a signed URL valid for 7 days so admin can view the photo
+      const [signedUrl] = await bucket.file(storageDest).getSignedUrl({
+        action: 'read',
+        expires: Date.now() + 7 * 24 * 60 * 60 * 1000 // 7 days
+      });
+      photoUrl = signedUrl;
+      console.log(`[submit-photo] Photo uploaded to Storage at ${storageDest}`);
+
+      // Clean up local /tmp file after successful Storage upload
+      if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
     }
 
     const docId = `${eventId}_${rollNoUpper}`;
@@ -848,7 +876,8 @@ app.post('/api/attendance/submit-photo', parseMultipart, async (req, res) => {
       latitude: parseFloat(latitude),
       longitude: parseFloat(longitude),
       photo_url: photoUrl,
-      photo_filename: file.filename, // Store filename to make deletion easy
+      photo_filename: file.filename,
+      storage_path: storagePath,  // Firebase Storage path for permanent deletion
       verification_status: 'Pending',
       attendance_method: 'Photo_GPS',
       submittedAt: Timestamp.now()
@@ -860,9 +889,7 @@ app.post('/api/attendance/submit-photo', parseMultipart, async (req, res) => {
     res.status(200).json({ ok: true, id: docId });
   } catch (err) {
     console.error('[submit-photo] Error:', err);
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
-    }
+    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
     const status = err.status || 500;
     res.status(status).json({ error: err.message || 'Internal server error' });
   }
@@ -1039,18 +1066,31 @@ app.put('/api/attendance/verify/:id', async (req, res) => {
       verifiedBy: adminRollNumber || adminRoll
     });
 
-    // 4. Delete physical photo from os.tmpdir() ONLY after DB transaction/update succeeds
-    if (photo_filename) {
-      const filePath = path.join(os.tmpdir(), path.basename(photo_filename));
-      try {
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-          console.log(`[verify] Deleted file: ${filePath}`);
-        } else {
-          console.warn(`[verify] File not found for deletion: ${filePath}`);
+    // 4. Delete photo from Firebase Storage (production) or /tmp (emulator) after DB update succeeds
+    const { storage_path } = logData;
+    if (process.env.FUNCTIONS_EMULATOR === 'true') {
+      // Emulator: delete from /tmp
+      if (photo_filename) {
+        const filePath = path.join(os.tmpdir(), path.basename(photo_filename));
+        try {
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            console.log(`[verify] Deleted /tmp file: ${filePath}`);
+          }
+        } catch (fileErr) {
+          console.error(`[verify] Failed to delete /tmp file:`, fileErr);
         }
-      } catch (fileErr) {
-        console.error(`[verify] Failed to delete file ${filePath}:`, fileErr);
+      }
+    } else if (storage_path) {
+      // Production: delete from Firebase Storage
+      const projectId = process.env.GCLOUD_PROJECT || 'nssiitp-app';
+      try {
+        const bucket = admin.storage().bucket(`${projectId}.appspot.com`);
+        await bucket.file(storage_path).delete({ ignoreNotFound: true });
+        console.log(`[verify] Deleted Storage file: ${storage_path}`);
+      } catch (storageErr) {
+        // Non-fatal: log but don't fail the verification
+        console.error(`[verify] Failed to delete Storage file ${storage_path}:`, storageErr);
       }
     }
 
@@ -1058,6 +1098,90 @@ app.put('/api/attendance/verify/:id', async (req, res) => {
     res.status(200).json({ ok: true, status });
   } catch (err) {
     console.error('[verify] Error:', err);
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || 'Internal server error' });
+  }
+});
+
+/**
+ * Endpoint: POST /api/attendance/notify
+ * Sends push notifications to FCM topics for an event. Includes a 10-min cooldown.
+ */
+app.post('/api/attendance/notify', async (req, res) => {
+  try {
+    console.log('[notify] Notification request received');
+    await verifyAuthToken(req); // Ensure caller is authenticated
+
+    const { eventId, title, body, targetWings } = req.body;
+    if (!eventId || !title || !body) {
+      return res.status(400).json({ error: 'Missing required fields: eventId, title, body' });
+    }
+
+    const db = admin.firestore();
+    const eventRef = db.collection('NSS_Events_Attendence').doc(eventId);
+    let topicsToNotify = [];
+
+    await db.runTransaction(async (tx) => {
+      const eventSnap = await tx.get(eventRef);
+      if (!eventSnap.exists) {
+        throw Object.assign(new Error('Event not found'), { status: 404 });
+      }
+
+      const data = eventSnap.data();
+      const lastNotifiedAt = data.lastNotifiedAt;
+
+      // Check 10-minute cooldown
+      if (lastNotifiedAt) {
+        const lastTime = lastNotifiedAt.toMillis();
+        const now = Date.now();
+        const diffMins = (now - lastTime) / (1000 * 60);
+        if (diffMins < 10) {
+          throw Object.assign(
+            new Error(`Please wait ${Math.ceil(10 - diffMins)} minutes before notifying again.`), 
+            { status: 429 }
+          );
+        }
+      }
+
+      // Allow sending, update timestamp
+      tx.update(eventRef, {
+        lastNotifiedAt: Timestamp.now()
+      });
+    });
+
+    // Determine target topics
+    if (!targetWings || targetWings.length === 0 || targetWings.includes('all')) {
+      topicsToNotify.push('all');
+    } else {
+      targetWings.forEach(wing => {
+        // Format wing exactly like ChatApplication.kt does
+        const formattedWing = "wing_" + wing.toLowerCase().replace(/ /g, "_").replace(/&/g, "and");
+        topicsToNotify.push(formattedWing);
+      });
+    }
+
+    // Send using admin.messaging()
+    if (topicsToNotify.length > 0) {
+      const notification = { title, body };
+      
+      if (topicsToNotify.includes('all')) {
+        await admin.messaging().send({
+          notification,
+          topic: 'all'
+        });
+      } else {
+        const condition = topicsToNotify.map(t => `'${t}' in topics`).join(' || ');
+        await admin.messaging().send({
+          notification,
+          condition: condition
+        });
+      }
+    }
+
+    console.log(`[notify] Notification sent for event ${eventId} to topics: ${topicsToNotify.join(', ')}`);
+    res.status(200).json({ ok: true, message: 'Notification sent successfully' });
+  } catch (err) {
+    console.error('[notify] Error:', err);
     const status = err.status || 500;
     res.status(status).json({ error: err.message || 'Internal server error' });
   }
