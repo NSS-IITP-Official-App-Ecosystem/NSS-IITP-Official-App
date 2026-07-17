@@ -41,15 +41,8 @@ object PlayIntegrityManager {
             } catch (e: Exception) {
                 null
             } ?: "nssiitp-app"
-            return if (com.phad.chatapp.BuildConfig.DEBUG) {
-                val isEmulator = android.os.Build.FINGERPRINT.startsWith("generic") || 
-                                 android.os.Build.MODEL.contains("google_sdk") || 
-                                 android.os.Build.MODEL.contains("Emulator")
-                val host = if (isEmulator) "10.0.2.2" else "127.0.0.1"
-                "http://$host:5001/$projId/asia-south1/verifyPlayIntegrity"
-            } else {
-                "https://asia-south1-$projId.cloudfunctions.net/verifyPlayIntegrity"
-            }
+            // Use production Cloud Functions URL
+            return "https://asia-south1-$projId.cloudfunctions.net/verifyPlayIntegrity"
         }
 
     // Shared Preferences for Integrity Cache

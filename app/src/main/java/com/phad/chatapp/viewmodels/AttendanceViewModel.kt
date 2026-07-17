@@ -301,8 +301,11 @@ class AttendanceViewModel(private val application: Application) : ViewModel() {
             val idToken = auth.currentUser?.getIdToken(false)?.await()?.token
                 ?: return Result.failure(Exception("Not authenticated"))
 
-            // TODO: Replace with actual NSS IITP Functions URL after deployment
-            val url = "https://asia-south1-chatapp-24fae.cloudfunctions.net/applyAbsentPenalty"
+            val projId = try {
+                com.google.firebase.FirebaseApp.getInstance().options.projectId
+            } catch (e: Exception) { null } ?: "nssiitp-app"
+            // Use production Cloud Functions URL
+            val url = "https://asia-south1-$projId.cloudfunctions.net/applyAbsentPenalty"
             
             val client = java.net.URL(url).openConnection() as java.net.HttpURLConnection
             client.requestMethod = "POST"

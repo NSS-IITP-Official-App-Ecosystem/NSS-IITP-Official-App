@@ -4,12 +4,14 @@ import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
 import com.google.firebase.firestore.PropertyName
 import com.google.firebase.firestore.Exclude
+import com.google.firebase.firestore.IgnoreExtraProperties
 
 /**
  * Model class representing a consolidated attendance event in the NSS_Events_Attendence collection
  * This model combines event metadata with attendee records in a single document
  * Document ID format: {day}_{month}_{event_name_with_underscores}
  */
+@IgnoreExtraProperties
 data class AttendanceEvent(
     @DocumentId
     val id: String = "", // Format: "{day}_{month}_{event_name_with_underscores}"

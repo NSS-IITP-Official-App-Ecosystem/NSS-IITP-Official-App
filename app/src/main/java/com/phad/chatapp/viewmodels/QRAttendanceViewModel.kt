@@ -250,76 +250,6 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                     onSuccess = { eventId ->
                         Log.d(TAG, "Event created successfully with ID: $eventId")
                         
-                        // Send Notification for the event
-                        // VOTA (Visible Only To Attendees) events are private — skip notifications
-                        // entirely to avoid confusion for users who aren't attending.
-                        if (!visibleOnlyToPresent) {
-                            try {
-                                val eventType = if (isMandatory) "Mandatory Event" else "Event"
-                                val title = "$eventType: $name"
-                                val message = "A new ${if (isMandatory) "mandatory " else ""}event '$name' has been scheduled on $dateString from $timeRangeString. Location: $location"
-
-                                // An event is "open" (targets all) if wings list covers all wings by SIZE >= 6 or if it's a Design and Curation Wing event
-                                val isOpenEvent = wings.isEmpty() || wings.size >= com.phad.chatapp.models.AttendanceEvent.ALL_WINGS.size || wings.contains("Design and Curation Wing")
-                                val targetTopics = if (isOpenEvent) {
-                                    listOf("all")
-                                } else {
-                                    wings.map { "wing_" + it.lowercase().replace(" ", "_").replace("&", "and") }
-                                }
-
-                                val notificationData = hashMapOf<String, Any>(
-                                    "title" to title,
-                                    "body" to message,
-                                    "targetRole" to "all",
-                                    "targetWing" to "all",
-                                    "targetTopics" to targetTopics,
-                                    "type" to "EVENT_NOTIFICATION",
-                                    "creatorId" to _adminUiState.value.adminId,
-                                    "isRead" to false,
-                                    "timestamp" to com.google.firebase.Timestamp.now()
-                                )
-                                com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("app_notifications").add(notificationData)
-                                    .addOnSuccessListener { Log.d(TAG, "Successfully created app_notification for event broadcast") }
-                                    .addOnFailureListener { e -> Log.e(TAG, "Failed to create app_notification for event", e) }
-
-                                // Trigger Vercel FCM Push
-                                targetTopics.forEach { topic ->
-                                    viewModelScope.launch {
-                                        com.phad.chatapp.utils.FcmSender.sendToTopic(
-                                            topic = topic,
-                                            title = title,
-                                            body = message
-                                        )
-                                    }
-                                }
-                                // Schedule 1-hour reminder for mandatory events
-                                if (isMandatory) {
-                                    val delayMs = openingTime.time - System.currentTimeMillis() - (60 * 60 * 1000L)
-                                    if (delayMs > 0) {
-                                        val reminderTitle = "⏰ Mandatory Event Starting Soon: $name"
-                                        val reminderBody = "The mandatory event '$name' starts in 1 hour at $timeRangeString. Location: $location"
-                                        val reminderWork = OneTimeWorkRequestBuilder<com.phad.chatapp.workers.EventReminderWorker>()
-                                            .setInitialDelay(delayMs, TimeUnit.MILLISECONDS)
-                                            .setInputData(workDataOf(
-                                                "title" to reminderTitle,
-                                                "body" to reminderBody,
-                                                "topics" to targetTopics.joinToString(",")
-                                            ))
-                                            .addTag("event_reminder_$eventId")
-                                            .build()
-                                        WorkManager.getInstance(application).enqueue(reminderWork)
-                                        Log.d(TAG, "Scheduled 1-hr reminder for mandatory event '$name' in ${delayMs / 60000} min")
-                                    } else {
-                                        Log.d(TAG, "Skipping reminder: event starts in less than 1 hour")
-                                    }
-                                }
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Error creating event notification or reminder", e)
-                            }
-                        } else {
-                            Log.d(TAG, "Skipping notification for VOTA event '$name' — visible only to attendees")
-                        }
-
                         _adminUiState.value = _adminUiState.value.copy(
                             isCreatingEvent = false,
                             showCreateEventDialog = false,
@@ -367,6 +297,53 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
             createEventSuccess = false,
             errorMessage = null
         )
+    }
+
+    /**
+     * Schedule a cloud-based notification for an event at a custom time.
+     * @param eventId The Firestore event document ID
+     * @param title Notification title (admin-editable, defaulted from event info)
+     * @param body Notification body (admin-editable, defaulted from event info)
+     * @param scheduledAtMs Unix timestamp (ms) when the notification should be sent
+     * @param targetWings Wings to target; empty list means all students
+     * @return Firestore document ID of the scheduled notification, or null on failure
+     */
+    fun scheduleNotification(
+        eventId: String,
+        title: String,
+        body: String,
+        scheduledAtMs: Long,
+        targetWings: List<String>
+    ) {
+        viewModelScope.launch {
+            try {
+                val id = com.phad.chatapp.network.BackendApi.scheduleNotification(
+                    eventId = eventId,
+                    title = title,
+                    body = body,
+                    scheduledAtMs = scheduledAtMs,
+                    targetWings = targetWings
+                )
+                Log.d(TAG, "Scheduled notification $id for event $eventId at $scheduledAtMs")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to schedule notification for event $eventId", e)
+            }
+        }
+    }
+
+    /**
+     * Cancel a pending scheduled notification.
+     * @param notificationId Firestore document ID of the scheduledNotifications doc
+     */
+    fun deleteScheduledNotification(notificationId: String) {
+        viewModelScope.launch {
+            try {
+                com.phad.chatapp.network.BackendApi.deleteScheduledNotification(notificationId)
+                Log.d(TAG, "Cancelled scheduled notification $notificationId")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to cancel notification $notificationId", e)
+            }
+        }
     }
 
     /**
@@ -2250,14 +2227,14 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                 val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
                 val eventRef = db.collection("NSS_Events_Attendence").document(eventId)
 
-                // 1. Enforce 10-minute cooldown via Firestore transaction
+                // 1. Enforce 30-minute cooldown via Firestore transaction
                 db.runTransaction { tx ->
                     val snap = tx.get(eventRef)
                     val lastNotifiedAt = snap.getTimestamp("lastNotifiedAt")
                     if (lastNotifiedAt != null) {
                         val diffMins = (System.currentTimeMillis() - lastNotifiedAt.toDate().time) / (1000.0 * 60)
-                        if (diffMins < 10) {
-                            val remaining = Math.ceil(10 - diffMins).toLong()
+                        if (diffMins < 30) {
+                            val remaining = Math.ceil(30 - diffMins).toLong()
                             throw Exception("Please wait $remaining more minute(s) before sending another notification.")
                         }
                     }

@@ -1,0 +1,5 @@
+firebase-admin
+pandas
+fpdf
+google-cloud-firestore
+python-dateutil

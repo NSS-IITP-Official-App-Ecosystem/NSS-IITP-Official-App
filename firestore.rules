@@ -59,6 +59,15 @@ service cloud.firestore {
       allow update: if isAuthenticated(); // Allow students to mark attendance by updating attendees array
     }
 
+    // Users collection - Allow public read for login verification (roll number checking)
+    // Allow authenticated users to update their own document, admins can manage all
+    match /users/{userId} {
+      allow get: if true; // Needed for LoginFormActivity findCorrectRollNumberCase before auth
+      allow list: if isAuthenticated();
+      allow create, update: if isOwner(userId) || isAdminByUID();
+      allow delete: if isAdminByUID();
+    }
+
     // Legacy collections for backward compatibility
     match /attendance_events/{eventId} {
       allow read: if isAuthenticated();
@@ -90,5 +99,12 @@ service cloud.firestore {
         allow read, write: if isAuthenticated();
       }
     }
+
+    // Scheduled push notifications — written only by Cloud Functions (Admin SDK, bypasses rules)
+    // Admins can read to verify scheduled reminders; no client writes allowed
+    match /scheduledNotifications/{notifId} {
+      allow read: if isAdminByUID();
+      allow write: if false; // Only Cloud Functions write here via Admin SDK
+    }
   }
-}
+}
