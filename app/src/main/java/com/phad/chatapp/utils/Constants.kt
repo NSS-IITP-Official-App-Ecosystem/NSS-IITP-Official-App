@@ -19,16 +19,14 @@ object Constants {
     }
     
     const val WING_TTW = "Teaching and Technical Wing"
-    const val WING_CHN = "Chetna Wing"
-    const val WING_PRY = "Prayatna Wing"
+    const val WING_PRN = "Prerna Wing"
     const val WING_RDW = "Rural Development Wing"
     const val WING_ENV = "Environmental Wing"
     const val WING_DCW = "Design and Curation Wing"
     
     val NSS_WINGS = listOf(
         WING_TTW,
-        WING_CHN,
-        WING_PRY,
+        WING_PRN,
         WING_RDW,
         WING_ENV,
         WING_DCW

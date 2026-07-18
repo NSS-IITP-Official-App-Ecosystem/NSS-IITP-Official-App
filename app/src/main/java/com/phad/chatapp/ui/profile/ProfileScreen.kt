@@ -827,7 +827,6 @@ fun ProfileScreen(
         )
     }
 }
-}
 
 
 @Composable
