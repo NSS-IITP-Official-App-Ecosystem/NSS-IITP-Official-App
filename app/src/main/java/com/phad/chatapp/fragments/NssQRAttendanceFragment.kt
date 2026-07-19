@@ -1,6 +1,9 @@
 package com.phad.chatapp.fragments
 
 import android.os.Bundle
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
@@ -400,20 +403,23 @@ fun QRAttendanceAdminScreen(
             result.fold(
                 onSuccess = { photos -> 
                     pendingPhotos = photos
-                    photos.forEach { record ->
-                        launch(kotlinx.coroutines.Dispatchers.IO) {
-                            val userResult = com.phad.chatapp.repositories.UserRepository().getUserByRollNumber(record.rollNumber)
-                            userResult.getOrNull()?.let { user ->
-                                val wingsStr = user.wings.joinToString(", ")
-                                if (wingsStr.isNotEmpty()) {
-                                    val currentList = pendingPhotos.toMutableList()
-                                    val index = currentList.indexOfFirst { it.id == record.id }
-                                    if (index != -1) {
-                                        currentList[index] = record.copy(wing = wingsStr)
-                                        pendingPhotos = currentList
+                    launch(kotlinx.coroutines.Dispatchers.IO) {
+                        val photosWithWings = coroutineScope {
+                            photos.map { record ->
+                                async {
+                                    val userResult = com.phad.chatapp.repositories.UserRepository().getUserByRollNumber(record.rollNumber.trim())
+                                    val wingsStr = userResult.getOrNull()?.wings?.joinToString(", ")
+                                    if (!wingsStr.isNullOrEmpty()) {
+                                        record.copy(wing = wingsStr)
+                                    } else {
+                                        record
                                     }
                                 }
-                            }
+                            }.awaitAll()
+                        }
+                        
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            pendingPhotos = photosWithWings
                         }
                     }
                 },
@@ -2169,8 +2175,19 @@ fun EventCard(
                     }
                 }
                 
+                // Determine if event date is in the past
+                val isPastEvent = try {
+                    val today = java.util.Calendar.getInstance().apply {
+                        set(java.util.Calendar.HOUR_OF_DAY, 0)
+                        set(java.util.Calendar.MINUTE, 0)
+                        set(java.util.Calendar.SECOND, 0)
+                        set(java.util.Calendar.MILLISECOND, 0)
+                    }.time
+                    event.getEventDateAsDate().before(today)
+                } catch (e: Exception) { false }
+
                 // Third row: Notify Users
-                if (event.getEventStatus() == AttendanceEvent.STATUS_LIVE && onNotify != null) {
+                if (event.getEventStatus() == AttendanceEvent.STATUS_LIVE && !isPastEvent && onNotify != null) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
