@@ -159,6 +159,20 @@
             app:layout_constraintBottom_toTopOf="@id/message_input_container"
             tools:listitem="@layout/item_message" />
 
+        <!-- Mentions Autocomplete RecyclerView (initially hidden) -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/mentions_recycler_view"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="@dimen/spacing_medium"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/bg_mentions_popup"
+            android:elevation="4dp"
+            android:visibility="gone"
+            app:layout_constraintBottom_toTopOf="@id/message_input_container"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
         <!-- Message Input Container -->
         <androidx.cardview.widget.CardView
             android:id="@+id/message_input_container"

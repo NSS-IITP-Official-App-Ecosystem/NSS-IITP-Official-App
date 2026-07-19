@@ -79,6 +79,9 @@ class GroupChatActivity : AppCompatActivity() {
     private val allMessages = mutableListOf<Message>()
     private var isSearchActive = false
     
+    private lateinit var mentionAutocompleteAdapter: com.phad.chatapp.adapters.MentionAutocompleteAdapter
+    private var currentMentionStart: Int = -1
+    
     companion object {
         private const val TAG = "GroupChatActivity"
         private const val GROUP_NOT_FOUND_MSG = "Group not found"
@@ -299,7 +302,26 @@ class GroupChatActivity : AppCompatActivity() {
         setupToolbar()
         setupRecyclerView()
         setupMessageInput()
+        prefetchParticipantNames()
         loadMessages()
+    }
+    
+    private fun prefetchParticipantNames() {
+        val participants = currentGroup?.participants ?: return
+        
+        participants.chunked(10).forEach { chunk ->
+            db.collection("users").whereIn(com.google.firebase.firestore.FieldPath.documentId(), chunk)
+                .get()
+                .addOnSuccessListener { querySnapshot ->
+                    for (document in querySnapshot.documents) {
+                        val name = document.getString("name") ?: "User"
+                        senderNames[document.id] = name
+                    }
+                }
+                .addOnFailureListener { e ->
+                    Log.e(TAG, "Error prefetching names", e)
+                }
+        }
     }
     
     private fun setupToolbar() {
@@ -707,12 +729,49 @@ class GroupChatActivity : AppCompatActivity() {
     }
     
     private fun setupMessageInput() {
-        binding.messageInput.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {
-                // Not used
+        mentionAutocompleteAdapter = com.phad.chatapp.adapters.MentionAutocompleteAdapter(emptyList()) { rollNumber ->
+            val text = binding.messageInput.text.toString()
+            if (currentMentionStart != -1) {
+                val newText = text.substring(0, currentMentionStart) + "@$rollNumber "
+                binding.messageInput.setText(newText)
+                binding.messageInput.setSelection(newText.length)
+                binding.mentionsRecyclerView.visibility = View.GONE
+                currentMentionStart = -1
             }
+        }
+        
+        binding.mentionsRecyclerView.apply {
+            layoutManager = LinearLayoutManager(this@GroupChatActivity)
+            adapter = mentionAutocompleteAdapter
+        }
+
+        binding.messageInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                // Not used
+                if (s == null) return
+                
+                val cursorPosition = binding.messageInput.selectionStart
+                if (cursorPosition > 0) {
+                    val textToCursor = s.substring(0, cursorPosition)
+                    val lastAtSymbol = textToCursor.lastIndexOf('@')
+                    
+                    if (lastAtSymbol != -1) {
+                        val isMentionStart = lastAtSymbol == 0 || textToCursor[lastAtSymbol - 1].isWhitespace()
+                        
+                        if (isMentionStart) {
+                            currentMentionStart = lastAtSymbol
+                            val query = textToCursor.substring(lastAtSymbol + 1).lowercase()
+                            
+                            if (!query.contains(" ") && !query.contains("\n")) {
+                                filterMentions(query)
+                                return
+                            }
+                        }
+                    }
+                }
+                
+                binding.mentionsRecyclerView.visibility = View.GONE
+                currentMentionStart = -1
             }
             override fun afterTextChanged(s: Editable?) {
                 binding.sendButton.isEnabled = !s.isNullOrBlank()
@@ -728,6 +787,33 @@ class GroupChatActivity : AppCompatActivity() {
         
         binding.attachButton.setOnClickListener {
             showAttachmentOptions(it)
+        }
+    }
+
+    private fun filterMentions(query: String) {
+        val participants = currentGroup?.participants ?: emptyList()
+        val currentUserId = sessionManager.fetchUserId()
+        
+        val matchedUsers = mutableListOf<Pair<String, String>>()
+        
+        if ("everyone".contains(query) && "everyone" != query) {
+            matchedUsers.add(Pair("Everyone", "everyone"))
+        }
+        
+        for (roll in participants) {
+            if (roll == currentUserId) continue
+            
+            val name = senderNames[roll] ?: "User"
+            if (name.lowercase().contains(query) || roll.lowercase().contains(query)) {
+                matchedUsers.add(Pair(name, roll))
+            }
+        }
+        
+        if (matchedUsers.isNotEmpty()) {
+            mentionAutocompleteAdapter.updateUsers(matchedUsers.take(3))
+            binding.mentionsRecyclerView.visibility = View.VISIBLE
+        } else {
+            binding.mentionsRecyclerView.visibility = View.GONE
         }
     }
     
