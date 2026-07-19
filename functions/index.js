@@ -606,102 +606,81 @@ exports.applyAbsentPenalty = onRequest({ region: REGION, invoker: 'public' }, as
 
     const hasSelectiveLists = Array.isArray(positiveRollNumbers) || Array.isArray(negativeRollNumbers) || Array.isArray(zeroRollNumbers);
 
-    if (hasSelectiveLists) {
-      const posSet = new Set((positiveRollNumbers || []).map(r => r.toUpperCase()));
-      const negSet = new Set((negativeRollNumbers || []).map(r => r.toUpperCase()));
-      const zeroSet = new Set((zeroRollNumbers || []).map(r => r.toUpperCase()));
+    if (!hasSelectiveLists) {
+      throw Object.assign(new Error('Outdated App Version: The app did not send positive/negative/zero lists. Please update your app.'), { status: 400 });
+    }
 
-      console.log(`[AbsentPenalty] Processing selective: positive=${posSet.size}, negative=${negSet.size}, zero=${zeroSet.size}`);
+    const posSet = new Set((positiveRollNumbers || []).map(r => r.toUpperCase()));
+    const negSet = new Set((negativeRollNumbers || []).map(r => r.toUpperCase()));
+    const zeroSet = new Set((zeroRollNumbers || []).map(r => r.toUpperCase()));
 
-      for (const rollNumber of Object.keys(userMap)) {
-        const user = userMap[rollNumber];
-        if (user.userType === 'Admin') continue;
+    console.log(`[AbsentPenalty] Processing selective: positive=${posSet.size}, negative=${negSet.size}, zero=${zeroSet.size}`);
 
-        const userRef = db.collection('users').doc(rollNumber);
-        const hadAttendance = attendedRollNumbers.has(rollNumber);
+    for (const rollNumber of Object.keys(userMap)) {
+      const user = userMap[rollNumber];
+      if (user.userType === 'Admin') continue;
 
-        if (posSet.has(rollNumber)) {
-          if (!hadAttendance) {
-            // Mark as present -> create attendance document in subcollection
-            const attendanceDocRef = eventRef.collection('attendance').doc(rollNumber);
-            const name = user.name || 'Unknown Student';
-            const attendeeData = {
-              rollNumber: rollNumber,
-              roll_number: rollNumber,
-              name: name,
-              scanTimestamp: admin.firestore.Timestamp.now(),
-              scan_timestamp: admin.firestore.Timestamp.now(),
-              deviceId: "Manual_Penalty_Exemption",
-              manualEntry: true,
-              attendanceMethod: "Manual",
-              attendance_method: "Manual"
-            };
-            batch.set(attendanceDocRef, attendeeData);
-            // Note: The onAttendanceCreate Cloud Function trigger will automatically add the positive hours to the user profile
-          }
-        } else if (negSet.has(rollNumber)) {
-          // Deduct negative hours
-          const updates = {
-            hours: admin.firestore.FieldValue.increment(-negativeHours),
+      const userRef = db.collection('users').doc(rollNumber);
+      const hadAttendance = attendedRollNumbers.has(rollNumber);
+
+      if (posSet.has(rollNumber)) {
+        if (!hadAttendance) {
+          // Mark as present -> create attendance document in subcollection
+          const attendanceDocRef = eventRef.collection('attendance').doc(rollNumber);
+          const name = user.name || 'Unknown Student';
+          const attendeeData = {
+            rollNumber: rollNumber,
+            roll_number: rollNumber,
+            name: name,
+            scanTimestamp: admin.firestore.Timestamp.now(),
+            scan_timestamp: admin.firestore.Timestamp.now(),
+            deviceId: "Manual_Penalty_Exemption",
+            manualEntry: true,
+            attendanceMethod: "Manual",
+            attendance_method: "Manual"
           };
-          if (semester === 1) updates.sem1Hours = admin.firestore.FieldValue.increment(-negativeHours);
-          if (semester === 2) updates.sem2Hours = admin.firestore.FieldValue.increment(-negativeHours);
-
-          if (hadAttendance) {
-            // If they had attendance, we delete the attendance doc and also deduct the positive hours they received
-            const attendanceDocRef = eventRef.collection('attendance').doc(rollNumber);
-            batch.delete(attendanceDocRef);
-
-            const eventHours = Number(event.hours) || 0;
-            updates.eventsAttended = admin.firestore.FieldValue.increment(-1);
-            updates.hours = admin.firestore.FieldValue.increment(-eventHours - negativeHours);
-            if (semester === 1) updates.sem1Hours = admin.firestore.FieldValue.increment(-eventHours - negativeHours);
-            if (semester === 2) updates.sem2Hours = admin.firestore.FieldValue.increment(-eventHours - negativeHours);
-            updates.eventsList = admin.firestore.FieldValue.arrayRemove(eventId);
-          }
-          batch.set(userRef, updates, { merge: true });
-          penaltyCount++;
-        } else if (zeroSet.has(rollNumber)) {
-          if (hadAttendance) {
-            // If they had attendance but are set to zero/exempted, they lose the positive hours and the attendance doc
-            const attendanceDocRef = eventRef.collection('attendance').doc(rollNumber);
-            batch.delete(attendanceDocRef);
-
-            const eventHours = Number(event.hours) || 0;
-            const updates = {
-              eventsAttended: admin.firestore.FieldValue.increment(-1),
-              hours: admin.firestore.FieldValue.increment(-eventHours),
-              eventsList: admin.firestore.FieldValue.arrayRemove(eventId)
-            };
-            if (semester === 1) updates.sem1Hours = admin.firestore.FieldValue.increment(-eventHours);
-            if (semester === 2) updates.sem2Hours = admin.firestore.FieldValue.increment(-eventHours);
-
-            batch.set(userRef, updates, { merge: true });
-          }
+          batch.set(attendanceDocRef, attendeeData);
+          // Note: The onAttendanceCreate Cloud Function trigger will automatically add the positive hours to the user profile
         }
-      }
-    } else {
-      // Old fallback logic (apply negative hours to all absent volunteers)
-      for (const rollNumber of Object.keys(userMap)) {
-        const user = userMap[rollNumber];
-        if (user.userType === 'Admin') continue;
-        if (attendedRollNumbers.has(rollNumber)) continue;
-
-        if (eventWings.length > 0) {
-          const userWings = user.wings || [];
-          const isInWing = userWings.some(w => eventWings.includes(w));
-          if (!isInWing) continue;
-        }
-
-        const userRef = db.collection('users').doc(rollNumber);
+      } else if (negSet.has(rollNumber)) {
+        // Deduct negative hours
         const updates = {
           hours: admin.firestore.FieldValue.increment(-negativeHours),
         };
         if (semester === 1) updates.sem1Hours = admin.firestore.FieldValue.increment(-negativeHours);
         if (semester === 2) updates.sem2Hours = admin.firestore.FieldValue.increment(-negativeHours);
 
+        if (hadAttendance) {
+          // If they had attendance, we delete the attendance doc and also deduct the positive hours they received
+          const attendanceDocRef = eventRef.collection('attendance').doc(rollNumber);
+          batch.delete(attendanceDocRef);
+
+          const eventHours = Number(event.hours) || 0;
+          updates.eventsAttended = admin.firestore.FieldValue.increment(-1);
+          updates.hours = admin.firestore.FieldValue.increment(-eventHours - negativeHours);
+          if (semester === 1) updates.sem1Hours = admin.firestore.FieldValue.increment(-eventHours - negativeHours);
+          if (semester === 2) updates.sem2Hours = admin.firestore.FieldValue.increment(-eventHours - negativeHours);
+          updates.eventsList = admin.firestore.FieldValue.arrayRemove(eventId);
+        }
         batch.set(userRef, updates, { merge: true });
         penaltyCount++;
+      } else if (zeroSet.has(rollNumber)) {
+        if (hadAttendance) {
+          // If they had attendance but are set to zero/exempted, they lose the positive hours and the attendance doc
+          const attendanceDocRef = eventRef.collection('attendance').doc(rollNumber);
+          batch.delete(attendanceDocRef);
+
+          const eventHours = Number(event.hours) || 0;
+          const updates = {
+            eventsAttended: admin.firestore.FieldValue.increment(-1),
+            hours: admin.firestore.FieldValue.increment(-eventHours),
+            eventsList: admin.firestore.FieldValue.arrayRemove(eventId)
+          };
+          if (semester === 1) updates.sem1Hours = admin.firestore.FieldValue.increment(-eventHours);
+          if (semester === 2) updates.sem2Hours = admin.firestore.FieldValue.increment(-eventHours);
+
+          batch.set(userRef, updates, { merge: true });
+        }
       }
     }
 
