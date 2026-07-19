@@ -37,11 +37,13 @@ object BackendApi {
             .post(body)
             .addHeader("Authorization", authHeader())
             .build()
-        client.newCall(req).execute().use { resp ->
-            val respBody = resp.body?.string() ?: "{}"
-            if (!resp.isSuccessful) throw IllegalStateException("Bind challenge failed: ${resp.code} $respBody")
-            val obj = JSONObject(respBody)
-            return obj.getString("nonce")
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            client.newCall(req).execute().use { resp ->
+                val respBody = resp.body?.string() ?: "{}"
+                if (!resp.isSuccessful) throw IllegalStateException("Bind challenge failed: ${resp.code} $respBody")
+                val obj = JSONObject(respBody)
+                obj.getString("nonce")
+            }
         }
     }
 
@@ -56,11 +58,13 @@ object BackendApi {
             .post(payload)
             .addHeader("Authorization", authHeader())
             .build()
-        client.newCall(req).execute().use { resp ->
-            val body = resp.body?.string()
-            if (!resp.isSuccessful && resp.code != 409) {
-                Log.e(TAG, "bindDevice error: ${resp.code} $body")
-                throw IllegalStateException("bindDevice failed: ${resp.code}")
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            client.newCall(req).execute().use { resp ->
+                val body = resp.body?.string()
+                if (!resp.isSuccessful && resp.code != 409) {
+                    Log.e(TAG, "bindDevice error: ${resp.code} $body")
+                    throw IllegalStateException("bindDevice failed: ${resp.code}")
+                }
             }
         }
     }
@@ -93,13 +97,15 @@ object BackendApi {
             .post(payload)
             .addHeader("Authorization", authHeader())
             .build()
-        client.newCall(req).execute().use { resp ->
-            val respBody = resp.body?.string() ?: "{}"
-            if (!resp.isSuccessful) {
-                Log.e(TAG, "scheduleNotification error: ${resp.code} $respBody")
-                throw IllegalStateException("scheduleNotification failed: ${resp.code} $respBody")
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            client.newCall(req).execute().use { resp ->
+                val respBody = resp.body?.string() ?: "{}"
+                if (!resp.isSuccessful) {
+                    Log.e(TAG, "scheduleNotification error: ${resp.code} $respBody")
+                    throw IllegalStateException("scheduleNotification failed: ${resp.code} $respBody")
+                }
+                JSONObject(respBody).getString("id")
             }
-            return JSONObject(respBody).getString("id")
         }
     }
 
@@ -112,11 +118,13 @@ object BackendApi {
             .delete()
             .addHeader("Authorization", authHeader())
             .build()
-        client.newCall(req).execute().use { resp ->
-            val respBody = resp.body?.string()
-            if (!resp.isSuccessful) {
-                Log.e(TAG, "deleteScheduledNotification error: ${resp.code} $respBody")
-                throw IllegalStateException("deleteScheduledNotification failed: ${resp.code}")
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            client.newCall(req).execute().use { resp ->
+                val respBody = resp.body?.string()
+                if (!resp.isSuccessful) {
+                    Log.e(TAG, "deleteScheduledNotification error: ${resp.code} $respBody")
+                    throw IllegalStateException("deleteScheduledNotification failed: ${resp.code}")
+                }
             }
         }
     }
