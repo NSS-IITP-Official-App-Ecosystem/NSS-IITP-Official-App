@@ -10,6 +10,7 @@ data class Issue(
     val description: String = "",
     val photoUrl: String? = null,
     val photoPublicId: String? = null,
+    val attachmentType: String? = null,
     val status: IssueStatus = IssueStatus.OPEN,
     val resolvedByRollNumber: String? = null,
     val resolvedByName: String? = null,

@@ -172,9 +172,8 @@ object GoogleSheetsSync {
 
             // Generate Wing Sheets
             val specificWings = listOf(
-                com.phad.chatapp.utils.Constants.WING_CHN,
                 com.phad.chatapp.utils.Constants.WING_ENV,
-                com.phad.chatapp.utils.Constants.WING_PRY,
+                com.phad.chatapp.utils.Constants.WING_PRN,
                 com.phad.chatapp.utils.Constants.WING_RDW,
                 com.phad.chatapp.utils.Constants.WING_TTW
             )

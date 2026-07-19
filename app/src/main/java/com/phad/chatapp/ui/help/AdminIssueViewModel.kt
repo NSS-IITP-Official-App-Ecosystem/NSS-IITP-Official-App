@@ -36,7 +36,7 @@ class AdminIssueViewModel(
     private fun fetchAdminIssues() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
-            repository.getAdminOpenIssues(adminUserType, adminWings)
+            repository.getAdminOpenIssues(adminUserType, adminWings, adminRollNumber)
                 .catch { e ->
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,

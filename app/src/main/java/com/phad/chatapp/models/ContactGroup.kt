@@ -1,6 +1,10 @@
 package com.phad.chatapp.models
 
+import com.google.firebase.firestore.DocumentId
+
 data class ContactGroup(
+    @DocumentId
+    val id: String = "",
     val title: String = "",
     val icon: String = "phone", // Optional
     val filterByWing: Boolean = false,
@@ -11,5 +15,7 @@ data class ContactGroup(
 data class ContactPerson(
     val name: String = "",
     val role: String = "",
-    val phone: String = ""
+    val phone: String? = null,
+    val email: String? = null,
+    val rollNumber: String? = null
 )

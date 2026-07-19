@@ -12,6 +12,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -180,16 +182,28 @@ fun ResolveIssueDialog(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 if (issue.photoUrl != null) {
+                    val isPdf = issue.attachmentType?.contains("pdf") == true
+                    val isImage = issue.attachmentType?.startsWith("image/") == true || issue.attachmentType == null
+                    
                     Button(
                         onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(issue.photoUrl))
-                            context.startActivity(intent)
+                            if (isPdf) {
+                                com.phad.chatapp.utils.DownloadUtils.downloadAttachment(context, issue.photoUrl, isPdf = true, isImage = false)
+                            } else {
+                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(issue.photoUrl))
+                                context.startActivity(intent)
+                            }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = colorResource(id = R.color.ui_gray_dark))
                     ) {
-                        Icon(Icons.Default.Image, contentDescription = "View Photo", modifier = Modifier.size(16.dp), tint = colorResource(id = R.color.ui_white))
+                        Icon(
+                            imageVector = if (isPdf) Icons.Default.PictureAsPdf else if (isImage) Icons.Default.Image else Icons.Default.InsertDriveFile,
+                            contentDescription = "View Attachment",
+                            modifier = Modifier.size(16.dp),
+                            tint = colorResource(id = R.color.ui_white)
+                        )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("View Attached Photo", color = colorResource(id = R.color.ui_white))
+                        Text(if (isImage) "View Attached Photo" else "View Attached File", color = colorResource(id = R.color.ui_white))
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                 }
