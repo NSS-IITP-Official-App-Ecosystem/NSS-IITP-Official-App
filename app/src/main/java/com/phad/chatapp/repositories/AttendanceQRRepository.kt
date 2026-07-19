@@ -1231,6 +1231,22 @@ class AttendanceQRRepository {
             return@withContext Result.failure(e)
         }
     }
+    /**
+     * Get event IDs for which the user has submitted a photo attendance (pending or approved)
+     */
+    suspend fun getSubmittedPhotoEventIds(rollNumber: String): Result<List<String>> = withContext(Dispatchers.IO) {
+        try {
+            val querySnapshot = firestore.collection("PhotoAttendanceLog")
+                .whereEqualTo("rollNumber", rollNumber)
+                .get()
+                .await()
+            val eventIds = querySnapshot.documents.mapNotNull { it.getString("eventId") }
+            Result.success(eventIds)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting submitted photo attendances", e)
+            Result.failure(e)
+        }
+    }
 
     /**
      * Get past (non-live) events for history display

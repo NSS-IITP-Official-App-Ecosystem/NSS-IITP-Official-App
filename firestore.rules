@@ -106,5 +106,54 @@ service cloud.firestore {
       allow read: if isAdminByUID();
       allow write: if false; // Only Cloud Functions write here via Admin SDK
     }
+
+    // Help & Support
+    match /help_contacts/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAdminByUID();
+    }
+    
+    // NSS Updates (Home Screen)
+    match /nss_updates/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAdminByUID();
+    }
+    
+    // ============================================
+    // SCHEDULING MODULE (Teaching Slots, TTW, etc)
+    // ============================================
+    match /teachingSlotPresets/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAdminByUID();
+    }
+    match /volunteerPresets/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAdminByUID();
+    }
+    match /ttwStudents/{document=**} {
+      allow read: if isAuthenticated();
+      // Allow students to update their own preferences, admins can do everything
+      allow write: if isAdminByUID() || (isAuthenticated() && request.auth.uid == document);
+    }
+    match /TTW_Subjects/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAdminByUID();
+    }
+    match /generatedSchedules/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAdminByUID();
+    }
+    match /generateSchedule/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAdminByUID();
+    }
+    
+    match /issues/{issueId} {
+      // Users can read and create their own issues. Admins can read and update all issues.
+      allow read: if isAuthenticated() && (isAdminByUID() || resource.data.reportedBy == request.auth.uid);
+      allow create: if isAuthenticated() && request.resource.data.reportedBy == request.auth.uid;
+      allow update: if isAdminByUID() || (isAuthenticated() && resource.data.reportedBy == request.auth.uid);
+      allow delete: if isAdminByUID();
+    }
   }
 }

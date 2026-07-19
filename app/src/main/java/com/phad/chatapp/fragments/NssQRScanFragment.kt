@@ -118,6 +118,7 @@ class NssQRScanFragment : Fragment() {
     private var attendanceMode by mutableStateOf(AttendanceMode.SELECT)
     private var selectedEventForPhoto by mutableStateOf<AttendanceEvent?>(null)
     private var isUploadingPhoto by mutableStateOf(false)
+    private var isTakingPicture by mutableStateOf(false)
     private var uploadErrorMsg by mutableStateOf<String?>(null)
     private var mockLocationDetected by mutableStateOf(false)
     private var isFrontCamera by mutableStateOf(false)
@@ -245,7 +246,7 @@ class NssQRScanFragment : Fragment() {
                         studentName = sessionManager.fetchUserName(),
                         onModeSelected = { mode ->
                             if (mode == AttendanceMode.CAPTURE_PHOTO) {
-                                viewModel.loadAvailableEvents()
+                                viewModel.refreshAvailableEvents()
                             }
                             onModeChanged(mode)
                         }
@@ -280,8 +281,30 @@ class NssQRScanFragment : Fragment() {
                             }
                         )
                     } else {
+                        val profile = sessionManager.getProfileFromSession()
+                        val userWings = profile.wings
+                        val userRollNumber = profile.rollNumber
+
                         PhotoCaptureOverlay(
-                            availableEvents = adminState.availableEvents.filter { it.allowedAttendanceMode == "GEO" || it.allowedAttendanceMode == "BOTH" },
+                            availableEvents = adminState.availableEvents.filter { event ->
+                                val validMode = event.allowedAttendanceMode == "GEO" || event.allowedAttendanceMode == "BOTH"
+                                val validWing = event.wings.isEmpty() || event.wings.any { wing ->
+                                    userWings.any { it.equals(wing, ignoreCase = true) }
+                                }
+                                val isNotPastEvent = try {
+                                    val today = java.util.Calendar.getInstance().apply {
+                                        set(java.util.Calendar.HOUR_OF_DAY, 0)
+                                        set(java.util.Calendar.MINUTE, 0)
+                                        set(java.util.Calendar.SECOND, 0)
+                                        set(java.util.Calendar.MILLISECOND, 0)
+                                    }.time
+                                    !event.getEventDateAsDate().before(today)
+                                } catch (e: Exception) { true }
+                                val alreadyMarked = event.attendees.any { it.rollNumber == userRollNumber }
+                                val hasPendingPhoto = uiState.pendingPhotoEventIds.contains(event.id)
+                                
+                                validMode && validWing && !alreadyMarked && !hasPendingPhoto && isNotPastEvent
+                            },
                             selectedEvent = selectedEventForPhoto,
                             onEventSelected = { selectedEventForPhoto = it },
                             onCaptureClick = {
@@ -304,7 +327,8 @@ class NssQRScanFragment : Fragment() {
                             currentZoomLevel = uiState.currentZoomLevel,
                             minZoomLevel = uiState.minZoomLevel,
                             maxZoomLevel = uiState.maxZoomLevel,
-                            onZoomChanged = { viewModel.updateZoomLevel(it) }
+                            onZoomChanged = { viewModel.updateZoomLevel(it) },
+                            isTakingPicture = isTakingPicture
                         )
                     }
                 }
@@ -363,6 +387,8 @@ class NssQRScanFragment : Fragment() {
         super.onResume()
         // Start periodic location refresh every 10s while on scan screen
         viewModel.startStudentLocationUpdates()
+        // Refresh events list to avoid stale cache when app returns to foreground
+        viewModel.refreshAvailableEvents()
     }
 
     override fun onPause() {
@@ -685,39 +711,43 @@ class NssQRScanFragment : Fragment() {
             return
         }
 
-        isUploadingPhoto = true
+        isTakingPicture = true
         uploadErrorMsg = null
 
-        val locationService = LocationService(requireContext())
-        locationService.getFreshHighAccuracyLocation { location ->
-            if (location == null) {
-                isUploadingPhoto = false
-                Toast.makeText(requireContext(), "Failed to get GPS location. Ensure location is enabled.", Toast.LENGTH_LONG).show()
-                return@getFreshHighAccuracyLocation
-            }
+        val tempFile = File(requireContext().cacheDir, "temp_attendance_${System.currentTimeMillis()}.jpg")
+        val outputOptions = ImageCapture.OutputFileOptions.Builder(tempFile).build()
 
-            // Check for mock location provider (Fake GPS prevention)
-            val isMock = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                location.isMock
-            } else {
-                @Suppress("DEPRECATION")
-                location.isFromMockProvider
-            }
+        // Take the picture IMMEDIATELY so the user doesn't have to hold still
+        imageCaptureObj.takePicture(
+            outputOptions,
+            ContextCompat.getMainExecutor(requireContext()),
+            object : ImageCapture.OnImageSavedCallback {
+                override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                    isTakingPicture = false
+                    isUploadingPhoto = true
+                    // Photo is saved! Now acquire GPS location
+                    val locationService = LocationService(requireContext())
+                    locationService.getFreshHighAccuracyLocation { location ->
+                        if (location == null) {
+                            isUploadingPhoto = false
+                            Toast.makeText(requireContext(), "Failed to get GPS location. Ensure location is enabled.", Toast.LENGTH_LONG).show()
+                            return@getFreshHighAccuracyLocation
+                        }
 
-            if (isMock) {
-                isUploadingPhoto = false
-                mockLocationDetected = true
-                return@getFreshHighAccuracyLocation
-            }
+                        // Check for mock location provider (Fake GPS prevention)
+                        val isMock = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            location.isMock
+                        } else {
+                            @Suppress("DEPRECATION")
+                            location.isFromMockProvider
+                        }
 
-            val tempFile = File(requireContext().cacheDir, "temp_attendance_${System.currentTimeMillis()}.jpg")
-            val outputOptions = ImageCapture.OutputFileOptions.Builder(tempFile).build()
+                        if (isMock) {
+                            isUploadingPhoto = false
+                            mockLocationDetected = true
+                            return@getFreshHighAccuracyLocation
+                        }
 
-            imageCaptureObj.takePicture(
-                outputOptions,
-                ContextCompat.getMainExecutor(requireContext()),
-                object : ImageCapture.OnImageSavedCallback {
-                    override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
                         lifecycleScope.launch {
                             try {
                                 var bitmap = android.graphics.BitmapFactory.decodeFile(tempFile.absolutePath)
@@ -745,15 +775,16 @@ class NssQRScanFragment : Fragment() {
                             }
                         }
                     }
-
-                    override fun onError(exception: ImageCaptureException) {
-                        Log.e(TAG, "Photo capture failed", exception)
-                        isUploadingPhoto = false
-                        uploadErrorMsg = "Failed to capture photo: ${exception.message}"
-                    }
                 }
-            )
-        }
+
+                override fun onError(exception: ImageCaptureException) {
+                    Log.e(TAG, "Photo capture failed: ${exception.message}", exception)
+                    isTakingPicture = false
+                    isUploadingPhoto = false
+                    uploadErrorMsg = "Capture failed: ${exception.message}"
+                }
+            }
+        )
     }
 
     private fun submitCapturedPhoto(event: AttendanceEvent) {
@@ -1514,7 +1545,8 @@ fun PhotoCaptureOverlay(
     currentZoomLevel: Float,
     minZoomLevel: Float,
     maxZoomLevel: Float,
-    onZoomChanged: (Float) -> Unit
+    onZoomChanged: (Float) -> Unit,
+    isTakingPicture: Boolean
 ) {
     val currentEvent = selectedEvent
     var dropdownExpanded by remember { mutableStateOf(false) }
@@ -1793,7 +1825,7 @@ fun PhotoCaptureOverlay(
                                 .size(80.dp)
                                 .background(Color.Transparent, CircleShape)
                                 .border(4.dp, Color.White, CircleShape)
-                                .clickable(enabled = currentEvent != null && !isUploading) { onCaptureClick() },
+                                .clickable(enabled = currentEvent != null && !isUploading && !isTakingPicture) { onCaptureClick() },
                             contentAlignment = Alignment.Center
                         ) {
                             Box(
@@ -1858,7 +1890,7 @@ fun PhotoCaptureOverlay(
                             fontSize = 16.sp
                         )
                         Text(
-                            text = "Acquiring GPS location and processing image. Please hold still...",
+                            text = "Acquiring GPS location and processing image...",
                             fontSize = 12.sp,
                             color = Color.Gray,
                             textAlign = TextAlign.Center
@@ -2033,13 +2065,13 @@ fun PhotoPreviewOverlay(
                     ) {
                         CircularProgressIndicator(color = Color(0xFF4CAF50))
                         Text(
-                            text = "Capturing Attendance Photo...",
+                            text = "Submitting Attendance...",
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp,
                             color = Color.Black
                         )
                         Text(
-                            text = "Please hold still while we save your attendance.",
+                            text = "Please wait while we upload your attendance photo.",
                             fontSize = 12.sp,
                             color = Color.Gray,
                             textAlign = TextAlign.Center

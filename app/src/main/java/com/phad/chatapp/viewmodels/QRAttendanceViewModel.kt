@@ -200,6 +200,23 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
      */
     fun refreshAvailableEvents() {
         loadAvailableEvents(forceRefresh = true)
+        loadPendingPhotoEventIds()
+    }
+
+    /**
+     * Load pending photo event IDs for the current student to filter out events already submitted
+     */
+    fun loadPendingPhotoEventIds() {
+        val rollNumber = sessionManager.fetchUserName() ?: return
+        viewModelScope.launch {
+            val result = repository.getSubmittedPhotoEventIds(rollNumber)
+            if (result.isSuccess) {
+                _studentUiState.value = _studentUiState.value.copy(
+                    pendingPhotoEventIds = result.getOrDefault(emptyList())
+                )
+                Log.d(TAG, "Loaded ${result.getOrDefault(emptyList()).size} pending photo events for $rollNumber")
+            }
+        }
     }
 
     /**
@@ -2321,6 +2338,7 @@ data class StudentQRUiState(
     val studentId: String = "",
     val studentName: String = "",
     val isStudent: Boolean = false,
+    val pendingPhotoEventIds: List<String> = emptyList(),
     val scanResult: ScanResult? = null,
     val isCameraPermissionGranted: Boolean = false,
 

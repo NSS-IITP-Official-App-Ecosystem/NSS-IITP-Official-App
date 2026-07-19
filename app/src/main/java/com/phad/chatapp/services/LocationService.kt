@@ -80,11 +80,11 @@ class LocationService(private val context: Context) {
             val cts = CancellationTokenSource()
             fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.token)
                 .addOnSuccessListener { location ->
-                    if (location != null) {
+                    if (location != null && location.accuracy <= 50f) {
                         Log.d(TAG, "Fresh location: ${location.latitude}, ${location.longitude}, acc=${location.accuracy}")
                         callback(location)
                     } else {
-                        Log.w(TAG, "Fresh getCurrentLocation returned null; falling back to updates")
+                        Log.w(TAG, "Location null or inaccurate (${location?.accuracy}); falling back to updates")
                         requestLocationUpdates(callback)
                     }
                 }
@@ -122,14 +122,17 @@ class LocationService(private val context: Context) {
             
             locationCallback = object : LocationCallback() {
                 override fun onLocationResult(locationResult: LocationResult) {
-                    locationResult.lastLocation?.let { location ->
-                        Log.d(TAG, "Location update received: ${location.latitude}, ${location.longitude}")
+                    val bestLocation = locationResult.locations.minByOrNull { it.accuracy } ?: locationResult.lastLocation
+                    
+                    if (bestLocation != null && bestLocation.accuracy <= 50f) {
+                        Log.d(TAG, "Accurate location update received: acc=${bestLocation.accuracy}")
                         fusedLocationClient.removeLocationUpdates(this)
                         locationCallback = null
-                        callback(location)
-                    } ?: run {
+                        callback(bestLocation)
+                    } else if (bestLocation != null) {
+                        Log.w(TAG, "Location update received but accuracy is poor (${bestLocation.accuracy}). Waiting for better...")
+                    } else {
                         Log.w(TAG, "Location update received but location is null")
-                        callback(null)
                     }
                 }
             }

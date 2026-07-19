@@ -27,7 +27,7 @@ object NotificationSender {
                     return@withContext
                 }
 
-                val projectId = FirebaseApp.getInstance().options.projectId ?: "chatapp-24fae"
+                val projectId = FirebaseApp.getInstance().options.projectId ?: "nssiitp-app"
 
                 val url = URL(VERCEL_API_URL)
                 val conn = url.openConnection() as HttpURLConnection

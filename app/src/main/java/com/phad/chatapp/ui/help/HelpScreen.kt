@@ -313,7 +313,11 @@ fun ContactListDialog(
                 Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = onSurfaceColor)
                 Spacer(modifier = Modifier.height(16.dp))
 
+                val scrollState = rememberScrollState()
                 Column(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .verticalScroll(scrollState),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     if (contacts.isEmpty()) {
