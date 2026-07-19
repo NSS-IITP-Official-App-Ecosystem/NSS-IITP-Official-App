@@ -56,6 +56,9 @@ data class AttendanceEvent(
     @PropertyName("attendanceLocationTimestamp")
     val attendanceLocationTimestamp: Timestamp? = null, // When the location was last updated
 
+    @PropertyName("lastNotifiedAt")
+    val lastNotifiedAt: Timestamp? = null, // When the last notification was sent for this event
+
     @PropertyName("createdAt")
     val createdAt: Timestamp = Timestamp.now(), // When the event was created in the system
 

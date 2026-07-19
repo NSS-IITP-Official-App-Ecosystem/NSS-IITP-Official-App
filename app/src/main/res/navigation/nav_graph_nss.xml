@@ -28,19 +28,19 @@
     <fragment
         android:id="@+id/nssQRAttendanceFragment"
         android:name="com.phad.chatapp.fragments.NssQRAttendanceFragment"
-        android:label="QR Attendance - Admin"
+        android:label="Attendance - Admin"
         tools:layout="@layout/fragment_nss_qr_attendance" />
 
     <fragment
         android:id="@+id/nssQRScanFragment"
         android:name="com.phad.chatapp.fragments.NssQRScanFragment"
-        android:label="QR Attendance - Student"
+        android:label="Attendance - Student"
         tools:layout="@layout/fragment_nss_qr_scan" />
 
     <fragment
         android:id="@+id/qrAttendanceResultFragment"
         android:name="com.phad.chatapp.fragments.QRAttendanceResultFragment"
-        android:label="QR Attendance Result" />
+        android:label="Attendance Result" />
 
     <!-- Add other NSS-specific fragments as needed -->
     <fragment

@@ -92,6 +92,14 @@ class SplashActivity : AppCompatActivity() {
 			exoPlayer.prepare()
 			exoPlayer.playWhenReady = true
 
+			// Add tap to skip
+			binding.root.setOnClickListener {
+				if (!isFinishing) {
+					videoEnded = true
+					tryNavigate()
+				}
+			}
+
 			exoPlayer.addListener(object : Player.Listener {
 				override fun onPlaybackStateChanged(state: Int) {
 					when (state) {
@@ -120,7 +128,7 @@ class SplashActivity : AppCompatActivity() {
 				videoEnded = true
 				tryNavigate()
 			}
-		}, 12000)
+		}, 3000)
 	}
 
 	private fun checkForUpdates() {

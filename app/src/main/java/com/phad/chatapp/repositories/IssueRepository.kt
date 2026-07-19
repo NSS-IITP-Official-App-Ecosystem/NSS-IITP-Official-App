@@ -20,23 +20,31 @@ class IssueRepository(
 ) {
     private val issuesCollection = firestore.collection("issues")
 
-    suspend fun submitIssue(issue: Issue, imageUri: Uri?): Result<Unit> {
+    suspend fun submitIssue(issue: Issue, fileUri: Uri?, mimeType: String? = null): Result<Unit> {
         return try {
             var photoUrl: String? = null
             var photoPublicId: String? = null
+            var attachmentType: String? = null
 
-            if (imageUri != null) {
+            if (fileUri != null) {
                 // Upload to Cloudinary
-                val uploadResult = cloudinaryHelper.uploadImage(imageUri, folder = "issues")
+                val uploadResult = if (mimeType?.startsWith("image/") == true || mimeType == null) {
+                    cloudinaryHelper.uploadImage(fileUri, folder = "issues")
+                } else {
+                    cloudinaryHelper.uploadDocument(fileUri, folder = "issues")
+                }
+                
                 photoUrl = uploadResult.url
                 photoPublicId = uploadResult.publicId
+                attachmentType = mimeType ?: "image/jpeg"
             }
 
             val issueId = UUID.randomUUID().toString()
             val issueToSave = issue.copy(
                 id = issueId,
                 photoUrl = photoUrl,
-                photoPublicId = photoPublicId
+                photoPublicId = photoPublicId,
+                attachmentType = attachmentType
             )
 
             issuesCollection.document(issueId).set(issueToSave).await()
@@ -134,17 +142,47 @@ class IssueRepository(
         awaitClose { subscription.remove() }
     }
 
-    fun getAdminOpenIssues(adminUserType: String, adminWings: List<String>): Flow<List<Issue>> = callbackFlow {
+    fun getAdminOpenIssues(adminUserType: String, adminWings: List<String>, adminRollNumber: String): Flow<List<Issue>> = callbackFlow {
         val targetAddresses = mutableListOf<String>()
-        if (adminUserType == "admin" || adminUserType == "super_admin" || adminUserType == "Admin" || adminUserType == "Super Admin") {
+        
+        try {
+            // First fetch the help contacts to see what this user's EXACT roles are
+            val helpContactsDocs = firestore.collection("help_contacts").get().await()
+            for (doc in helpContactsDocs.documents) {
+                val groupData = doc.data ?: continue
+                
+                // Safe cast to List<Map<String, Any>>
+                val contacts = try {
+                    groupData["contacts"] as? List<*>
+                } catch (e: Exception) { null } ?: continue
+                
+                for (contactObj in contacts) {
+                    val contact = contactObj as? Map<*, *> ?: continue
+                    val rollNum = contact["rollNumber"] as? String
+                    
+                    if (rollNum.equals(adminRollNumber, ignoreCase = true)) {
+                        val role = contact["role"] as? String ?: ""
+                        when (doc.id) {
+                            "deputy_gensecs" -> {
+                                targetAddresses.add("General Secretary")
+                                targetAddresses.add("NSS Admin")
+                            }
+                            "technical_team" -> targetAddresses.add("Technical Team")
+                            "wing_subcoords" -> targetAddresses.add("Wing SubCoord - $role")
+                            "wing_secretaries" -> targetAddresses.add("Wing Secretary - $role")
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            // If fetching help contacts fails, targetAddresses might be empty, which is safer (fail closed).
+        }
+
+        // Super admins still get fallback access to global categories
+        if (adminUserType.equals("super_admin", ignoreCase = true) || adminUserType.equals("Super Admin", ignoreCase = true)) {
             targetAddresses.add("NSS Admin")
             targetAddresses.add("Technical Team")
             targetAddresses.add("General Secretary")
-        }
-        
-        adminWings.forEach { wing ->
-            val normalizedWing = if (wing.endsWith("Wing")) wing else "$wing Wing"
-            targetAddresses.add("Wing Subcoord - $normalizedWing")
         }
 
         if (targetAddresses.isEmpty()) {

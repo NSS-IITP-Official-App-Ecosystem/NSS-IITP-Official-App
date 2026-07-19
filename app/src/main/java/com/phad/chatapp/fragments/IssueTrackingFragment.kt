@@ -9,6 +9,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.fragment.findNavController
+import com.phad.chatapp.repositories.HelpRepository
 import com.phad.chatapp.repositories.IssueRepository
 import com.phad.chatapp.ui.help.IssueTrackingScreen
 import com.phad.chatapp.ui.help.IssueViewModel
@@ -42,7 +43,7 @@ class IssueTrackingFragment : Fragment() {
                             val repository = IssueRepository(
                                 cloudinaryHelper = CloudinaryHelper.getInstance(requireContext())
                             )
-                            return IssueViewModel(repository, userRollNumber, userName) as T
+                            return IssueViewModel(repository, HelpRepository, userRollNumber, userName) as T
                         }
                     }
                 )

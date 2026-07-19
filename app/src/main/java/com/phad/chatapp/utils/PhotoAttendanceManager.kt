@@ -152,11 +152,15 @@ object PhotoAttendanceManager {
                         val timestampMs = seconds * 1000
                         
                         val rawPhotoUrl = obj.optString("photo_url", "")
-                        val finalPhotoUrl = if (com.phad.chatapp.BuildConfig.DEBUG && rawPhotoUrl.isNotEmpty()) {
+                        // In production: rawPhotoUrl is a Firebase Storage signed URL (permanent, valid 7 days)
+                        // In emulator: rawPhotoUrl is a /tmp proxy URL — rewrite to use local host
+                        val finalPhotoUrl = if (com.phad.chatapp.BuildConfig.DEBUG && rawPhotoUrl.isNotEmpty()
+                            && !rawPhotoUrl.startsWith("https://storage.googleapis.com")
+                            && !rawPhotoUrl.startsWith("https://firebasestorage")) {
                             val filename = rawPhotoUrl.substringAfterLast("/")
                             "$BASE_URL/api/attendance/photo/$filename"
                         } else {
-                            rawPhotoUrl
+                            rawPhotoUrl // Production: use the signed URL as-is
                         }
 
                         records.add(

@@ -22,7 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.AssignmentTurnedIn
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.FlashOff
@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.GridOff
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Cameraswitch
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -1339,7 +1340,7 @@ fun ModeSelectionScreen(
         GradientHeader(
             title = "Attendance Verification",
             subtitle = "Student: $studentName",
-            icon = Icons.Default.QrCodeScanner,
+            icon = Icons.Default.AssignmentTurnedIn,
             onBackClick = null,
             isTitleCentered = true
         )
@@ -1832,7 +1833,7 @@ fun PhotoCaptureOverlay(
             }
         }
 
-        // Uploading Overlay
+        // Capturing / Processing Overlay (GPS fetch + watermark — NOT uploading yet)
         if (isUploading) {
             Box(
                 modifier = Modifier
@@ -1850,14 +1851,14 @@ fun PhotoCaptureOverlay(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        CircularProgressIndicator(color = Color(0xFF4CAF50))
+                        CircularProgressIndicator(color = Color(0xFF2196F3))
                         Text(
-                            text = "Uploading Photo Attendance",
+                            text = "Capturing Photo...",
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
                         )
                         Text(
-                            text = "Please wait, embedding GPS coordinates and syncing with server...",
+                            text = "Acquiring GPS location and processing image. Please hold still...",
                             fontSize = 12.sp,
                             color = Color.Gray,
                             textAlign = TextAlign.Center
@@ -2032,13 +2033,13 @@ fun PhotoPreviewOverlay(
                     ) {
                         CircularProgressIndicator(color = Color(0xFF4CAF50))
                         Text(
-                            text = "Uploading Photo Attendance",
+                            text = "Capturing Attendance Photo...",
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp,
                             color = Color.Black
                         )
                         Text(
-                            text = "Please wait, embedding GPS coordinates and syncing with server...",
+                            text = "Please hold still while we save your attendance.",
                             fontSize = 12.sp,
                             color = Color.Gray,
                             textAlign = TextAlign.Center

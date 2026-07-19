@@ -64,8 +64,7 @@ class HelpFragment : Fragment() {
                 val helpViewModel: HelpViewModel = viewModel(
                     factory = object : ViewModelProvider.Factory {
                         override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-                            val helpRepo = HelpRepository()
-                            return HelpViewModel(helpRepo) as T
+                            return HelpViewModel(HelpRepository) as T
                         }
                     }
                 )
@@ -75,6 +74,7 @@ class HelpFragment : Fragment() {
                     isAdmin = isAdmin,
                     openIssuesCount = openIssuesCount,
                     userWings = profile.wings,
+                    userRollNumber = profile.rollNumber ?: "",
                     helpUiState = helpUiState,
                     onRetryContacts = { helpViewModel.fetchContacts(true) },
                     onRaiseIssueClick = {
