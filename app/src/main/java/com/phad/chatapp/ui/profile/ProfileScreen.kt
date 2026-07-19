@@ -141,8 +141,6 @@ fun ProfileScreen(
     var showMenu by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
     var showClassesDialog by remember { mutableStateOf(false) }
-    var showPenaltyDialog by remember { mutableStateOf(false) }
-    var showEventSelectDialog by remember { mutableStateOf(false) }
     
     // Determine user type
     val isAdmin = !state.isStudent
@@ -325,7 +323,6 @@ fun ProfileScreen(
                                     onChangeSubjects = onChangeSubjectsClick,
                                     onFaqs = onFaqsClick,
                                     onLogout = { showLogoutDialog = true },
-                                    onApplyPenalty = { showPenaltyDialog = true },
                                     isTeachingWing = teachingWing,
                                     isAdmin = isAdmin,
                                     currentInterface = currentInterface
@@ -1117,7 +1114,6 @@ fun ProfileMenu(
     onChangeSubjects: () -> Unit,
     onFaqs: () -> Unit,
     onLogout: () -> Unit,
-    onApplyPenalty: () -> Unit = {},
     isTeachingWing: Boolean,
     isAdmin: Boolean,
     currentInterface: String,
@@ -1165,26 +1161,6 @@ fun ProfileMenu(
                 }
             )
         }
-
-// Apply Absent Penalty - only for admins in NSS interface
-
-if (isAdmin && currentInterface == "NSS") {
-    DropdownMenuItem(
-        text = { Text("Apply Absent Penalty", color = Color(0xFFE53935)) },
-        onClick = {
-            onApplyPenalty()
-            onDismiss()
-        },
-        leadingIcon = {
-            Icon(
-                imageVector = Icons.Default.Info,
-                contentDescription = null,
-                tint = Color(0xFFE53935)
-            )
-        }
-    )
-}
-
 
 
         // Event History - only for admins in NSS interface
