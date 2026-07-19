@@ -314,7 +314,11 @@ class LoginFormActivity : AppCompatActivity() {
 
                 // Now attempt to authenticate with Firebase Auth using the retrieved email
                 try {
-                    auth.signInWithEmailAndPassword(firestoreEmail, password).await()
+                    if (!sessionManager.isFirebaseAuthBypassEnabled()) {
+                        auth.signInWithEmailAndPassword(firestoreEmail, password).await()
+                    } else {
+                        Log.w(TAG, "Bypassing Firebase Auth sign-in for debug testing")
+                    }
                     // Login successful - extract user data
                     val fullName = userData["name"] as? String ?: ""
                     // Create login session

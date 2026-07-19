@@ -94,6 +94,14 @@ class SessionManager(context: Context) {
         editor.putBoolean(KEY_BYPASS_FIREBASE_AUTH, enable)
         editor.apply()
     }
+
+    fun isFirebaseAuthBypassEnabled(): Boolean {
+        return if (com.phad.chatapp.BuildConfig.DEBUG) {
+            pref.getBoolean(KEY_BYPASS_FIREBASE_AUTH, false)
+        } else {
+            false
+        }
+    }
     
     /**
      * Test if we can access Firestore with the current authentication

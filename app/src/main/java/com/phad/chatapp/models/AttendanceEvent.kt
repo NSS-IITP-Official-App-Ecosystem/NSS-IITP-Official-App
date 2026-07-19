@@ -94,17 +94,7 @@ data class AttendanceEvent(
         const val STATUS_END = "End"
 
         // All available wings
-<<<<<<< HEAD
-        val ALL_WINGS = setOf(
-            "Teaching and Technical Wing",
-            "Prerna Wing",
-            "Rural Development Wing",
-            "Environmental Wing",
-            "Design and Curation Wing"
-        )
-=======
         val ALL_WINGS = com.phad.chatapp.utils.Constants.NSS_WINGS.toSet()
->>>>>>> a840bfda95bbd6c15108c1beb52c041581fb4689
     }
 
     /**
