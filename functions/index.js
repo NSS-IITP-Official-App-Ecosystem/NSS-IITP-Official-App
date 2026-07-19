@@ -8,11 +8,8 @@
  */
 
 // eslint-disable-next-line no-unused-vars
-const { onRequest } = require("firebase-functions/v2/https");
-// eslint-disable-next-line no-unused-vars
 const logger = require("firebase-functions/logger");
-// Firestore v2 triggers
-const { onDocumentCreated, onDocumentDeleted } = require("firebase-functions/v2/firestore");
+// Gen 1 - no billing required for deployment
 
 /**
  * Cloud Functions for Firebase
@@ -21,7 +18,11 @@ const { onDocumentCreated, onDocumentDeleted } = require("firebase-functions/v2/
  * handle sending push notifications through Firebase Cloud Messaging
  */
 
-const functions = require('firebase-functions');
+// firebase-functions v6: Gen 2 API (functions are deployed as Gen 2 on nssiitp-app)
+const { onRequest } = require('firebase-functions/v2/https');
+const { onDocumentCreated, onDocumentDeleted } = require('firebase-functions/v2/firestore');
+const { onSchedule } = require('firebase-functions/v2/scheduler');
+const REGION = 'asia-south1';
 const admin = require('firebase-admin');
 admin.initializeApp();
 const { Timestamp, FieldValue, GeoPoint } = require('firebase-admin/firestore');
@@ -64,7 +65,7 @@ async function verifyAuthToken(req) {
  * - BLOCK: Emulator detected
  * - LOG ONLY: Root detected (soft block)
  */
-exports.verifyPlayIntegrity = onRequest({ region: 'asia-south1' }, async (req, res) => {
+exports.verifyPlayIntegrity = onRequest({ region: REGION, invoker: 'public' }, async (req, res) => {
   try {
     if (req.method !== 'POST') {
       throw Object.assign(new Error('Method not allowed'), { status: 405 });
@@ -233,7 +234,7 @@ async function assertUserIdentityMatches(db, rollNumber, decodedToken) {
  * Issue a short-lived bind challenge for device binding
  * POST body: { rollNumber }
  */
-exports.getDeviceBindChallenge = onRequest({ region: 'asia-south1' }, async (req, res) => {
+exports.getDeviceBindChallenge = onRequest({ region: REGION, invoker: 'public' }, async (req, res) => {
   try {
     if (req.method !== 'POST') throw Object.assign(new Error('Method not allowed'), { status: 405 });
     const decoded = await verifyAuthToken(req);
@@ -256,7 +257,7 @@ exports.getDeviceBindChallenge = onRequest({ region: 'asia-south1' }, async (req
  * Bind a device public key when user has no active binding (NULL policy)
  * POST body: { rollNumber, publicKeyPem, signatureBase64 } where signature = sign(nonce)
  */
-exports.bindDevice = onRequest({ region: 'asia-south1' }, async (req, res) => {
+exports.bindDevice = onRequest({ region: REGION, invoker: 'public' }, async (req, res) => {
   try {
     if (req.method !== 'POST') throw Object.assign(new Error('Method not allowed'), { status: 405 });
     const decoded = await verifyAuthToken(req);
@@ -308,7 +309,7 @@ exports.bindDevice = onRequest({ region: 'asia-south1' }, async (req, res) => {
  * Issue attendance challenge for the bound device
  * POST body: { rollNumber, eventId }
  */
-exports.getAttendanceChallenge = onRequest({ region: 'asia-south1' }, async (req, res) => {
+exports.getAttendanceChallenge = onRequest({ region: REGION, invoker: 'public' }, async (req, res) => {
   try {
     if (req.method !== 'POST') throw Object.assign(new Error('Method not allowed'), { status: 405 });
     const decoded = await verifyAuthToken(req);
@@ -337,7 +338,7 @@ exports.getAttendanceChallenge = onRequest({ region: 'asia-south1' }, async (req
  * POST body: { rollNumber, eventId, attendee, signatureBase64 }
  *   where signature signs the nonce from getAttendanceChallenge
  */
-exports.markAttendance = onRequest({ region: 'asia-south1' }, async (req, res) => {
+exports.markAttendance = onRequest({ region: REGION, invoker: 'public' }, async (req, res) => {
   try {
     if (req.method !== 'POST') throw Object.assign(new Error('Method not allowed'), { status: 405 });
     const decoded = await verifyAuthToken(req);
@@ -431,11 +432,13 @@ exports.markAttendance = onRequest({ region: 'asia-south1' }, async (req, res) =
 
 // Increment counters and update user stats when a new attendance record is written
 exports.onAttendanceCreate = onDocumentCreated(
-  { document: 'NSS_Events_Attendence/{eventId}/attendance/{rollNumber}', region: 'asia-south1' },
+  { document: 'NSS_Events_Attendence/{eventId}/attendance/{rollNumber}', region: REGION },
   async (event) => {
-    const { eventId, rollNumber } = event.params;
+    const snap = event.data;
+    const context = { params: event.params };
+    const { eventId, rollNumber } = context.params;
     const db = admin.firestore();
-    const attendee = event.data?.data() || {};
+    const attendee = snap.data() || {};
     try {
       // Increment total_marked on parent event
       const eventRef = db.collection('NSS_Events_Attendence').doc(eventId);
@@ -505,7 +508,7 @@ exports.onAttendanceCreate = onDocumentCreated(
 
 // Maintain meta.statistics when an event is created or deleted
 exports.onEventWrite = onDocumentCreated(
-  { document: 'NSS_Events_Attendence/{eventId}', region: 'asia-south1' },
+  { document: 'NSS_Events_Attendence/{eventId}', region: REGION },
   async (event) => {
     try {
       const db = admin.firestore();
@@ -522,7 +525,7 @@ exports.onEventWrite = onDocumentCreated(
 );
 
 exports.onEventDelete = onDocumentDeleted(
-  { document: 'NSS_Events_Attendence/{eventId}', region: 'asia-south1' },
+  { document: 'NSS_Events_Attendence/{eventId}', region: REGION },
   async (event) => {
     try {
       const db = admin.firestore();
@@ -546,7 +549,7 @@ exports.onEventDelete = onDocumentDeleted(
  * Called when an admin closes a mandatory event.
  * POST body: { eventId }
  */
-exports.applyAbsentPenalty = onRequest({ region: 'asia-south1' }, async (req, res) => {
+exports.applyAbsentPenalty = onRequest({ region: REGION, invoker: 'public' }, async (req, res) => {
   try {
     if (req.method !== 'POST') throw Object.assign(new Error('Method not allowed'), { status: 405 });
 
@@ -728,6 +731,13 @@ const os = require('os');
 
 const app = express();
 
+const cloudinary = require('cloudinary').v2;
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
 // Enable CORS
 app.use(cors({ origin: true }));
 app.use(express.json());
@@ -832,40 +842,19 @@ app.post('/api/attendance/submit-photo', parseMultipart, async (req, res) => {
     let photoUrl;
     let storagePath = null;
 
-    if (process.env.FUNCTIONS_EMULATOR === 'true') {
-      // In emulator: serve from /tmp as before (Storage emulator may not be running)
-      const incomingHost = req.get('host') || '127.0.0.1:5001';
-      photoUrl = `http://${incomingHost}/${projectId}/asia-south1/attendance/api/attendance/photo/${file.filename}`;
-      console.log('[submit-photo] Emulator mode: using /tmp photo URL');
-    } else {
-      // Production: upload to Firebase Storage for permanent storage
-      console.log(`[submit-photo] Uploading photo to Firebase Storage for ${rollNoUpper}`);
-      const bucket = admin.storage().bucket(`${projectId}.appspot.com`);
-      const storageDest = `photo_attendance/${eventId}/${rollNoUpper}_${file.filename}`;
-      storagePath = storageDest;
+    console.log(`[submit-photo] Uploading photo to Cloudinary for ${rollNoUpper}`);
+    const cloudinaryResponse = await cloudinary.uploader.upload(file.path, {
+      folder: `photo_attendance/${eventId}`,
+      public_id: `${rollNoUpper}_${file.filename.split('.')[0]}`,
+      context: `uploadedBy=${rollNoUpper}|eventId=${eventId}`
+    });
+    
+    photoUrl = cloudinaryResponse.secure_url;
+    storagePath = cloudinaryResponse.public_id;
+    console.log(`[submit-photo] Photo uploaded to Cloudinary: ${storagePath}`);
 
-      await bucket.upload(file.path, {
-        destination: storageDest,
-        metadata: {
-          contentType: file.mimetype || 'image/jpeg',
-          metadata: {
-            uploadedBy: rollNoUpper,
-            eventId: eventId
-          }
-        }
-      });
-
-      // Generate a signed URL valid for 7 days so admin can view the photo
-      const [signedUrl] = await bucket.file(storageDest).getSignedUrl({
-        action: 'read',
-        expires: Date.now() + 7 * 24 * 60 * 60 * 1000 // 7 days
-      });
-      photoUrl = signedUrl;
-      console.log(`[submit-photo] Photo uploaded to Storage at ${storageDest}`);
-
-      // Clean up local /tmp file after successful Storage upload
-      if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
-    }
+    // Clean up local /tmp file after successful upload
+    if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
 
     const docId = `${eventId}_${rollNoUpper}`;
     const logData = {
@@ -1056,6 +1045,44 @@ app.put('/api/attendance/verify/:id', async (req, res) => {
         });
       });
       console.log(`[verify] Approved attendance written to consolidated event ${eventId} for ${rollNumber}`);
+
+      // Also directly update user hours (belt-and-suspenders alongside onAttendanceCreate trigger)
+      const eventSnap = await db.collection('NSS_Events_Attendence').doc(eventId).get();
+      if (eventSnap.exists) {
+        const eventData = eventSnap.data();
+        const hours = Number(eventData.hours) || 0;
+        const eventDate = eventData.eventDate || '';
+
+        // Determine semester using same logic as onAttendanceCreate trigger
+        const semester = (() => {
+          try {
+            const parts = eventDate.split(' ');
+            if (parts.length < 3) return 0;
+            const day = parseInt(parts[0], 10);
+            const month = parts[1];
+            const monthIndex = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].indexOf(month);
+            if (monthIndex === -1) return 0;
+            const m = monthIndex + 1;
+            if (m >= 7 && m <= 11) return 1;
+            if (m === 12 && day <= 10) return 1;
+            if (m === 12 && day >= 11) return 2;
+            if (m >= 1 && m <= 6) return 2;
+          } catch (e) {}
+          return 0;
+        })();
+
+        const userRef = db.collection('users').doc(rollNumber);
+        const userUpdates = {
+          eventsAttended: FieldValue.increment(1),
+          hours: FieldValue.increment(hours),
+          eventsList: FieldValue.arrayUnion(eventId)
+        };
+        if (semester === 1) userUpdates.sem1Hours = FieldValue.increment(hours);
+        if (semester === 2) userUpdates.sem2Hours = FieldValue.increment(hours);
+
+        await userRef.set(userUpdates, { merge: true });
+        console.log(`[verify] Updated user ${rollNumber} hours: +${hours} (sem${semester})`);
+      }
     }
 
     // 3. Update verification log status and nullify photo_url
@@ -1066,31 +1093,15 @@ app.put('/api/attendance/verify/:id', async (req, res) => {
       verifiedBy: adminRollNumber || adminRoll
     });
 
-    // 4. Delete photo from Firebase Storage (production) or /tmp (emulator) after DB update succeeds
+    // 4. Delete photo from Cloudinary after DB update succeeds
     const { storage_path } = logData;
-    if (process.env.FUNCTIONS_EMULATOR === 'true') {
-      // Emulator: delete from /tmp
-      if (photo_filename) {
-        const filePath = path.join(os.tmpdir(), path.basename(photo_filename));
-        try {
-          if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
-            console.log(`[verify] Deleted /tmp file: ${filePath}`);
-          }
-        } catch (fileErr) {
-          console.error(`[verify] Failed to delete /tmp file:`, fileErr);
-        }
-      }
-    } else if (storage_path) {
-      // Production: delete from Firebase Storage
-      const projectId = process.env.GCLOUD_PROJECT || 'nssiitp-app';
+    if (storage_path) {
       try {
-        const bucket = admin.storage().bucket(`${projectId}.appspot.com`);
-        await bucket.file(storage_path).delete({ ignoreNotFound: true });
-        console.log(`[verify] Deleted Storage file: ${storage_path}`);
-      } catch (storageErr) {
+        await cloudinary.uploader.destroy(storage_path);
+        console.log(`[verify] Deleted Cloudinary file: ${storage_path}`);
+      } catch (cloudErr) {
         // Non-fatal: log but don't fail the verification
-        console.error(`[verify] Failed to delete Storage file ${storage_path}:`, storageErr);
+        console.error(`[verify] Failed to delete Cloudinary file ${storage_path}:`, cloudErr);
       }
     }
 
@@ -1130,14 +1141,14 @@ app.post('/api/attendance/notify', async (req, res) => {
       const data = eventSnap.data();
       const lastNotifiedAt = data.lastNotifiedAt;
 
-      // Check 10-minute cooldown
+      // Check 30-minute cooldown
       if (lastNotifiedAt) {
         const lastTime = lastNotifiedAt.toMillis();
         const now = Date.now();
         const diffMins = (now - lastTime) / (1000 * 60);
-        if (diffMins < 10) {
+        if (diffMins < 30) {
           throw Object.assign(
-            new Error(`Please wait ${Math.ceil(10 - diffMins)} minutes before notifying again.`), 
+            new Error(`Please wait ${Math.ceil(30 - diffMins)} minutes before notifying again.`), 
             { status: 429 }
           );
         }
@@ -1187,6 +1198,150 @@ app.post('/api/attendance/notify', async (req, res) => {
   }
 });
 
+/**
+ * Endpoint: POST /api/attendance/schedule-notification
+ * Admin schedules a custom notification for an event at a chosen time.
+ * Body: { eventId, title, body, scheduledAt (ms), targetWings }
+ */
+app.post('/api/attendance/schedule-notification', async (req, res) => {
+  try {
+    const decoded = await verifyAuthToken(req);
+    const { eventId, title, body, scheduledAt, targetWings } = req.body || {};
+
+    if (!eventId || !title || !body || !scheduledAt) {
+      return res.status(400).json({ error: 'Missing required fields: eventId, title, body, scheduledAt' });
+    }
+
+    const now = Date.now();
+    if (scheduledAt <= now) {
+      return res.status(400).json({ error: 'scheduledAt must be in the future' });
+    }
+
+    const db = admin.firestore();
+
+    // Derive FCM topics from targetWings
+    const isOpenEvent = !targetWings || targetWings.length === 0 || targetWings.includes('all');
+    const topics = isOpenEvent
+      ? ['all']
+      : targetWings.map(w => 'wing_' + w.toLowerCase().replace(/ /g, '_').replace(/&/g, 'and'));
+
+    const docRef = await db.collection('scheduledNotifications').add({
+      eventId,
+      title,
+      body,
+      scheduledAt: Timestamp.fromMillis(scheduledAt),
+      targetWings: targetWings || [],
+      topics,
+      status: 'pending',
+      createdBy: decoded.uid,
+      createdAt: Timestamp.now(),
+    });
+
+    console.log(`[schedule-notification] Scheduled notification ${docRef.id} for event ${eventId} at ${new Date(scheduledAt).toISOString()}`);
+    res.status(200).json({ ok: true, id: docRef.id });
+  } catch (err) {
+    console.error('[schedule-notification] Error:', err);
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || 'Internal server error' });
+  }
+});
+
+/**
+ * Endpoint: DELETE /api/attendance/schedule-notification/:id
+ * Cancel a pending scheduled notification.
+ */
+app.delete('/api/attendance/schedule-notification/:id', async (req, res) => {
+  try {
+    await verifyAuthToken(req);
+    const { id } = req.params;
+    const db = admin.firestore();
+    const docRef = db.collection('scheduledNotifications').doc(id);
+    const snap = await docRef.get();
+    if (!snap.exists) return res.status(404).json({ error: 'Notification not found' });
+    if (snap.data().status !== 'pending') {
+      return res.status(400).json({ error: 'Only pending notifications can be cancelled' });
+    }
+    await docRef.update({ status: 'cancelled' });
+    console.log(`[schedule-notification] Cancelled notification ${id}`);
+    res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error('[schedule-notification] Cancel error:', err);
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || 'Internal server error' });
+  }
+});
+
+/**
+ * Endpoint: GET /api/attendance/schedule-notification/:eventId
+ * Fetch all scheduled notifications for an event.
+ */
+app.get('/api/attendance/schedule-notification/:eventId', async (req, res) => {
+  try {
+    await verifyAuthToken(req);
+    const { eventId } = req.params;
+    const db = admin.firestore();
+    const snap = await db.collection('scheduledNotifications')
+      .where('eventId', '==', eventId)
+      .orderBy('scheduledAt', 'asc')
+      .get();
+    const results = snap.docs.map(d => ({ id: d.id, ...d.data(), scheduledAt: d.data().scheduledAt.toMillis() }));
+    res.status(200).json(results);
+  } catch (err) {
+    console.error('[schedule-notification] Fetch error:', err);
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || 'Internal server error' });
+  }
+});
+
 // Export Express app as Firebase Cloud Function
-exports.attendance = onRequest({ region: 'asia-south1' }, app);
+exports.attendance = onRequest({ region: REGION, invoker: 'public' }, app);
+
+/**
+ * Scheduled Cloud Function (Gen 1 pubsub) — runs every 5 minutes.
+ * Finds all pending scheduled notifications whose time has passed and sends them via FCM.
+ * Requires Firebase Blaze plan (billing).
+ */
+exports.processScheduledNotifications = onSchedule(
+  { schedule: 'every 5 minutes', timeZone: 'Asia/Kolkata', region: REGION },
+  async () => {
+    const db = admin.firestore();
+    const now = Timestamp.now();
+
+    const snap = await db.collection('scheduledNotifications')
+      .where('status', '==', 'pending')
+      .where('scheduledAt', '<=', now)
+      .get();
+
+    if (snap.empty) {
+      console.log('[processScheduledNotifications] No pending notifications due.');
+      return null;
+    }
+
+    const batch = db.batch();
+    const sendPromises = [];
+
+    for (const doc of snap.docs) {
+      const { title, body, topics } = doc.data();
+
+      for (const topic of (topics || ['all'])) {
+        const message = {
+          notification: { title, body },
+          topic,
+        };
+        sendPromises.push(
+          admin.messaging().send(message)
+            .then(() => console.log(`[processScheduledNotifications] Sent to topic ${topic}: "${title}"`))
+            .catch(e => console.error(`[processScheduledNotifications] Failed to send to ${topic}:`, e))
+        );
+      }
+
+      batch.update(doc.ref, { status: 'sent', sentAt: Timestamp.now() });
+    }
+
+    await Promise.all(sendPromises);
+    await batch.commit();
+    console.log(`[processScheduledNotifications] Processed ${snap.docs.length} notification(s).`);
+  }
+);
+
 

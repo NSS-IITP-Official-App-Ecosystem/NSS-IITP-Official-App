@@ -1,2 +1,21 @@
 node_modules/
 *.local
+.env
+
+# Firebase Emulator / Debug Logs
+firebase-debug.log
+firebase-debug.log.*
+ui-debug.log
+
+# IDE and OS Files
+.idea/
+.vscode/
+.DS_Store
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Database Backups
+database_backup*
+*backup*.json
+*.bak

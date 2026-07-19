@@ -1,4 +1,4 @@
-package com.phad.chatapp.fragments
+﻿package com.phad.chatapp.fragments
 
 import android.os.Bundle
 import android.util.Log
@@ -364,8 +364,17 @@ class NssCalendarFragment : Fragment() {
                     val preselected = java.util.Date.from(selectedDate.atStartOfDay(ZoneId.systemDefault()).toInstant())
                     CreateEventDialog(
                         isCreating = adminUi.isCreatingEvent,
-                        onCreateEvent = { name, desc, location, date, open, close, hours, isMandatory, negativeHours, wings, visibleOnlyToPresent, allowedAttendanceMode ->
+                        onCreateEvent = { name, desc, location, date, open, close, hours, isMandatory, negativeHours, wings, visibleOnlyToPresent, allowedAttendanceMode, reminders ->
                             viewModel.createAttendanceEvent(name, desc, location, date, open, close, hours, isMandatory, negativeHours, wings, visibleOnlyToPresent, allowedAttendanceMode)
+                            reminders.forEach { (scheduledAtMs, title, body) ->
+                                viewModel.scheduleNotification(
+                                    eventId = com.phad.chatapp.utils.AttendanceEventUtils.generateDocumentId(date, name),
+                                    title = title,
+                                    body = body,
+                                    scheduledAtMs = scheduledAtMs,
+                                    targetWings = wings
+                                )
+                            }
                         },
                         onDismiss = { viewModel.hideCreateEventDialog() },
                         errorMessage = adminUi.errorMessage,

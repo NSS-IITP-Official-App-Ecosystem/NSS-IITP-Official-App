@@ -24,6 +24,7 @@ service-account-key.json
 serviceAccountKey.json
 chatapp-*.json
 .firebase/
+.env
 
 # Generated files
 bin/
@@ -86,6 +87,9 @@ faqs_raw.*
 *_backup.txt
 database_*.txt
 database_*.md
+database_backup*
+*backup*.json
+*.bak
 
 # Temporary development files
 firebase-rules.txt
@@ -116,3 +120,38 @@ showcase/
 
 # Agent Files
 .ai/
+
+# =========================
+# Additional Unnecessary Files
+# =========================
+
+# OS Generated Files (Windows/Mac)
+Thumbs.db
+desktop.ini
+.DS_Store?
+ehthumbs.db
+$RECYCLE.BIN/
+
+# Firebase Emulator / Debug Logs
+firebase-debug.log
+firebase-debug.log.*
+ui-debug.log
+firestore-debug.log
+pubsub-debug.log
+
+# Kotlin runtime / cache
+.kotlin_workspace/
+.kotlin_module
+
+# Gradle specific
+.gradle/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Python Virtual Environments
+venv/
+.venv/
+env/
+
+# Temporary Backup Scripts & Screenshots
+backup_db.js
+screen*.png

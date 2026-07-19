@@ -15,18 +15,20 @@ object AttendanceStatsCalculator {
     private const val TAG = "AttendanceStatsCalculator"
     private val db = FirebaseFirestore.getInstance()
     
-    // Semester date ranges
+    // Semester date ranges (must match server-side logic in onAttendanceCreate)
+    // Semester 1: July 1 – December 10
+    // Semester 2: December 11 – June 30
     private val SEM1_START = "01 Jul 2025"
-    private val SEM1_END = "31 Dec 2025"
-    private val SEM2_START = "01 Jan 2026"
-    private val SEM2_END = "31 May 2026"
+    private val SEM1_END = "10 Dec 2025"
+    private val SEM2_START = "11 Dec 2025"
+    private val SEM2_END = "30 Jun 2026"
     
     private val dateFormat = SimpleDateFormat("dd MMM yyyy", Locale.ENGLISH)
     
     /**
      * Read semester-based statistics for a student directly from users collection
      */
-    suspend fun readStudentStatsFromUsers(rollNumber: String): Triple<String, String, String> {
+    suspend fun readStudentStatsFromUsers(rollNumber: String): Triple<String, String, String> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
         try {
             Log.d(TAG, "=== ATTENDANCE STATS CALCULATOR DEBUG ===")
             Log.d(TAG, "Reading stats from users collection for student: $rollNumber")
@@ -153,23 +155,23 @@ object AttendanceStatsCalculator {
                 
                 Log.d(TAG, "Final stats - SEM1=$sem1Stats, SEM2=$sem2Stats, Events=$eventsStats")
                 Log.d(TAG, "=== ATTENDANCE STATS CALCULATOR DEBUG COMPLETE ===")
-                return Triple(sem1Stats, sem2Stats, eventsStats)
+                Triple(sem1Stats, sem2Stats, eventsStats)
             } else {
                 Log.w(TAG, "User document not found for rollNumber: $rollNumber")
                 Log.d(TAG, "=== ATTENDANCE STATS CALCULATOR DEBUG COMPLETE ===")
-                return Triple("0/0", "0/0", "0/0")
+                Triple("0/0", "0/0", "0/0")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error reading student stats from users collection", e)
             Log.d(TAG, "=== ATTENDANCE STATS CALCULATOR DEBUG COMPLETE ===")
-            return Triple("0/0", "0/0", "0/0")
+            Triple("0/0", "0/0", "0/0")
         }
     }
 
     /**
      * Calculate semester-based statistics for a student (legacy method - now uses users collection)
      */
-    suspend fun calculateStudentStats(rollNumber: String): Triple<String, String, String> {
+    suspend fun calculateStudentStats(rollNumber: String): Triple<String, String, String> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
         try {
             Log.d(TAG, "Calculating stats for student: $rollNumber")
             
@@ -254,11 +256,11 @@ object AttendanceStatsCalculator {
             
             Log.d(TAG, "Stats calculated - SEM1: $sem1Stats, SEM2: $sem2Stats, Events: $eventsStats")
             
-            return Triple(sem1Stats, sem2Stats, eventsStats)
+            Triple(sem1Stats, sem2Stats, eventsStats)
             
         } catch (e: Exception) {
             Log.e(TAG, "Error calculating student stats", e)
-            return Triple("0/0", "0/0", "0/0")
+            Triple("0/0", "0/0", "0/0")
         }
     }
     
@@ -336,7 +338,7 @@ object AttendanceStatsCalculator {
     /**
      * Update student document with new statistics
      */
-    suspend fun updateStudentStats(rollNumber: String) {
+    suspend fun updateStudentStats(rollNumber: String) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
         try {
             val (sem1Stats, sem2Stats, eventsStats) = calculateStudentStats(rollNumber)
             

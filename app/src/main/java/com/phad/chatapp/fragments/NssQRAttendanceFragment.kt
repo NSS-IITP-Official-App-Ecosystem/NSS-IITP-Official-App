@@ -1,4 +1,4 @@
-package com.phad.chatapp.fragments
+﻿package com.phad.chatapp.fragments
 
 import android.os.Bundle
 import android.util.Log
@@ -247,8 +247,18 @@ class NssQRAttendanceFragment : Fragment() {
                     onClearError = {
                         viewModel.clearError()
                     },
-                    onCreateEvent = { name, description, location, date, openingTime, closingTime, hours, isMandatory, negativeHours, wings, visibleOnlyToPresent, allowedAttendanceMode ->
+                    onCreateEvent = { name, description, location, date, openingTime, closingTime, hours, isMandatory, negativeHours, wings, visibleOnlyToPresent, allowedAttendanceMode, reminders ->
                         viewModel.createAttendanceEvent(name, description, location, date, openingTime, closingTime, hours, isMandatory, negativeHours, wings, visibleOnlyToPresent, allowedAttendanceMode)
+                        // Schedule cloud-based notifications for each custom reminder
+                        reminders.forEach { (scheduledAtMs, title, body) ->
+                            viewModel.scheduleNotification(
+                                eventId = com.phad.chatapp.utils.AttendanceEventUtils.generateDocumentId(date, name),
+                                title = title,
+                                body = body,
+                                scheduledAtMs = scheduledAtMs,
+                                targetWings = wings
+                            )
+                        }
                     },
                     onShowCreateDialog = {
                         viewModel.showCreateEventDialog()
@@ -350,7 +360,7 @@ fun QRAttendanceAdminScreen(
     onEndSession: () -> Unit,
     onLoadEvents: () -> Unit,
     onClearError: () -> Unit,
-    onCreateEvent: (String, String, String, Date, Date, Date, Double, Boolean, Double, List<String>, Boolean, String) -> Unit,
+    onCreateEvent: (String, String, String, Date, Date, Date, Double, Boolean, Double, List<String>, Boolean, String, List<Triple<Long, String, String>>) -> Unit,
     onShowCreateDialog: () -> Unit,
     onHideCreateDialog: () -> Unit,
     onClearCreateSuccess: () -> Unit,
@@ -2547,7 +2557,7 @@ private fun isValidDecimalInput(input: String): Boolean {
 @Composable
 fun CreateEventDialog(
     isCreating: Boolean,
-    onCreateEvent: (String, String, String, Date, Date, Date, Double, Boolean, Double, List<String>, Boolean, String) -> Unit,
+    onCreateEvent: (String, String, String, Date, Date, Date, Double, Boolean, Double, List<String>, Boolean, String, List<Triple<Long, String, String>>) -> Unit,
     onDismiss: () -> Unit,
     errorMessage: String?,
     initialDate: Date? = null
@@ -2574,6 +2584,13 @@ fun CreateEventDialog(
     var selectedWings by remember { mutableStateOf(emptyList<String>()) }
     var visibleOnlyToPresent by remember { mutableStateOf(false) }
     var allowedAttendanceMode by remember { mutableStateOf("BOTH") }
+
+    // Scheduled reminders: Triple(scheduledAtMs, title, body)
+    var scheduledReminders by remember { mutableStateOf(emptyList<Triple<Long, String, String>>()) }
+    var showReminderDatePicker by remember { mutableStateOf(false) }
+    var editingReminderIndex by remember { mutableStateOf<Int?>(-1) }
+    var pendingReminderDateMs by remember { mutableStateOf(0L) }
+    var showReminderTimePicker by remember { mutableStateOf(false) }
 
     // Reset error state when dialog opens
     LaunchedEffect(Unit) {
@@ -2963,6 +2980,108 @@ fun CreateEventDialog(
                         }
                     }
 
+                    // --- SCHEDULE NOTIFICATIONS SECTION ---
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(
+                        text = "📣 Schedule Notifications",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = Color(0xFF333333)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Reminders will be sent as push notifications to the targeted wings at the chosen time.",
+                        fontSize = 12.sp,
+                        color = Color.Gray
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    scheduledReminders.forEachIndexed { index, (ms, rTitle, rBody) ->
+                        val cal = java.util.Calendar.getInstance().apply { timeInMillis = ms }
+                        val displayText = java.text.SimpleDateFormat("dd MMM yyyy, hh:mm a", java.util.Locale.getDefault()).format(cal.time)
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                                .background(Color(0xFFF5F5F5), shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                                .padding(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "🕐 $displayText",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 13.sp,
+                                    color = Color(0xFF1565C0)
+                                )
+                                androidx.compose.material3.IconButton(
+                                    onClick = {
+                                        scheduledReminders = scheduledReminders.toMutableList().also { it.removeAt(index) }
+                                    },
+                                    enabled = !isCreating
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Remove reminder",
+                                        tint = Color(0xFFE53935),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            OutlinedTextField(
+                                value = rTitle,
+                                onValueChange = { newTitle ->
+                                    scheduledReminders = scheduledReminders.toMutableList().also {
+                                        it[index] = Triple(ms, newTitle, rBody)
+                                    }
+                                },
+                                label = { Text("Title", fontSize = 11.sp) },
+                                modifier = Modifier.fillMaxWidth(),
+                                enabled = !isCreating,
+                                singleLine = true,
+                                textStyle = TextStyle(fontSize = 13.sp, color = Color(0xFF333333))
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            OutlinedTextField(
+                                value = rBody,
+                                onValueChange = { newBody ->
+                                    scheduledReminders = scheduledReminders.toMutableList().also {
+                                        it[index] = Triple(ms, rTitle, newBody)
+                                    }
+                                },
+                                label = { Text("Message", fontSize = 11.sp) },
+                                modifier = Modifier.fillMaxWidth(),
+                                enabled = !isCreating,
+                                minLines = 2,
+                                maxLines = 3,
+                                textStyle = TextStyle(fontSize = 13.sp, color = Color(0xFF333333))
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
+
+                    // Add reminder button
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = {
+                            editingReminderIndex = -1
+                            showReminderDatePicker = true
+                        },
+                        enabled = !isCreating,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Add Reminder", fontSize = 13.sp)
+                    }
+
                     // Wing Selection
                     // Increased spacing before "Select Wings"
                     Spacer(modifier = Modifier.height(24.dp))
@@ -3142,7 +3261,7 @@ fun CreateEventDialog(
                                 else -> {
                                     showError = false
                                     validationErrorMessage = ""
-                                    onCreateEvent(trimmedName, eventDescription.trim(), eventLocation.trim(), selectedDate, openingTime, closingTime, hoursValue, isMandatory, negHoursValue, selectedWings, visibleOnlyToPresent, allowedAttendanceMode)
+                                    onCreateEvent(trimmedName, eventDescription.trim(), eventLocation.trim(), selectedDate, openingTime, closingTime, hoursValue, isMandatory, negHoursValue, selectedWings, visibleOnlyToPresent, allowedAttendanceMode, scheduledReminders)
                                 }
                             }
                         },
@@ -3234,6 +3353,71 @@ fun CreateEventDialog(
                 showClosingTimePicker = false
             }
 
+            timePickerDialog.show()
+        }
+    }
+
+    // Auto-add a default reminder (1 hour before opening time) when opening time first loads
+    // Only if no reminders have been added yet (so admin edits are preserved)
+    LaunchedEffect(openingTime) {
+        val defaultReminderMs = openingTime.time - (60 * 60 * 1000L)
+        if (defaultReminderMs > System.currentTimeMillis() && scheduledReminders.isEmpty()) {
+            val timeStr = com.phad.chatapp.utils.AttendanceEventUtils.formatTimeForPicker(openingTime)
+            val dateStr = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault()).format(selectedDate)
+            val defaultTitle = "\u23f0 Reminder: ${eventName.ifBlank { "Upcoming Event" }}"
+            val defaultBody = "The event starts at " + timeStr + " on " + dateStr + "." + (if (eventLocation.isNotBlank()) " Location: $eventLocation" else "")
+            scheduledReminders = listOf(Triple(defaultReminderMs, defaultTitle, defaultBody))
+        }
+    }
+
+    // Reminder Date Picker
+    if (showReminderDatePicker) {
+        val context = LocalContext.current
+        LaunchedEffect(showReminderDatePicker) {
+            val calendar = java.util.Calendar.getInstance()
+            val datePickerDialog = android.app.DatePickerDialog(
+                context,
+                { _, year, month, dayOfMonth ->
+                    val picked = java.util.Calendar.getInstance()
+                    picked.set(year, month, dayOfMonth, 0, 0, 0)
+                    picked.set(java.util.Calendar.MILLISECOND, 0)
+                    pendingReminderDateMs = picked.timeInMillis
+                    showReminderDatePicker = false
+                    showReminderTimePicker = true
+                },
+                calendar.get(java.util.Calendar.YEAR),
+                calendar.get(java.util.Calendar.MONTH),
+                calendar.get(java.util.Calendar.DAY_OF_MONTH)
+            )
+            datePickerDialog.datePicker.minDate = System.currentTimeMillis()
+            datePickerDialog.setOnDismissListener { showReminderDatePicker = false }
+            datePickerDialog.show()
+        }
+    }
+
+    // Reminder Time Picker (shown after date is selected)
+    if (showReminderTimePicker) {
+        val context = LocalContext.current
+        LaunchedEffect(showReminderTimePicker) {
+            val cal = java.util.Calendar.getInstance()
+            val timePickerDialog = android.app.TimePickerDialog(
+                context,
+                { _, hourOfDay, minute ->
+                    val fullMs = pendingReminderDateMs + (hourOfDay * 60L + minute) * 60 * 1000L
+                    if (fullMs > System.currentTimeMillis()) {
+                        val timeStr = com.phad.chatapp.utils.AttendanceEventUtils.formatTimeForPicker(openingTime)
+                        val dateStr = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault()).format(selectedDate)
+                        val defaultTitle = "\u23f0 Reminder: ${eventName.ifBlank { "Upcoming Event" }}"
+                        val defaultBody = "The event starts at " + timeStr + " on " + dateStr + "." + (if (eventLocation.isNotBlank()) " Location: $eventLocation" else "")
+                        scheduledReminders = scheduledReminders + Triple(fullMs, defaultTitle, defaultBody)
+                    }
+                    showReminderTimePicker = false
+                },
+                cal.get(java.util.Calendar.HOUR_OF_DAY),
+                cal.get(java.util.Calendar.MINUTE),
+                false
+            )
+            timePickerDialog.setOnDismissListener { showReminderTimePicker = false }
             timePickerDialog.show()
         }
     }
@@ -3716,10 +3900,10 @@ fun NotifyEventDialog(
                 if (event.lastNotifiedAt != null) {
                     val lastTime = event.lastNotifiedAt.toDate().time
                     val diffMins = (System.currentTimeMillis() - lastTime) / (1000 * 60)
-                    if (diffMins < 10) {
+                    if (diffMins < 30) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Warning: Last notification was sent ${diffMins}m ago. The server enforces a 10-minute cooldown.",
+                            text = "Warning: Last notification was sent ${diffMins}m ago. The server enforces a 30-minute cooldown.",
                             color = Color.Red,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium

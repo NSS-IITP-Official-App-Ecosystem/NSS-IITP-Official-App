@@ -25,15 +25,8 @@ object PhotoAttendanceManager {
             } catch (e: Exception) {
                 null
             } ?: "nssiitp-app"
-            return if (com.phad.chatapp.BuildConfig.DEBUG) {
-                val isEmulator = android.os.Build.FINGERPRINT.startsWith("generic") || 
-                                 android.os.Build.MODEL.contains("google_sdk") || 
-                                 android.os.Build.MODEL.contains("Emulator")
-                val host = if (isEmulator) "10.0.2.2" else "127.0.0.1"
-                "http://$host:5001/$projId/asia-south1/attendance"
-            } else {
-                "https://asia-south1-$projId.cloudfunctions.net/attendance"
-            }
+            // Use production Cloud Functions URL
+            return "https://asia-south1-$projId.cloudfunctions.net/attendance"
         }
     private val SUBMIT_URL get() = "$BASE_URL/api/attendance/submit-photo"
     private val PENDING_URL get() = "$BASE_URL/api/attendance/pending-photos"
@@ -156,7 +149,8 @@ object PhotoAttendanceManager {
                         // In emulator: rawPhotoUrl is a /tmp proxy URL — rewrite to use local host
                         val finalPhotoUrl = if (com.phad.chatapp.BuildConfig.DEBUG && rawPhotoUrl.isNotEmpty()
                             && !rawPhotoUrl.startsWith("https://storage.googleapis.com")
-                            && !rawPhotoUrl.startsWith("https://firebasestorage")) {
+                            && !rawPhotoUrl.startsWith("https://firebasestorage")
+                            && !rawPhotoUrl.startsWith("https://res.cloudinary.com")) {
                             val filename = rawPhotoUrl.substringAfterLast("/")
                             "$BASE_URL/api/attendance/photo/$filename"
                         } else {

@@ -18,15 +18,8 @@ object BackendApi {
             } catch (e: Exception) {
                 null
             } ?: "nssiitp-app"
-            return if (com.phad.chatapp.BuildConfig.DEBUG) {
-                val isEmulator = android.os.Build.FINGERPRINT.startsWith("generic") || 
-                                 android.os.Build.MODEL.contains("google_sdk") || 
-                                 android.os.Build.MODEL.contains("Emulator")
-                val host = if (isEmulator) "10.0.2.2" else "127.0.0.1"
-                "http://$host:5001/$projId/asia-south1"
-            } else {
-                "https://asia-south1-$projId.cloudfunctions.net"
-            }
+            // Use production Cloud Functions URL
+            return "https://asia-south1-$projId.cloudfunctions.net"
         }
     private val client = OkHttpClient()
     private val json = "application/json; charset=utf-8".toMediaType()
@@ -72,9 +65,62 @@ object BackendApi {
         }
     }
 
+    /**
+     * Schedule a cloud-side notification for an event.
+     * @param eventId Firestore event document ID
+     * @param title Notification title (editable by admin)
+     * @param body Notification body text (editable by admin)
+     * @param scheduledAtMs Unix timestamp in milliseconds when notification should fire
+     * @param targetWings List of wings to notify; empty/null = all students
+     * @return The Firestore document ID of the scheduled notification
+     */
+    suspend fun scheduleNotification(
+        eventId: String,
+        title: String,
+        body: String,
+        scheduledAtMs: Long,
+        targetWings: List<String>
+    ): String {
+        val payload = JSONObject()
+            .put("eventId", eventId)
+            .put("title", title)
+            .put("body", body)
+            .put("scheduledAt", scheduledAtMs)
+            .put("targetWings", org.json.JSONArray(targetWings))
+            .toString().toRequestBody(json)
+        val req = Request.Builder()
+            .url("$BASE_URL/attendance/api/attendance/schedule-notification")
+            .post(payload)
+            .addHeader("Authorization", authHeader())
+            .build()
+        client.newCall(req).execute().use { resp ->
+            val respBody = resp.body?.string() ?: "{}"
+            if (!resp.isSuccessful) {
+                Log.e(TAG, "scheduleNotification error: ${resp.code} $respBody")
+                throw IllegalStateException("scheduleNotification failed: ${resp.code} $respBody")
+            }
+            return JSONObject(respBody).getString("id")
+        }
+    }
 
-
-
+    /**
+     * Cancel a pending scheduled notification by its Firestore document ID.
+     */
+    suspend fun deleteScheduledNotification(notificationId: String) {
+        val req = Request.Builder()
+            .url("$BASE_URL/attendance/api/attendance/schedule-notification/$notificationId")
+            .delete()
+            .addHeader("Authorization", authHeader())
+            .build()
+        client.newCall(req).execute().use { resp ->
+            val respBody = resp.body?.string()
+            if (!resp.isSuccessful) {
+                Log.e(TAG, "deleteScheduledNotification error: ${resp.code} $respBody")
+                throw IllegalStateException("deleteScheduledNotification failed: ${resp.code}")
+            }
+        }
+    }
 }
+
 
 
