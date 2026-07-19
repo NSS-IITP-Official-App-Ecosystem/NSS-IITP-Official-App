@@ -332,9 +332,8 @@ private fun BulkSetButton(text: String, color: Color, onClick: () -> Unit) {
     TextButton(
         onClick = onClick,
         colors = ButtonDefaults.textButtonColors(contentColor = color),
-        modifier = Modifier
-            .height(32.dp)
-            .padding(horizontal = 4.dp)
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+        modifier = Modifier.height(32.dp)
     ) {
         Text(text, fontSize = 11.sp, fontWeight = FontWeight.Bold)
     }

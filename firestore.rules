@@ -10,9 +10,7 @@ service cloud.firestore {
     function isAdmin() {
       return isAuthenticated() &&
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        (
-          lower(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userType) == 'admin'
-        );
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userType in ['admin', 'Admin', 'ADMIN'];
     }
 
     // Alternative admin check by querying users collection with UID field
@@ -57,6 +55,12 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create, delete: if isAdminByUID();
       allow update: if isAuthenticated(); // Allow students to mark attendance by updating attendees array
+
+      // Sub-collection: attendance records for each event
+      match /attendance/{attendeeId} {
+        allow read: if isAuthenticated(); // Admin reads to build penalty list; students read own record
+        allow write: if isAuthenticated(); // Students write when marking attendance
+      }
     }
 
     // Users collection - Allow public read for login verification (roll number checking)
