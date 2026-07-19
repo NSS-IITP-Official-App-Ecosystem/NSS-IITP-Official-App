@@ -348,7 +348,15 @@ class AttendanceViewModel(private val application: Application) : ViewModel() {
                 Log.d(TAG, "applyAbsentPenalty response ($responseCode): $response")
                 
                 if (responseCode == 200) {
-                    Result.success("Penalty settings applied successfully!")
+                    if (response.contains("\"ok\":true") || response.contains("\"ok\": true")) {
+                        Result.success("Penalty settings applied successfully!")
+                    } else {
+                        // Extract reason if present
+                        val reasonRegex = "\"reason\"\\s*:\\s*\"([^\"]+)\"".toRegex()
+                        val match = reasonRegex.find(response)
+                        val reason = match?.groupValues?.get(1) ?: "Unknown error from server"
+                        Result.failure(Exception(reason))
+                    }
                 } else {
                     Result.failure(Exception("Failed: $response"))
                 }
