@@ -431,7 +431,7 @@ class AttendanceViewModel(private val application: Application) : ViewModel() {
                 // Skip students who have already marked their attendance
                 if (!isAbsent) continue
                 
-                val defaultSelection = PenaltySelection.NEGATIVE
+                val defaultSelection = PenaltySelection.ZERO
                 
                 Log.d(TAG, "Adding volunteer: rollNumber=$rollNumber, name=$name, isAbsent=$isAbsent, selection=$defaultSelection")
                 
@@ -491,7 +491,7 @@ class AttendanceViewModel(private val application: Application) : ViewModel() {
                 // Filter out students who have already marked their attendance
                 if (!isAbsent) return@mapNotNull null
 
-                VolunteerPenaltyState(rollNumber, name, isAbsent = true, selection = PenaltySelection.NEGATIVE)
+                VolunteerPenaltyState(rollNumber, name, isAbsent = true, selection = PenaltySelection.ZERO)
             }.sortedBy { it.rollNumber }
 
             Log.d(TAG, "Returning ${volunteers.size} volunteers")
