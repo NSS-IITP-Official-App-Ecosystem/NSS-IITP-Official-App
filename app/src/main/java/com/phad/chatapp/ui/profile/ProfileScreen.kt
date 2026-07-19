@@ -141,7 +141,8 @@ fun ProfileScreen(
     var showMenu by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
     var showClassesDialog by remember { mutableStateOf(false) }
-    
+    var showPenaltyDialog by remember { mutableStateOf(false) }
+    var showEventSelectDialog by remember { mutableStateOf(false) }
     // Determine user type
     val isAdmin = !state.isStudent
     // Debug logging for ProfileScreen
