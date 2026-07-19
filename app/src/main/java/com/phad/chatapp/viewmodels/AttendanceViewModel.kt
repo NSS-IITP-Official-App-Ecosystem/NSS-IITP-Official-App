@@ -18,6 +18,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.*
 
 class AttendanceViewModel(private val application: Application) : ViewModel() {
@@ -307,47 +309,49 @@ class AttendanceViewModel(private val application: Application) : ViewModel() {
             // Use production Cloud Functions URL
             val url = "https://asia-south1-$projId.cloudfunctions.net/applyAbsentPenalty"
             
-            val client = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-            client.requestMethod = "POST"
-            client.setRequestProperty("Content-Type", "application/json")
-            client.setRequestProperty("Authorization", "Bearer $idToken")
-            client.doOutput = true
+            withContext(Dispatchers.IO) {
+                val client = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                client.requestMethod = "POST"
+                client.setRequestProperty("Content-Type", "application/json")
+                client.setRequestProperty("Authorization", "Bearer $idToken")
+                client.doOutput = true
 
-            // Build JSON request manually to avoid external serialization dependencies
-            val bodyBuilder = java.lang.StringBuilder()
-            bodyBuilder.append("{")
-            bodyBuilder.append("\"eventId\":\"$eventId\"")
-            
-            if (positiveRollNumbers != null) {
-                val posArray = positiveRollNumbers.joinToString(prefix = "[", postfix = "]", separator = ",") { "\"$it\"" }
-                bodyBuilder.append(",\"positiveRollNumbers\":$posArray")
-            }
-            if (negativeRollNumbers != null) {
-                val negArray = negativeRollNumbers.joinToString(prefix = "[", postfix = "]", separator = ",") { "\"$it\"" }
-                bodyBuilder.append(",\"negativeRollNumbers\":$negArray")
-            }
-            if (zeroRollNumbers != null) {
-                val zeroArray = zeroRollNumbers.joinToString(prefix = "[", postfix = "]", separator = ",") { "\"$it\"" }
-                bodyBuilder.append(",\"zeroRollNumbers\":$zeroArray")
-            }
-            bodyBuilder.append("}")
+                // Build JSON request manually to avoid external serialization dependencies
+                val bodyBuilder = java.lang.StringBuilder()
+                bodyBuilder.append("{")
+                bodyBuilder.append("\"eventId\":\"$eventId\"")
+                
+                if (positiveRollNumbers != null) {
+                    val posArray = positiveRollNumbers.joinToString(prefix = "[", postfix = "]", separator = ",") { "\"$it\"" }
+                    bodyBuilder.append(",\"positiveRollNumbers\":$posArray")
+                }
+                if (negativeRollNumbers != null) {
+                    val negArray = negativeRollNumbers.joinToString(prefix = "[", postfix = "]", separator = ",") { "\"$it\"" }
+                    bodyBuilder.append(",\"negativeRollNumbers\":$negArray")
+                }
+                if (zeroRollNumbers != null) {
+                    val zeroArray = zeroRollNumbers.joinToString(prefix = "[", postfix = "]", separator = ",") { "\"$it\"" }
+                    bodyBuilder.append(",\"zeroRollNumbers\":$zeroArray")
+                }
+                bodyBuilder.append("}")
 
-            val body = bodyBuilder.toString()
-            client.outputStream.write(body.toByteArray())
+                val body = bodyBuilder.toString()
+                client.outputStream.write(body.toByteArray())
 
-            val responseCode = client.responseCode
-            val response = if (responseCode == 200) {
-                client.inputStream.bufferedReader().readText()
-            } else {
-                client.errorStream?.bufferedReader()?.readText() ?: "Error code: $responseCode"
-            }
-            
-            Log.d(TAG, "applyAbsentPenalty response ($responseCode): $response")
-            
-            if (responseCode == 200) {
-                Result.success("Penalty settings applied successfully!")
-            } else {
-                Result.failure(Exception("Failed: $response"))
+                val responseCode = client.responseCode
+                val response = if (responseCode == 200) {
+                    client.inputStream.bufferedReader().readText()
+                } else {
+                    client.errorStream?.bufferedReader()?.readText() ?: "Error code: $responseCode"
+                }
+                
+                Log.d(TAG, "applyAbsentPenalty response ($responseCode): $response")
+                
+                if (responseCode == 200) {
+                    Result.success("Penalty settings applied successfully!")
+                } else {
+                    Result.failure(Exception("Failed: $response"))
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error applying penalty", e)
