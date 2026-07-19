@@ -377,7 +377,7 @@ class AttendanceViewModel(private val application: Application) : ViewModel() {
                     db.collection("users").whereArrayContainsAny("wings", eventWings)
                 } else {
                     Log.d(TAG, "Event wings is empty. Querying all students.")
-                    db.collection("users").whereEqualTo("userType", "Student")
+                    db.collection("users").whereIn("userType", listOf("student", "Student"))
                 }
                 query.get().await()
             } catch (queryEx: Exception) {
