@@ -50,7 +50,8 @@ object PhotoAttendanceManager {
         val longitude: Double,
         val photoUrl: String,
         val status: String,
-        val submittedAtMs: Long
+        val submittedAtMs: Long,
+        var wing: String? = null
     )
 
     /**

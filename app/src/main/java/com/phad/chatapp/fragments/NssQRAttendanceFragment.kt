@@ -398,7 +398,25 @@ fun QRAttendanceAdminScreen(
             val result = PhotoAttendanceManager.getPendingPhotos()
             isLoadingPending = false
             result.fold(
-                onSuccess = { pendingPhotos = it },
+                onSuccess = { photos -> 
+                    pendingPhotos = photos
+                    photos.forEach { record ->
+                        launch(kotlinx.coroutines.Dispatchers.IO) {
+                            val userResult = com.phad.chatapp.repositories.UserRepository().getUserByRollNumber(record.rollNumber)
+                            userResult.getOrNull()?.let { user ->
+                                val wingsStr = user.wings.joinToString(", ")
+                                if (wingsStr.isNotEmpty()) {
+                                    val currentList = pendingPhotos.toMutableList()
+                                    val index = currentList.indexOfFirst { it.id == record.id }
+                                    if (index != -1) {
+                                        currentList[index] = record.copy(wing = wingsStr)
+                                        pendingPhotos = currentList
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
                 onFailure = { pendingFetchError = it.message ?: "Failed to load pending photos" }
             )
         }
@@ -3741,6 +3759,15 @@ fun PendingVerificationsScreen(
                                             fontSize = 13.sp,
                                             color = Color.Gray
                                         )
+                                        record.wing?.let { wingName ->
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text(
+                                                text = "Wing: $wingName",
+                                                fontSize = 13.sp,
+                                                color = Color.Gray,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        }
                                     }
                                     Card(
                                         colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
