@@ -150,6 +150,7 @@ class NssQRScanFragment : Fragment() {
 
     // Captured photo state for previewing before upload
     private var capturedPhotoBitmap by mutableStateOf<Bitmap?>(null)
+    private var frozenPreviewBitmap by mutableStateOf<Bitmap?>(null)
     private var capturedLocation by mutableStateOf<android.location.Location?>(null)
     private var capturedImageBytes by mutableStateOf<ByteArray?>(null)
     
@@ -192,6 +193,7 @@ class NssQRScanFragment : Fragment() {
         
         // Get camera preview view
         previewView = view.findViewById(R.id.camera_preview)
+        previewView.implementationMode = PreviewView.ImplementationMode.COMPATIBLE
         previewView.visibility = View.GONE // Hide camera by default until a mode is chosen
 
         // Set up zoom gesture detection on the preview view
@@ -263,6 +265,7 @@ class NssQRScanFragment : Fragment() {
                 }
                 AttendanceMode.CAPTURE_PHOTO -> {
                     val capturedBitmap = capturedPhotoBitmap
+                    val frozenBitmap = frozenPreviewBitmap
                     if (capturedBitmap != null) {
                         PhotoPreviewOverlay(
                             bitmap = capturedBitmap,
@@ -281,6 +284,14 @@ class NssQRScanFragment : Fragment() {
                             }
                         )
                     } else {
+                        if (frozenBitmap != null) {
+                            Image(
+                                bitmap = frozenBitmap.asImageBitmap(),
+                                contentDescription = "Frozen Camera Preview",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
                         val profile = sessionManager.getProfileFromSession()
                         val userWings = profile.wings
                         val userRollNumber = profile.rollNumber
@@ -717,6 +728,12 @@ class NssQRScanFragment : Fragment() {
         val tempFile = File(requireContext().cacheDir, "temp_attendance_${System.currentTimeMillis()}.jpg")
         val outputOptions = ImageCapture.OutputFileOptions.Builder(tempFile).build()
 
+        try {
+            frozenPreviewBitmap = previewView.bitmap
+        } catch (e: Exception) {
+            Log.e(TAG, "Could not freeze preview", e)
+        }
+
         // Take the picture IMMEDIATELY so the user doesn't have to hold still
         imageCaptureObj.takePicture(
             outputOptions,
@@ -730,6 +747,7 @@ class NssQRScanFragment : Fragment() {
                     locationService.getFreshHighAccuracyLocation { location ->
                         if (location == null) {
                             isUploadingPhoto = false
+                            frozenPreviewBitmap = null
                             Toast.makeText(requireContext(), "Failed to get GPS location. Ensure location is enabled.", Toast.LENGTH_LONG).show()
                             return@getFreshHighAccuracyLocation
                         }
@@ -771,6 +789,7 @@ class NssQRScanFragment : Fragment() {
                             } catch (e: Exception) {
                                 Log.e(TAG, "Error processing captured photo", e)
                                 isUploadingPhoto = false
+                                frozenPreviewBitmap = null
                                 uploadErrorMsg = "Failed to process photo: ${e.message}"
                             }
                         }
@@ -781,6 +800,7 @@ class NssQRScanFragment : Fragment() {
                     Log.e(TAG, "Photo capture failed: ${exception.message}", exception)
                     isTakingPicture = false
                     isUploadingPhoto = false
+                    frozenPreviewBitmap = null
                     uploadErrorMsg = "Capture failed: ${exception.message}"
                 }
             }
@@ -835,6 +855,8 @@ class NssQRScanFragment : Fragment() {
         capturedPhotoBitmap = null
         capturedLocation = null
         capturedImageBytes = null
+        frozenPreviewBitmap?.recycle()
+        frozenPreviewBitmap = null
     }
 
     private fun retakePhoto() {
