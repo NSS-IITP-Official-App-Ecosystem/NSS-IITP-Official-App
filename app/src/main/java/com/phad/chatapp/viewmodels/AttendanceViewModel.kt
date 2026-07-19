@@ -419,7 +419,11 @@ class AttendanceViewModel(private val application: Application) : ViewModel() {
                 }
                 
                 val isAbsent = !attendedRollNumbers.contains(rollNumber)
-                val defaultSelection = if (isAbsent) PenaltySelection.NEGATIVE else PenaltySelection.POSITIVE
+                
+                // Skip students who have already marked their attendance
+                if (!isAbsent) continue
+                
+                val defaultSelection = PenaltySelection.NEGATIVE
                 
                 Log.d(TAG, "Adding volunteer: rollNumber=$rollNumber, name=$name, isAbsent=$isAbsent, selection=$defaultSelection")
                 
@@ -476,7 +480,10 @@ class AttendanceViewModel(private val application: Application) : ViewModel() {
                 if (eventWings.isNotEmpty() && userWings.none { it in eventWings }) return@mapNotNull null
 
                 val isAbsent = !attendedRollNumbers.contains(rollNumber)
-                VolunteerPenaltyState(rollNumber, name, isAbsent, if (isAbsent) PenaltySelection.NEGATIVE else PenaltySelection.POSITIVE)
+                // Filter out students who have already marked their attendance
+                if (!isAbsent) return@mapNotNull null
+
+                VolunteerPenaltyState(rollNumber, name, isAbsent = true, selection = PenaltySelection.NEGATIVE)
             }.sortedBy { it.rollNumber }
 
             Log.d(TAG, "Returning ${volunteers.size} volunteers")
