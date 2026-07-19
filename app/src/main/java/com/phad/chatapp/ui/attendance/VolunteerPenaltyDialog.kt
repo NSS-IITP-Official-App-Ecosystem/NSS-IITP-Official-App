@@ -72,8 +72,16 @@ fun VolunteerPenaltyDialog(
     var isApplying by remember { mutableStateOf(false) }
     var showConfirmDialog by remember { mutableStateOf(false) }
 
+    var loadError by remember { mutableStateOf<String?>(null) }
+
     LaunchedEffect(eventId) {
-        volunteers = viewModel.getVolunteersForPenalty(eventId)
+        isLoading = true
+        loadError = null
+        val result = viewModel.getVolunteersForPenaltyWithError(eventId)
+        result.fold(
+            onSuccess = { volunteers = it },
+            onFailure = { loadError = it.message }
+        )
         isLoading = false
     }
 
@@ -125,6 +133,20 @@ fun VolunteerPenaltyDialog(
                         contentAlignment = Alignment.Center
                     ) {
                         CircularProgressIndicator(color = Color(0xFFE53935))
+                    }
+                } else if (loadError != null) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Error: $loadError",
+                            color = Color(0xFFEF5350),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier.padding(16.dp)
+                        )
                     }
                 } else if (volunteers.isEmpty()) {
                     Box(

@@ -381,7 +381,7 @@ class AttendanceViewModel(private val application: Application) : ViewModel() {
                 }
                 query.get().await()
             } catch (queryEx: Exception) {
-                Log.w(TAG, "Optimized wing query failed, falling back to full users scan", queryEx)
+                Log.w(TAG, "Optimized wing query failed, falling back to full users scan. Error: ${queryEx.message}", queryEx)
                 db.collection("users").get().await()
             }
             Log.d(TAG, "Fetched ${usersSnap.documents.size} raw users from Firestore")
@@ -433,8 +433,53 @@ class AttendanceViewModel(private val application: Application) : ViewModel() {
             Log.d(TAG, "=== getVolunteersForPenalty() COMPLETE: Returning ${sortedList.size} volunteers ===")
             sortedList
         } catch (e: Exception) {
-            Log.e(TAG, "Error in getVolunteersForPenalty", e)
+            Log.e(TAG, "Error in getVolunteersForPenalty: ${e.message}", e)
             emptyList()
+        }
+    }
+
+    suspend fun getVolunteersForPenaltyWithError(eventId: String): Result<List<VolunteerPenaltyState>> {
+        return try {
+            Log.d(TAG, "=== getVolunteersForPenaltyWithError() START for event: $eventId ===")
+
+            val eventDoc = db.collection("NSS_Events_Attendence").document(eventId).get().await()
+            if (!eventDoc.exists()) {
+                return Result.failure(Exception("Event not found: $eventId"))
+            }
+
+            val eventWings = (eventDoc.get("wings") as? List<*>)?.filterIsInstance<String>() ?: emptyList()
+            Log.d(TAG, "Event Wings: $eventWings")
+
+            val usersSnap = if (eventWings.isNotEmpty()) {
+                db.collection("users").whereArrayContainsAny("wings", eventWings).get().await()
+            } else {
+                db.collection("users").whereIn("userType", listOf("student", "Student")).get().await()
+            }
+            Log.d(TAG, "Raw users fetched: ${usersSnap.documents.size}")
+
+            val attendanceSnap = db.collection("NSS_Events_Attendence").document(eventId)
+                .collection("attendance").get().await()
+            val attendedRollNumbers = attendanceSnap.documents.map { it.id.uppercase() }.toSet()
+
+            val volunteers = usersSnap.documents.mapNotNull { doc ->
+                val userType = doc.getString("userType") ?: "student"
+                if (userType.equals("Admin", ignoreCase = true)) return@mapNotNull null
+
+                val rollNumber = doc.id.uppercase()
+                val name = doc.getString("name") ?: "Unknown"
+                val userWings = (doc.get("wings") as? List<*>)?.filterIsInstance<String>() ?: emptyList()
+
+                if (eventWings.isNotEmpty() && userWings.none { it in eventWings }) return@mapNotNull null
+
+                val isAbsent = !attendedRollNumbers.contains(rollNumber)
+                VolunteerPenaltyState(rollNumber, name, isAbsent, if (isAbsent) PenaltySelection.NEGATIVE else PenaltySelection.POSITIVE)
+            }.sortedBy { it.rollNumber }
+
+            Log.d(TAG, "Returning ${volunteers.size} volunteers")
+            Result.success(volunteers)
+        } catch (e: Exception) {
+            Log.e(TAG, "getVolunteersForPenaltyWithError FAILED: ${e.message}", e)
+            Result.failure(e)
         }
     }
 }
