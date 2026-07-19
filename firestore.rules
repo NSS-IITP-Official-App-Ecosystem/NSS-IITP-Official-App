@@ -113,6 +113,12 @@ service cloud.firestore {
       allow write: if isAdminByUID();
     }
     
+    // FAQs collection
+    match /faqs/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAdminByUID();
+    }
+    
     // NSS Updates (Home Screen)
     match /nss_updates/{document=**} {
       allow read: if isAuthenticated();
