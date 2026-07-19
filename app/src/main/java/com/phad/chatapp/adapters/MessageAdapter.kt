@@ -62,7 +62,7 @@ class MessageAdapter(
     
     // Colors for highlighting
     private val EVERYONE_COLOR = Color.parseColor("#FFC107") // Amber/Yellow for @everyone
-    private val MENTION_COLOR = Color.parseColor("#4CAF50") // Green for @rollNumber mentions
+    private val MENTION_COLOR = Color.parseColor("#006BFF") // Blue for @rollNumber mentions
     private val IMPORTANT_COLOR = Color.parseColor("#FF9900") // Neon Orange for @important
     
     // Add property for recyclerView reference
@@ -195,6 +195,9 @@ class MessageAdapter(
                 0, displayText.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
             )
         }
+        // Determine text color based on whether it's a sent or received message
+        val isSent = message.sender == currentUserId
+        val mentionTextColor = if (isSent) Color.WHITE else MENTION_COLOR
         
         // Highlight @everyone mentions
         val everyoneMatcher = EVERYONE_PATTERN.matcher(displayText)
@@ -202,15 +205,15 @@ class MessageAdapter(
             val start = everyoneMatcher.start()
             val end = everyoneMatcher.end()
             
-            // Add background color span for @everyone
+            // Make the text bold
             spannableString.setSpan(
-                BackgroundColorSpan(EVERYONE_COLOR),
+                android.text.style.StyleSpan(android.graphics.Typeface.BOLD),
                 start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
             )
             
-            // Add text color for better contrast
+            // Set the text color
             spannableString.setSpan(
-                ForegroundColorSpan(Color.BLACK),
+                ForegroundColorSpan(mentionTextColor),
                 start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
             )
         }
@@ -222,22 +225,22 @@ class MessageAdapter(
             val end = mentionMatcher.end()
             val mentionedUser = mentionMatcher.group(1)
             
-            // Add background color span for roll number mention
+            // Make the text bold
             spannableString.setSpan(
-                BackgroundColorSpan(MENTION_COLOR),
+                android.text.style.StyleSpan(android.graphics.Typeface.BOLD),
                 start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
             )
             
-            // Add text color for better contrast
+            // Set the text color
             spannableString.setSpan(
-                ForegroundColorSpan(Color.WHITE),
+                ForegroundColorSpan(mentionTextColor),
                 start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
             )
             
-            // If the current user is mentioned, make it more prominent
+            // If the current user is mentioned, make it more prominent with an underline
             if (mentionedUser == currentUserId) {
                 spannableString.setSpan(
-                    ForegroundColorSpan(Color.YELLOW),
+                    android.text.style.UnderlineSpan(),
                     start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
                 )
             }

@@ -253,7 +253,7 @@ class ChatMessagingService : FirebaseMessagingService() {
             val notificationColor = when {
                 isImportant -> Color.parseColor("#FF9900") // Neon Orange for important
                 containsEveryone -> Color.parseColor("#FFC107") // Amber/Yellow for @everyone
-                containsRollNumberMention -> Color.parseColor("#4CAF50") // Green for roll number mentions
+                containsRollNumberMention -> Color.parseColor("#006BFF") // Blue for roll number mentions
                 else -> Color.parseColor("#2196F3") // Blue for regular
             }
             
