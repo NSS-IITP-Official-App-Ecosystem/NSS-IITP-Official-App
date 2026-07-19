@@ -1,4 +1,4 @@
-﻿package com.phad.chatapp.fragments
+package com.phad.chatapp.fragments
 
 import android.os.Bundle
 import android.util.Log
@@ -1519,13 +1519,7 @@ fun EditEventDialog(
                         fontSize = 14.sp
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-<<<<<<< HEAD
-
                     val wings = com.phad.chatapp.utils.Constants.NSS_WINGS
-
-=======
-                    val wings = com.phad.chatapp.utils.Constants.NSS_WINGS
->>>>>>> 46b9ccfa108b67c6134ee45fc16352e1fb3569c1
                     
                     // Select All Checkbox
                     Row(
@@ -3092,13 +3086,7 @@ fun CreateEventDialog(
                             fontSize = 14.sp
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-<<<<<<< HEAD
-
                         val wings = com.phad.chatapp.utils.Constants.NSS_WINGS
-
-=======
-                        val wings = com.phad.chatapp.utils.Constants.NSS_WINGS
->>>>>>> 46b9ccfa108b67c6134ee45fc16352e1fb3569c1
                         
                         // Select All Checkbox
                         Row(
