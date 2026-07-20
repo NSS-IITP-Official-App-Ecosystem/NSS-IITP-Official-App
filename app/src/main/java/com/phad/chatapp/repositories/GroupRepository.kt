@@ -300,7 +300,8 @@ class GroupRepository {
                         
                         batch.update(existingDoc.reference, mapOf(
                             "participants" to finalParticipants,
-                            "admins" to finalAdmins
+                            "admins" to finalAdmins,
+                            "createdAt" to Timestamp.now()
                         ))
                         batchCount++
                     }

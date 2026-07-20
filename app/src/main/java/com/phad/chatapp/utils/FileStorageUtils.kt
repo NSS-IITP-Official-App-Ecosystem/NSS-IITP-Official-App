@@ -53,31 +53,12 @@ object FileStorageUtils {
         customFileName: String? = null
     ): String? = withContext(Dispatchers.IO) {
         try {
-            val driveHelper = DriveServiceHelper.getInstance(context)
+            val cloudinaryHelper = CloudinaryHelper.getInstance(context)
             
-            // Generate a file name if not provided
-            val fileName = customFileName ?: "IMG_${UUID.randomUUID()}.${getFileExtension(context, imageUri)}"
+            // Upload the file using Cloudinary
+            val result = cloudinaryHelper.uploadImage(imageUri, "chat_media/images")
+            return@withContext result.url
             
-            // Get MIME type
-            val mimeType = getMimeType(context, imageUri) ?: "image/jpeg"
-            
-            // Upload the file
-            val result = driveHelper.uploadFile(
-                fileUri = imageUri,
-                fileName = fileName,
-                mimeType = mimeType,
-                fileType = FileTypeEnum.IMAGE
-            )
-            
-            if (result.isSuccess) {
-                return@withContext result.getOrNull()
-            } else {
-                Log.e(TAG, "Failed to upload image: ${result.exceptionOrNull()?.message}")
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "Failed to upload image", Toast.LENGTH_SHORT).show()
-                }
-                return@withContext null
-            }
         } catch (e: Exception) {
             Log.e(TAG, "Error uploading image", e)
             withContext(Dispatchers.Main) {
@@ -101,31 +82,12 @@ object FileStorageUtils {
         customFileName: String? = null
     ): String? = withContext(Dispatchers.IO) {
         try {
-            val driveHelper = DriveServiceHelper.getInstance(context)
+            val cloudinaryHelper = CloudinaryHelper.getInstance(context)
             
-            // Generate a file name if not provided
-            val fileName = customFileName ?: "DOC_${UUID.randomUUID()}.${getFileExtension(context, documentUri)}"
+            // Upload the document using Cloudinary
+            val result = cloudinaryHelper.uploadDocument(documentUri, "chat_media/documents")
+            return@withContext result.url
             
-            // Get MIME type
-            val mimeType = getMimeType(context, documentUri) ?: "application/pdf"
-            
-            // Upload the file
-            val result = driveHelper.uploadFile(
-                fileUri = documentUri,
-                fileName = fileName,
-                mimeType = mimeType,
-                fileType = FileTypeEnum.DOCUMENT
-            )
-            
-            if (result.isSuccess) {
-                return@withContext result.getOrNull()
-            } else {
-                Log.e(TAG, "Failed to upload document: ${result.exceptionOrNull()?.message}")
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "Failed to upload document", Toast.LENGTH_SHORT).show()
-                }
-                return@withContext null
-            }
         } catch (e: Exception) {
             Log.e(TAG, "Error uploading document", e)
             withContext(Dispatchers.Main) {
