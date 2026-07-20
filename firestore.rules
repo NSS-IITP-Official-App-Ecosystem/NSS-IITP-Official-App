@@ -158,6 +158,26 @@ service cloud.firestore {
       allow write: if isAdminByUID();
     }
     
+    // CHAT GROUPS AND MESSAGES
+    match /groups/{groupId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdminByUID();
+      
+      match /messages/{messageId} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+
+    match /meta/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAdminByUID();
+    }
+
+    match /subjectAssignments/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAdminByUID();
+    }
+    
     match /issues/{issueId} {
       // Users can read and create their own issues. Admins can read and update all issues.
       allow read: if isAuthenticated() && (isAdminByUID() || resource.data.reportedBy == request.auth.uid);
