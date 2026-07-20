@@ -145,7 +145,7 @@ fun HelpScreen(
                     val filteredBySelf = group.contacts.filter { it.rollNumber != userRollNumber }
                     val contactsToShow = if (group.filterByWing) {
                         filteredBySelf.filter { contact ->
-                            userWings.any { wing -> contact.role.equals(wing, ignoreCase = true) }
+                            userWings.any { wing -> contact.role.contains(wing, ignoreCase = true) }
                         }
                     } else {
                         filteredBySelf
