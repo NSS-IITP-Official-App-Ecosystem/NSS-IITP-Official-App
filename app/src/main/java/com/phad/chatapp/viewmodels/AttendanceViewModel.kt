@@ -75,7 +75,7 @@ class AttendanceViewModel(private val application: Application) : ViewModel() {
                 "live" to FieldValue.delete() // Remove duplicate field if it exists
             )
 
-            db.collection("attendances")
+            db.collection("NSS_Events_Attendence")
                 .document(event.id)
                 .update(updates)
                 .await()
@@ -100,7 +100,8 @@ class AttendanceViewModel(private val application: Application) : ViewModel() {
                 "is_live" to true,
                 "liveCount" to newLiveCount,
                 "closedAt" to FieldValue.delete(), // Remove closedAt timestamp (using correct field name)
-                "live" to FieldValue.delete() // Remove duplicate field if it exists
+                "live" to FieldValue.delete(), // Remove duplicate field if it exists
+                "absentPenaltyApplied" to false // Reset penalty flag so it can be re-applied after closing
             )
 
             db.collection("NSS_Events_Attendence")

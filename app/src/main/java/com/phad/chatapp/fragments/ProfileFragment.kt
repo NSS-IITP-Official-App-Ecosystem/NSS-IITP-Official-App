@@ -387,10 +387,7 @@ class ProfileFragment : Fragment() {
                             isRefreshing = false // Reset refreshing state
                         ) 
                     }
-                    
-                    // Update student document with new stats
-                    AttendanceStatsCalculator.updateStudentStats(rollNumber)
-                    
+                    // Student stats are maintained by the server. We no longer write them from the client.
                     Log.d(TAG, "Refreshed student attendance stats: SEM1=$sem1Stats, SEM2=$sem2Stats, Events=$eventsStats")
                 } catch (e: Exception) {
                     _uiState.update { 

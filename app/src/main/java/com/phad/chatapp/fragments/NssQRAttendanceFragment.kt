@@ -54,6 +54,7 @@ import androidx.compose.material3.*
 import androidx.compose.ui.window.Dialog
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -3712,7 +3713,7 @@ fun PendingVerificationsScreen(
                 
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
+                    contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 100.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(eventRecords) { record ->
@@ -3844,9 +3845,10 @@ fun PendingVerificationsScreen(
                                         contentDescription = "Volunteer Geo-Tagged Photo",
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .height(200.dp)
-                                            .background(Color(0xFFEEEEEE), RoundedCornerShape(8.dp)),
-                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                            .wrapContentHeight()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(Color(0xFFEEEEEE)),
+                                        contentScale = androidx.compose.ui.layout.ContentScale.FillWidth
                                     )
                                     Spacer(modifier = Modifier.height(16.dp))
                                 }

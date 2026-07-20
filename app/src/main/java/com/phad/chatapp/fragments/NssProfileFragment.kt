@@ -150,11 +150,7 @@ class NssProfileFragment : Fragment() {
                 try {
                     // Set refreshing state to true
                     _uiState.update { it.copy(isRefreshing = true) }
-                    
-                    // Trigger background recalculation
-                    // The UI will be updated automatically by the real-time listener in loadStatistics
-                    AttendanceStatsCalculator.updateStudentStats(rollNumber)
-                    
+                    // Student stats are maintained by the server. We no longer trigger a background recalculation that overwrites them.
                     _uiState.update { it.copy(isRefreshing = false) }
                     
                     Log.d(TAG, "Triggered student attendance stats recalculation")

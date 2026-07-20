@@ -430,6 +430,7 @@ class AttendanceQRRepository {
                     val liveCount = (eventSnapshot.get("liveCount") as? Number)?.toInt() ?: 1
                     val isMandatory = event.isMandatory
                     val negativeHours = event.negativeHours
+                    val absentPenaltyApplied = event.absentPenaltyApplied
                     
                     // Calculate hours to add
                     var hoursToAdd = eventHours
@@ -437,7 +438,8 @@ class AttendanceQRRepository {
                     var sem2HoursToAdd = if (semester == 2) eventHours else 0.0
                     
                     // For mandatory events with liveCount > 1, also refund negative hours
-                    if (isMandatory && liveCount > 1 && negativeHours > 0.0) {
+                    // Bug fix: only refund if penalty was actually applied
+                    if (isMandatory && liveCount > 1 && negativeHours > 0.0 && absentPenaltyApplied) {
                         Log.d(TAG, "Mandatory event with liveCount > 1: adding refund of negative hours")
                         hoursToAdd += negativeHours
                         if (semester == 1) sem1HoursToAdd += negativeHours
@@ -533,6 +535,7 @@ class AttendanceQRRepository {
                 val liveCount = (eventSnapshot.get("liveCount") as? Number)?.toInt() ?: 1
                 val isMandatory = event.isMandatory
                 val negativeHours = event.negativeHours
+                val absentPenaltyApplied = event.absentPenaltyApplied
                 
                 // Calculate hours to remove
                 var hoursToRemove = eventHours
@@ -540,7 +543,8 @@ class AttendanceQRRepository {
                 var sem2HoursToRemove = if (semester == 2) eventHours else 0.0
                 
                 // For mandatory events with liveCount > 1, also re-apply negative hours penalty
-                if (isMandatory && liveCount > 1 && negativeHours > 0.0) {
+                // Bug fix: only re-apply if penalty was actually applied
+                if (isMandatory && liveCount > 1 && negativeHours > 0.0 && absentPenaltyApplied) {
                     Log.d(TAG, "Mandatory event with liveCount > 1: re-applying negative hours penalty")
                     hoursToRemove += negativeHours
                     if (semester == 1) sem1HoursToRemove += negativeHours
@@ -1040,8 +1044,30 @@ class AttendanceQRRepository {
                 val oldSemester = getSemesterFromDate(oldEvent.eventDate)
                 val newSemester = getSemesterFromDate(newEvent.eventDate)
                 val attendeeRolls = oldEvent.attendees.map { it.rollNumber }.toSet()
-                val allUsersDocs = usersCollection.get().await().documents
-                val absentees = allUsersDocs.map { it.id }.filter { it.isNotBlank() && !attendeeRolls.contains(it) }
+                var allUsersDocs = usersCollection.get().await().documents
+                if (allUsersDocs.isEmpty()) {
+                    Log.w(TAG, "users collection is empty; falling back to ttwStudents")
+                    allUsersDocs = firestore.collection("ttwStudents").get().await().documents
+                }
+                
+                // Bug fix: Filter using wing logic (like updateAttendanceEvent)
+                val absentees = allUsersDocs.mapNotNull { doc ->
+                    val roll = doc.id
+                    val isPresent = attendeeRolls.contains(roll)
+                    if (roll.isBlank() || isPresent) return@mapNotNull null
+                    
+                    @Suppress("UNCHECKED_CAST")
+                    val userWings = (doc.get("wings") as? List<String>) ?: emptyList()
+                    val isDNCEvent = newEvent.wings.contains("Design and Curation Wing")
+                    
+                    val shouldDeduct = when {
+                        isDNCEvent -> true
+                        newEvent.wings.isEmpty() -> true
+                        else -> newEvent.wings.any { it in userWings }
+                    }
+                    
+                    if (shouldDeduct) roll else null
+                }
 
                 Log.d(TAG, "Handling mandatory penalties: oldPenalty=$oldPenalty, newPenalty=$newPenalty, absentees=${absentees.size}")
 
@@ -1470,7 +1496,8 @@ class AttendanceQRRepository {
                 "is_live" to true,
                 "liveCount" to newLiveCount,
                 "closedAt" to FieldValue.delete(), // Remove closedAt timestamp
-                "live" to FieldValue.delete() // Remove duplicate field if it exists
+                "live" to FieldValue.delete(), // Remove duplicate field if it exists
+                "absentPenaltyApplied" to false // Reset penalty flag
             )
 
             eventsAttendanceCollection.document(eventId)

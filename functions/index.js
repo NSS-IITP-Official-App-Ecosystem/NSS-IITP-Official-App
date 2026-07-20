@@ -579,12 +579,18 @@ exports.applyAbsentPenalty = onRequest({ region: REGION, invoker: 'public' }, as
     const semester = (() => {
       try {
         const parts = eventDate.split(' ');
+        if (parts.length < 3) return 0;
+        const day = parseInt(parts[0], 10);
         const month = parts[1];
-        const year = parseInt(parts[2], 10);
         const monthIndex = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].indexOf(month);
-        if ((year === 2025 && monthIndex >= 6) || (year === 2026 && monthIndex <= 4)) {
-          return year === 2025 ? 1 : 2;
-        }
+        if (monthIndex === -1) return 0;
+        const m = monthIndex + 1;
+        // Semester 1: July 1 - December 10
+        if (m >= 7 && m <= 11) return 1;
+        if (m === 12 && day <= 10) return 1;
+        // Semester 2: December 11 - June 30
+        if (m === 12 && day >= 11) return 2;
+        if (m >= 1 && m <= 6) return 2;
       } catch (e) {}
       return 0;
     })();
@@ -604,7 +610,9 @@ exports.applyAbsentPenalty = onRequest({ region: REGION, invoker: 'public' }, as
     const batch = db.batch();
     let penaltyCount = 0;
 
-    const hasSelectiveLists = Array.isArray(positiveRollNumbers) || Array.isArray(negativeRollNumbers) || Array.isArray(zeroRollNumbers);
+    // Bug fix: all three lists must be present (use && not ||).
+    // With ||, a request missing two of the three lists would still pass the guard.
+    const hasSelectiveLists = Array.isArray(positiveRollNumbers) && Array.isArray(negativeRollNumbers) && Array.isArray(zeroRollNumbers);
 
     if (!hasSelectiveLists) {
       throw Object.assign(new Error('Outdated App Version: The app did not send positive/negative/zero lists. Please update your app.'), { status: 400 });
@@ -613,12 +621,57 @@ exports.applyAbsentPenalty = onRequest({ region: REGION, invoker: 'public' }, as
     const posSet = new Set((positiveRollNumbers || []).map(r => r.toUpperCase()));
     const negSet = new Set((negativeRollNumbers || []).map(r => r.toUpperCase()));
     const zeroSet = new Set((zeroRollNumbers || []).map(r => r.toUpperCase()));
+    const coveredSet = new Set([...posSet, ...negSet, ...zeroSet]);
 
     console.log(`[AbsentPenalty] Processing selective: positive=${posSet.size}, negative=${negSet.size}, zero=${zeroSet.size}`);
+
+    // Bug fix: detect absent students not covered by any list.
+    // This can happen if the client-side wing query fell back and missed some volunteers.
+    const uncoveredAbsent = [];
+    for (const rollNumber of Object.keys(userMap)) {
+      const user = userMap[rollNumber];
+      if (user.userType === 'Admin') continue;
+      const isAbsent = !attendedRollNumbers.has(rollNumber);
+      if (isAbsent && !coveredSet.has(rollNumber)) {
+        // Apply wing filter before flagging — only warn for students relevant to this event
+        if (eventWings.length === 0) {
+          uncoveredAbsent.push(rollNumber);
+        } else {
+          const userWings = user.wings || [];
+          if (userWings.some(w => eventWings.includes(w))) {
+            uncoveredAbsent.push(rollNumber);
+          }
+        }
+      }
+    }
+    if (uncoveredAbsent.length > 0) {
+      console.warn(`[AbsentPenalty] WARNING: ${uncoveredAbsent.length} absent student(s) not covered by any list (will receive no penalty). Roll numbers: ${uncoveredAbsent.join(', ')}`);
+    }
+
+    let updatedAttendees = [...(event.attendees || [])];
+    let updatedExempted = [...(event.exemptedRollNumbers || [])];
+    let totalMarked = event.totalMarked || updatedAttendees.length;
+    let attendeesChanged = false;
+    let exemptedChanged = false;
+
+    // Anyone uncovered by the penalty is explicitly exempted
+    for (const r of uncoveredAbsent) {
+      if (!updatedExempted.includes(r)) {
+        updatedExempted.push(r);
+        exemptedChanged = true;
+      }
+    }
 
     for (const rollNumber of Object.keys(userMap)) {
       const user = userMap[rollNumber];
       if (user.userType === 'Admin') continue;
+
+      // Bug fix: server-side wing filtering as a safety net, mirroring client-side logic.
+      // Prevents a roll number from a different wing (leaked via client fallback) from being acted on.
+      if (eventWings.length > 0) {
+        const userWings = user.wings || [];
+        if (!userWings.some(w => eventWings.includes(w))) continue;
+      }
 
       const userRef = db.collection('users').doc(rollNumber);
       const hadAttendance = attendedRollNumbers.has(rollNumber);
@@ -637,10 +690,19 @@ exports.applyAbsentPenalty = onRequest({ region: REGION, invoker: 'public' }, as
             deviceId: "Manual_Penalty_Exemption",
             manualEntry: true,
             attendanceMethod: "Manual",
-            attendance_method: "Manual"
+            attendance_method: "Manual",
+            scannedFrom: {
+              adminRollNumber: "System",
+              adminName: "Penalty Override"
+            }
           };
           batch.set(attendanceDocRef, attendeeData);
-          // Note: The onAttendanceCreate Cloud Function trigger will automatically add the positive hours to the user profile
+          
+          updatedAttendees.push(attendeeData);
+          totalMarked++;
+          attendeesChanged = true;
+          
+          // Note: We do NOT manually add hours here because the `onAttendanceCreate` trigger will automatically fire and add the hours when the attendance document is created.
         }
       } else if (negSet.has(rollNumber)) {
         // Deduct negative hours
@@ -655,6 +717,13 @@ exports.applyAbsentPenalty = onRequest({ region: REGION, invoker: 'public' }, as
           const attendanceDocRef = eventRef.collection('attendance').doc(rollNumber);
           batch.delete(attendanceDocRef);
 
+          const initialLength = updatedAttendees.length;
+          updatedAttendees = updatedAttendees.filter(a => (a.rollNumber || '').toUpperCase() !== rollNumber);
+          if (updatedAttendees.length < initialLength) {
+            totalMarked--;
+            attendeesChanged = true;
+          }
+
           const eventHours = Number(event.hours) || 0;
           updates.eventsAttended = admin.firestore.FieldValue.increment(-1);
           updates.hours = admin.firestore.FieldValue.increment(-eventHours - negativeHours);
@@ -666,9 +735,16 @@ exports.applyAbsentPenalty = onRequest({ region: REGION, invoker: 'public' }, as
         penaltyCount++;
       } else if (zeroSet.has(rollNumber)) {
         if (hadAttendance) {
-          // If they had attendance but are set to zero/exempted, they lose the positive hours and the attendance doc
+          // Deduct positive hours they received since we are nullifying their attendance
           const attendanceDocRef = eventRef.collection('attendance').doc(rollNumber);
           batch.delete(attendanceDocRef);
+
+          const initialLength = updatedAttendees.length;
+          updatedAttendees = updatedAttendees.filter(a => (a.rollNumber || '').toUpperCase() !== rollNumber);
+          if (updatedAttendees.length < initialLength) {
+            totalMarked--;
+            attendeesChanged = true;
+          }
 
           const eventHours = Number(event.hours) || 0;
           const updates = {
@@ -681,10 +757,25 @@ exports.applyAbsentPenalty = onRequest({ region: REGION, invoker: 'public' }, as
 
           batch.set(userRef, updates, { merge: true });
         }
+        
+        // Ensure they are marked as exempted
+        if (!updatedExempted.includes(rollNumber)) {
+          updatedExempted.push(rollNumber);
+          exemptedChanged = true;
+        }
       }
     }
 
-    batch.update(eventRef, { absentPenaltyApplied: true });
+    const eventUpdates = { absentPenaltyApplied: true };
+    if (attendeesChanged) {
+      eventUpdates.attendees = updatedAttendees;
+      eventUpdates.totalMarked = totalMarked;
+    }
+    if (exemptedChanged) {
+      eventUpdates.exemptedRollNumbers = updatedExempted;
+    }
+    batch.update(eventRef, eventUpdates);
+    
     await batch.commit();
 
     console.log(`[AbsentPenalty] Applied penalty: count=${penaltyCount}, negativeHours=${negativeHours} for event ${eventId}`);
@@ -1023,43 +1114,7 @@ app.put('/api/attendance/verify/:id', async (req, res) => {
       });
       console.log(`[verify] Approved attendance written to consolidated event ${eventId} for ${rollNumber}`);
 
-      // Also directly update user hours (belt-and-suspenders alongside onAttendanceCreate trigger)
-      const eventSnap = await db.collection('NSS_Events_Attendence').doc(eventId).get();
-      if (eventSnap.exists) {
-        const eventData = eventSnap.data();
-        const hours = Number(eventData.hours) || 0;
-        const eventDate = eventData.eventDate || '';
-
-        // Determine semester using same logic as onAttendanceCreate trigger
-        const semester = (() => {
-          try {
-            const parts = eventDate.split(' ');
-            if (parts.length < 3) return 0;
-            const day = parseInt(parts[0], 10);
-            const month = parts[1];
-            const monthIndex = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].indexOf(month);
-            if (monthIndex === -1) return 0;
-            const m = monthIndex + 1;
-            if (m >= 7 && m <= 11) return 1;
-            if (m === 12 && day <= 10) return 1;
-            if (m === 12 && day >= 11) return 2;
-            if (m >= 1 && m <= 6) return 2;
-          } catch (e) {}
-          return 0;
-        })();
-
-        const userRef = db.collection('users').doc(rollNumber);
-        const userUpdates = {
-          eventsAttended: FieldValue.increment(1),
-          hours: FieldValue.increment(hours),
-          eventsList: FieldValue.arrayUnion(eventId)
-        };
-        if (semester === 1) userUpdates.sem1Hours = FieldValue.increment(hours);
-        if (semester === 2) userUpdates.sem2Hours = FieldValue.increment(hours);
-
-        await userRef.set(userUpdates, { merge: true });
-        console.log(`[verify] Updated user ${rollNumber} hours: +${hours} (sem${semester})`);
-      }
+      // Note: We do NOT manually update user hours here because the `onAttendanceCreate` trigger will automatically fire and add the hours when the attendance document is created.
     }
 
     // 3. Update verification log status and nullify photo_url

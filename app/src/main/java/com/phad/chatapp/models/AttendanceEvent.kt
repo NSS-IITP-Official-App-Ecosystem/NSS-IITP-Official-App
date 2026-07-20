@@ -46,6 +46,9 @@ data class AttendanceEvent(
     @PropertyName("absentPenaltyApplied")
     val absentPenaltyApplied: Boolean = false, // Whether penalties have been applied for absentees
 
+    @PropertyName("exemptedRollNumbers")
+    val exemptedRollNumbers: List<String> = emptyList(), // Roll numbers explicitly exempted from absent penalties
+
     @PropertyName("attendanceLocationLatitude")
     val attendanceLocationLatitude: Double? = null, // GPS latitude where attendance is being taken
 

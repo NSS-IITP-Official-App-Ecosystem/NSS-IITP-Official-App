@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -333,9 +334,17 @@ private fun BulkSetButton(text: String, color: Color, onClick: () -> Unit) {
         onClick = onClick,
         colors = ButtonDefaults.textButtonColors(contentColor = color),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 0.dp),
-        modifier = Modifier.height(32.dp)
+        modifier = Modifier
+            .height(32.dp)
+            .defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)
     ) {
-        Text(text, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        Text(
+            text = text, 
+            fontSize = 11.sp, 
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            softWrap = false
+        )
     }
 }
 
