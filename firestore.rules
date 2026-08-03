@@ -6,23 +6,31 @@ service cloud.firestore {
       return request.auth != null;
     }
     
-    // Check if the user is an admin by looking up their UID in the users collection
-    function isAdmin() {
-      return isAuthenticated() &&
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userType in ['admin', 'Admin', 'ADMIN'];
+    // Extract the roll number from the authenticated user's email (e.g. 2401CS01)
+    function getCallerRollNumber() {
+      return (isAuthenticated() && request.auth.token.email != null) ? 
+        request.auth.token.email.split('@')[0].upper() : '';
     }
 
-    // Alternative admin check by querying users collection with UID field
+    // Check if the requesting user has userType == 'admin' in Firestore
     function isAdminByUID() {
-      return isAuthenticated();
-      // Simplified for now - we'll rely on app-level validation
-      // The complex query to find user by UID field is expensive in Firestore rules
+      return isAuthenticated() && (
+        (exists(/databases/$(database)/documents/users/$(getCallerRollNumber())) &&
+         'userType' in get(/databases/$(database)/documents/users/$(getCallerRollNumber())).data &&
+         get(/databases/$(database)/documents/users/$(getCallerRollNumber())).data.userType.lower() == 'admin') ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         'userType' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userType.lower() == 'admin')
+      );
     }
     
-    // Check if the current user is the owner of the document
+    function isAdmin() {
+      return isAdminByUID();
+    }
+
+    // Check if the current user is the owner of a document (by Auth UID or Roll Number)
     function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+      return isAuthenticated() && userId != null && (request.auth.uid == userId || (userId is string && getCallerRollNumber() == userId.upper()));
     }
     
     // Teaching events collection - Admin can create/edit/delete, all authenticated users can read
@@ -39,36 +47,37 @@ service cloud.firestore {
     
     // Leave applications - Users can create their own applications, admin can read/update all
     match /leave_applications/{applicationId} {
-      allow read: if isAdmin() || isOwner(resource.data.userId);
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow read: if isAdmin() || (resource.data != null && (('userId' in resource.data && isOwner(resource.data.userId)) || ('rollNumber' in resource.data && getCallerRollNumber() == resource.data.rollNumber.upper())));
+      allow create: if isAdmin() || (isAuthenticated() && (('userId' in request.resource.data && request.resource.data.userId == request.auth.uid) || ('rollNumber' in request.resource.data && request.resource.data.rollNumber.upper() == getCallerRollNumber())));
       allow update, delete: if isAdmin();
     }
     
     // Accepted leaves - Admin can create/update, users can read their own accepted leaves
     match /accepted_leaves/{leaveId} {
-      allow read: if isAdmin() || isOwner(resource.data.userId);
+      allow read: if isAdmin() || (resource.data != null && (('userId' in resource.data && isOwner(resource.data.userId)) || ('rollNumber' in resource.data && getCallerRollNumber() == resource.data.rollNumber.upper())));
       allow create, update, delete: if isAdmin();
     }
 
-    // Consolidated NSS Events Attendance Collection - Admin can create/edit/delete, all authenticated users can read and update (for marking attendance)
+    // Consolidated NSS Events Attendance Collection
     match /NSS_Events_Attendence/{eventId} {
       allow read: if isAuthenticated();
-      allow create, delete: if isAdminByUID();
-      allow update: if isAuthenticated(); // Allow students to mark attendance by updating attendees array
+      allow create, delete, update: if isAdmin(); // Main event document changes restricted to admins
 
-      // Sub-collection: attendance records for each event
+      // Sub-collection: individual student attendance records for each event
       match /attendance/{attendeeId} {
-        allow read: if isAuthenticated(); // Admin reads to build penalty list; students read own record
-        allow write: if isAuthenticated(); // Students write when marking attendance
+        allow read: if isAuthenticated(); 
+        // Admin can write any record; student can ONLY write to their OWN attendee document
+        allow write: if isAdmin() || (isAuthenticated() && attendeeId.upper() == getCallerRollNumber());
       }
     }
 
-    // Users collection - Allow public read for login verification (roll number checking)
-    // Allow authenticated users to update their own document, admins can manage all
+    // Users collection - Allow public get for login verification (roll number lookup)
+    // Allow authenticated users to update non-restricted fields on their own document, admins manage all
     match /users/{userId} {
-      allow get: if true; // Needed for LoginFormActivity findCorrectRollNumberCase before auth
+      allow get: if true; 
       allow list: if isAuthenticated();
-      allow create, update: if isOwner(userId) || isAdminByUID();
+      allow create: if isAdminByUID() || isOwner(userId);
+      allow update: if isAdminByUID() || (isOwner(userId) && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['userType']) || resource.data.userType == request.resource.data.userType));
       allow delete: if isAdminByUID();
     }
 
@@ -80,8 +89,7 @@ service cloud.firestore {
 
     match /attendance_sessions/{sessionId} {
       allow read: if isAuthenticated();
-      allow create, delete: if isAdminByUID();
-      allow update: if isAuthenticated();
+      allow create, delete, update: if isAdminByUID();
     }
 
     match /NSS_Events/{eventId} {
@@ -91,21 +99,27 @@ service cloud.firestore {
 
     match /NSS_Events_Attendance/{sessionId} {
       allow read: if isAuthenticated();
-      allow create, delete: if isAdminByUID();
-      allow update: if isAuthenticated();
+      allow create, delete, update: if isAdminByUID();
     }
 
-    // Legacy attendance collections (if still used)
+    // Legacy attendance collections
     match /attendances/{eventId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow write: if isAdminByUID();
 
       match /marked_attendance/{studentId} {
-        allow read, write: if isAuthenticated();
+        allow read: if isAuthenticated();
+        allow write: if isAdminByUID() || (isAuthenticated() && studentId.upper() == getCallerRollNumber());
       }
     }
 
-    // Scheduled push notifications — written only by Cloud Functions (Admin SDK, bypasses rules)
-    // Admins can read to verify scheduled reminders; no client writes allowed
+    // Photo Attendance Log — written only by Cloud Functions (Admin SDK); users read via endpoint or rules
+    match /PhotoAttendanceLog/{logId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Cloud Functions bypasses rules via Admin SDK
+    }
+
+    // Scheduled push notifications — written only by Cloud Functions (Admin SDK)
     match /scheduledNotifications/{notifId} {
       allow read: if isAdminByUID();
       allow write: if false; // Only Cloud Functions write here via Admin SDK
@@ -129,9 +143,7 @@ service cloud.firestore {
       allow write: if isAdminByUID();
     }
     
-    // ============================================
-    // SCHEDULING MODULE (Teaching Slots, TTW, etc)
-    // ============================================
+    // SCHEDULING MODULE
     match /teachingSlotPresets/{document=**} {
       allow read: if isAuthenticated();
       allow write: if isAdminByUID();
@@ -140,10 +152,10 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow write: if isAdminByUID();
     }
-    match /ttwStudents/{document=**} {
+    match /ttwStudents/{document} {
       allow read: if isAuthenticated();
-      // Allow students to update their own preferences, admins can do everything
-      allow write: if isAdminByUID() || (isAuthenticated() && request.auth.uid == document);
+      // Document ID is student roll number (e.g. 2401CS01)
+      allow write: if isAdminByUID() || (isAuthenticated() && getCallerRollNumber() == document.upper());
     }
     match /TTW_Subjects/{document=**} {
       allow read: if isAuthenticated();
@@ -179,11 +191,61 @@ service cloud.firestore {
     }
     
     match /issues/{issueId} {
-      // Users can read and create their own issues. Admins can read and update all issues.
-      allow read: if isAuthenticated() && (isAdminByUID() || resource.data.reportedBy == request.auth.uid);
-      allow create: if isAuthenticated() && request.resource.data.reportedBy == request.auth.uid;
-      allow update: if isAdminByUID() || (isAuthenticated() && resource.data.reportedBy == request.auth.uid);
+      allow read: if isAuthenticated() && (isAdminByUID() || resource.data.reportedBy == request.auth.uid || resource.data.reportedBy == getCallerRollNumber());
+      allow create: if isAuthenticated() && (request.resource.data.reportedBy == request.auth.uid || request.resource.data.reportedBy == getCallerRollNumber());
+      allow update: if isAdminByUID() || (isAuthenticated() && (resource.data.reportedBy == request.auth.uid || resource.data.reportedBy == getCallerRollNumber()));
       allow delete: if isAdminByUID();
     }
+
+    // IN-APP NOTIFICATIONS
+    match /app_notifications/{notifId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdminByUID();
+      allow delete: if isAuthenticated() && (isAdminByUID() || resource.data.userId == request.auth.uid || resource.data.userId == getCallerRollNumber());
+      allow update: if isAdminByUID();
+    }
+
+    // DIRECT MESSAGES (1-to-1 Private Chat)
+    match /user_conversations/{userId}/{partnerId}/{messageId} {
+      allow read, write: if isAuthenticated() &&
+        (request.auth.uid == userId || request.auth.uid == partnerId ||
+         getCallerRollNumber() == userId.upper() || getCallerRollNumber() == partnerId.upper());
+    }
+
+    // conversation_metadata — stores last message preview, unread counts
+    match /conversation_metadata/{conversationId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // LEGACY / MISC COLLECTIONS
+    match /NSS_Sessions/{sessionId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdminByUID();
+    }
+
+    match /ttw_updates/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAdminByUID();
+    }
+
+    match /public_data/{document=**} {
+      allow read: if true;
+      allow write: if isAdminByUID();
+    }
+
+    match /available_leaves/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAdminByUID();
+    }
+
+    match /updates/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAdminByUID();
+    }
+
+    match /Student/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAdminByUID();
+    }
   }
-}
+}

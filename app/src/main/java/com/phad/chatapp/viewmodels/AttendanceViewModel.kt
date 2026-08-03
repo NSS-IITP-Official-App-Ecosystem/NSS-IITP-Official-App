@@ -87,21 +87,18 @@ class AttendanceViewModel(private val application: Application) : ViewModel() {
 
     suspend fun makeEventLive(event: AttendanceEvent) {
         try {
-            // First, get the current liveCount
-            val eventSnap = db.collection("NSS_Events_Attendence")
-                .document(event.id)
-                .get()
-                .await()
-            val currentLiveCount = (eventSnap.get("liveCount") as? Number)?.toInt() ?: 1
-            val newLiveCount = currentLiveCount + 1
-
-            // Update isLive field to true, increment liveCount, and remove closedAt timestamp
+            // Use atomic increment to avoid race condition if two admins
+            // tap "Make Live" simultaneously (previously was read-then-write).
+            // NOTE: We do NOT reset 'penaltyEverApplied' here. That flag persists
+            // across reopens so the per-student refund check in addAttendeeToEvent
+            // still works correctly even after absentPenaltyApplied is reset to false.
             val updates = mapOf(
                 "is_live" to true,
-                "liveCount" to newLiveCount,
-                "closedAt" to FieldValue.delete(), // Remove closedAt timestamp (using correct field name)
-                "live" to FieldValue.delete(), // Remove duplicate field if it exists
-                "absentPenaltyApplied" to false // Reset penalty flag so it can be re-applied after closing
+                "liveCount" to FieldValue.increment(1),  // atomic — race-condition-safe
+                "closedAt" to FieldValue.delete(),
+                "live" to FieldValue.delete(),
+                "absentPenaltyApplied" to false
+                // penaltyEverApplied intentionally NOT reset here
             )
 
             db.collection("NSS_Events_Attendence")
@@ -369,90 +366,7 @@ class AttendanceViewModel(private val application: Application) : ViewModel() {
     }
 
     suspend fun getVolunteersForPenalty(eventId: String): List<VolunteerPenaltyState> {
-        return try {
-            Log.d(TAG, "=== getVolunteersForPenalty() START for event: $eventId ===")
-            
-            // 1. Fetch the target event document
-            val eventDoc = db.collection("NSS_Events_Attendence").document(eventId).get().await()
-            if (!eventDoc.exists()) {
-                Log.e(TAG, "Event not found for penalty calculation: $eventId")
-                return emptyList()
-            }
-            
-            // Extract event wings list
-            val eventWings = (eventDoc.get("wings") as? List<*>)?.filterIsInstance<String>() ?: emptyList()
-            Log.d(TAG, "Event Wings extracted: $eventWings")
-            
-            // 2. Fetch matching users from Firestore (Optimized Query with Fallback)
-            val usersSnap = try {
-                val query = if (eventWings.isNotEmpty()) {
-                    Log.d(TAG, "Querying users with array-contains-any in wings: $eventWings")
-                    db.collection("users").whereArrayContainsAny("wings", eventWings)
-                } else {
-                    Log.d(TAG, "Event wings is empty. Querying all students.")
-                    db.collection("users").whereIn("userType", listOf("student", "Student"))
-                }
-                query.get().await()
-            } catch (queryEx: Exception) {
-                Log.w(TAG, "Optimized wing query failed, falling back to full users scan. Error: ${queryEx.message}", queryEx)
-                db.collection("users").get().await()
-            }
-            Log.d(TAG, "Fetched ${usersSnap.documents.size} raw users from Firestore")
-            
-            // 3. Fetch all attendance documents for this event
-            val attendanceSnap = db.collection("NSS_Events_Attendence").document(eventId)
-                .collection("attendance").get().await()
-            val attendedRollNumbers = attendanceSnap.documents.map { it.id.toUpperCase() }.toSet()
-            Log.d(TAG, "Attended roll numbers: $attendedRollNumbers")
-            
-            val volunteers = mutableListOf<VolunteerPenaltyState>()
-            
-            for (doc in usersSnap.documents) {
-                val userType = doc.getString("userType") ?: "Student"
-                if (userType.equals("Admin", ignoreCase = true)) {
-                    Log.d(TAG, "Skipping admin user: ${doc.id}")
-                    continue
-                }
-                
-                val rollNumber = doc.id.toUpperCase()
-                val name = doc.getString("name") ?: "Unknown Student"
-                val userWings = (doc.get("wings") as? List<*>)?.filterIsInstance<String>() ?: emptyList()
-                
-                // Extra double-check filtering in memory (just in case fallback was triggered or query returned dirty records)
-                if (eventWings.isNotEmpty()) {
-                    val isInWing = userWings.any { it in eventWings }
-                    if (!isInWing) {
-                        Log.d(TAG, "Skipping student $rollNumber ($name) because wings $userWings does not match event wings $eventWings")
-                        continue
-                    }
-                }
-                
-                val isAbsent = !attendedRollNumbers.contains(rollNumber)
-                
-                // Skip students who have already marked their attendance
-                if (!isAbsent) continue
-                
-                val defaultSelection = PenaltySelection.ZERO
-                
-                Log.d(TAG, "Adding volunteer: rollNumber=$rollNumber, name=$name, isAbsent=$isAbsent, selection=$defaultSelection")
-                
-                volunteers.add(
-                    VolunteerPenaltyState(
-                        rollNumber = rollNumber,
-                        name = name,
-                        isAbsent = isAbsent,
-                        selection = defaultSelection
-                    )
-                )
-            }
-            
-            val sortedList = volunteers.sortedBy { it.rollNumber }
-            Log.d(TAG, "=== getVolunteersForPenalty() COMPLETE: Returning ${sortedList.size} volunteers ===")
-            sortedList
-        } catch (e: Exception) {
-            Log.e(TAG, "Error in getVolunteersForPenalty: ${e.message}", e)
-            emptyList()
-        }
+        return getVolunteersForPenaltyWithError(eventId).getOrDefault(emptyList())
     }
 
     suspend fun getVolunteersForPenaltyWithError(eventId: String): Result<List<VolunteerPenaltyState>> {
@@ -467,6 +381,35 @@ class AttendanceViewModel(private val application: Application) : ViewModel() {
             val eventWings = (eventDoc.get("wings") as? List<*>)?.filterIsInstance<String>() ?: emptyList()
             Log.d(TAG, "Event Wings: $eventWings")
 
+            // 1. Collect all roll numbers who submitted attendance by ANY method:
+            // a) From subcollection 'attendance'
+            val attendanceSnap = db.collection("NSS_Events_Attendence").document(eventId)
+                .collection("attendance").get().await()
+            val subcollectionRolls = attendanceSnap.documents.map { it.id.uppercase() }.toSet()
+
+            // b) From embedded 'attendees' list on event doc
+            @Suppress("UNCHECKED_CAST")
+            val embeddedAttendees = (eventDoc.get("attendees") as? List<Map<String, Any>>) ?: emptyList()
+            val embeddedRolls = embeddedAttendees.mapNotNull { 
+                (it["rollNumber"] as? String ?: it["roll_number"] as? String)?.uppercase() 
+            }.toSet()
+
+            // c) From PhotoAttendanceLog for this event (photo submissions)
+            val photoLogSnap = try {
+                db.collection("PhotoAttendanceLog")
+                    .whereEqualTo("eventId", eventId)
+                    .get().await()
+            } catch (e: Exception) {
+                null
+            }
+            val photoLogRolls = photoLogSnap?.documents?.mapNotNull { 
+                (it.getString("rollNumber") ?: it.getString("roll_number"))?.uppercase() 
+            }?.toSet() ?: emptySet()
+
+            val allAttendedOrSubmittedRolls = subcollectionRolls + embeddedRolls + photoLogRolls
+            Log.d(TAG, "Total students who submitted attendance through any way: ${allAttendedOrSubmittedRolls.size}")
+
+            // 2. Fetch users matching wing criteria
             val usersSnap = if (eventWings.isNotEmpty()) {
                 db.collection("users").whereArrayContainsAny("wings", eventWings).get().await()
             } else {
@@ -474,10 +417,7 @@ class AttendanceViewModel(private val application: Application) : ViewModel() {
             }
             Log.d(TAG, "Raw users fetched: ${usersSnap.documents.size}")
 
-            val attendanceSnap = db.collection("NSS_Events_Attendence").document(eventId)
-                .collection("attendance").get().await()
-            val attendedRollNumbers = attendanceSnap.documents.map { it.id.uppercase() }.toSet()
-
+            // 3. Include ONLY users who have NOT submitted attendance through any way (truly absent)
             val volunteers = usersSnap.documents.mapNotNull { doc ->
                 val userType = doc.getString("userType") ?: "student"
                 if (userType.equals("Admin", ignoreCase = true)) return@mapNotNull null
@@ -488,14 +428,22 @@ class AttendanceViewModel(private val application: Application) : ViewModel() {
 
                 if (eventWings.isNotEmpty() && userWings.none { it in eventWings }) return@mapNotNull null
 
-                val isAbsent = !attendedRollNumbers.contains(rollNumber)
-                // Filter out students who have already marked their attendance
-                if (!isAbsent) return@mapNotNull null
+                // Filter out anyone who has submitted attendance through ANY method
+                if (allAttendedOrSubmittedRolls.contains(rollNumber)) {
+                    Log.d(TAG, "Excluding $rollNumber ($name) from penalty dialog — attendance already submitted")
+                    return@mapNotNull null
+                }
 
-                VolunteerPenaltyState(rollNumber, name, isAbsent = true, selection = PenaltySelection.ZERO)
+                // Truly absent volunteer
+                VolunteerPenaltyState(
+                    rollNumber = rollNumber,
+                    name = name,
+                    isAbsent = true,
+                    selection = PenaltySelection.NEGATIVE
+                )
             }.sortedBy { it.rollNumber }
 
-            Log.d(TAG, "Returning ${volunteers.size} volunteers")
+            Log.d(TAG, "Returning ${volunteers.size} absent volunteers for penalty dialog")
             Result.success(volunteers)
         } catch (e: Exception) {
             Log.e(TAG, "getVolunteersForPenaltyWithError FAILED: ${e.message}", e)

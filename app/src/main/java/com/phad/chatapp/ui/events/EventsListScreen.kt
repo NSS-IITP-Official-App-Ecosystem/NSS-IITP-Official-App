@@ -566,38 +566,76 @@ private fun extractEventNameFromId(eventId: String): String {
 }
 
 /**
- * Determine semester from event date
+ * Determine semester from event date (supports multi-format parsing & eventId fallback)
  * Semester 1: July 1 - December 10 (any year)
  * Semester 2: December 11 - June 30 (any year)
  */
-private fun getSemesterFromDate(eventDate: String): Int {
+private fun getSemesterFromDate(eventDate: String, eventId: String? = null): Int {
     try {
-        val dateFormat = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.ENGLISH)
-        val date = dateFormat.parse(eventDate)
-        if (date != null) {
-            val calendar = java.util.Calendar.getInstance()
-            calendar.time = date
-            
-            val month = calendar.get(java.util.Calendar.MONTH) + 1
-            val day = calendar.get(java.util.Calendar.DAY_OF_MONTH)
-            
+        var month = -1
+        var day = -1
+
+        val trimmed = eventDate.trim()
+        if (trimmed.isNotEmpty()) {
+            val dateFormats = arrayOf(
+                "dd MMM yyyy", "d MMM yyyy",
+                "dd MMMM yyyy", "d MMMM yyyy",
+                "dd MMM", "d MMM",
+                "yyyy-MM-dd", "yyyy/MM/dd",
+                "dd-MM-yyyy", "dd/MM/yyyy"
+            )
+
+            for (fmt in dateFormats) {
+                try {
+                    val sdf = java.text.SimpleDateFormat(fmt, java.util.Locale.ENGLISH)
+                    sdf.isLenient = true
+                    val parsed = sdf.parse(trimmed)
+                    if (parsed != null) {
+                        val cal = java.util.Calendar.getInstance()
+                        cal.time = parsed
+                        month = cal.get(java.util.Calendar.MONTH) + 1
+                        day = cal.get(java.util.Calendar.DAY_OF_MONTH)
+                        break
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+
+        // Fallback: extract date from eventId (e.g. "15_Aug_2025_EventName" or "15_Aug_EventName")
+        if ((month == -1 || day == -1) && !eventId.isNullOrBlank()) {
+            val parts = eventId.split("_")
+            if (parts.size >= 2) {
+                val candidateStr = "${parts[0]} ${parts[1]} ${parts.getOrNull(2) ?: ""}".trim()
+                val fallbackFormats = arrayOf("d MMM yyyy", "dd MMM yyyy", "d MMM", "dd MMM")
+                for (fmt in fallbackFormats) {
+                    try {
+                        val sdf = java.text.SimpleDateFormat(fmt, java.util.Locale.ENGLISH)
+                        sdf.isLenient = true
+                        val parsed = sdf.parse(candidateStr)
+                        if (parsed != null) {
+                            val cal = java.util.Calendar.getInstance()
+                            cal.time = parsed
+                            month = cal.get(java.util.Calendar.MONTH) + 1
+                            day = cal.get(java.util.Calendar.DAY_OF_MONTH)
+                            break
+                        }
+                    } catch (_: Exception) {}
+                }
+            }
+        }
+
+        if (month != -1 && day != -1) {
             // Semester 1: July 1 - December 10
-            if (month in 7..11) {
-                return 1
-            } else if (month == 12 && day <= 10) {
-                return 1
-            }
+            if (month in 7..11) return 1
+            if (month == 12 && day <= 10) return 1
             // Semester 2: December 11 - June 30
-            else if (month == 12 && day >= 11) {
-                return 2
-            } else if (month in 1..6) {
-                return 2
-            }
+            if (month == 12 && day >= 11) return 2
+            if (month in 1..6) return 2
         }
     } catch (e: Exception) {
         // Handle parsing error
     }
-    return 0 // Not in any semester
+    return 0
 }
 
 private fun parseDate(dateString: String): Long {

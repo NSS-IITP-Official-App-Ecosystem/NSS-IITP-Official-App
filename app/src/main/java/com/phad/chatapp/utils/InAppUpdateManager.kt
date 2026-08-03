@@ -51,7 +51,7 @@ object InAppUpdateManager {
                 }
                 
                 // Proceed regardless of fetch success (use cache or defaults)
-                evaluateUpdateStatus(remoteConfig, onResult)
+                evaluateUpdateStatus(remoteConfig, onResult) 
             }
     }
 

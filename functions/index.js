@@ -29,7 +29,6 @@ const { Timestamp, FieldValue, GeoPoint } = require('firebase-admin/firestore');
 
 // Utilities for HTTPS endpoints
 const crypto = require('crypto');
-const { GoogleAuth } = require('google-auth-library');
 
 // Play Integrity API configuration
 const PLAY_INTEGRITY_API_URL = 'https://playintegrity.googleapis.com/v1';
@@ -75,8 +74,14 @@ exports.verifyPlayIntegrity = onRequest({ region: REGION, invoker: 'public' }, a
     const decoded = await verifyAuthToken(req);
     const { integrityToken, userId, nonce } = req.body || {};
 
-    if (!integrityToken) {
-      throw Object.assign(new Error('Missing integrityToken'), { status: 400 });
+    if (!integrityToken || !userId) {
+      throw Object.assign(new Error('Missing integrityToken or userId'), { status: 400 });
+    }
+
+    const callerRoll = decoded.email ? decoded.email.split('@')[0].toLowerCase() : '';
+    if (!callerRoll || callerRoll !== userId.toLowerCase()) {
+      console.warn(`[PlayIntegrity] Caller identity mismatch: caller is ${callerRoll}, requested userId is ${userId}`);
+      return res.status(403).json({ allowed: false, reason: 'Forbidden: Caller identity mismatch' });
     }
 
     console.log(`[PlayIntegrity] Verifying integrity for user: ${userId}`);
@@ -228,6 +233,65 @@ async function assertUserIdentityMatches(db, rollNumber, decodedToken) {
   // If no email on file, allow but log; otherwise enforce match
   if (!storedEmail) return;
   throw Object.assign(new Error('Authenticated user does not match roll number'), { status: 403 });
+}
+
+/**
+ * Verify that the caller is an admin by checking their userType in Firestore.
+ * Looks up the user by email prefix (roll number) derived from the decoded token.
+ * Throws 403 if the caller is not an admin.
+ */
+async function assertCallerIsAdmin(db, decodedToken) {
+  if (!decodedToken.email) throw Object.assign(new Error('Admin token missing email claim'), { status: 403 });
+  
+  const email = decodedToken.email.toLowerCase();
+  const rawPrefix = decodedToken.email.split('@')[0];
+  const rollNumber = rawPrefix.toUpperCase();
+
+  // 1. Try document ID as uppercase roll number
+  let userSnap = await db.collection('users').doc(rollNumber).get();
+
+  // 2. Fallback: Try document ID as raw email prefix
+  if (!userSnap.exists) {
+    userSnap = await db.collection('users').doc(rawPrefix).get();
+  }
+
+  // 3. Fallback: Try document ID as Firebase Auth UID
+  if (!userSnap.exists && decodedToken.uid) {
+    userSnap = await db.collection('users').doc(decodedToken.uid).get();
+  }
+
+  // 4. Fallback: Query collection by email or instituteOutlookId field
+  if (!userSnap.exists) {
+    const querySnap = await db.collection('users').where('email', '==', decodedToken.email).get();
+    if (!querySnap.empty) {
+      userSnap = querySnap.docs[0];
+    } else {
+      const outlookSnap = await db.collection('users').where('instituteOutlookId', '==', decodedToken.email).get();
+      if (!outlookSnap.empty) {
+        userSnap = outlookSnap.docs[0];
+      }
+    }
+  }
+
+  // 5. Fallback: Case-insensitive scan of users collection document IDs
+  if (!userSnap.exists) {
+    const allUsers = await db.collection('users').get();
+    for (const doc of allUsers.docs) {
+      if (doc.id.toLowerCase() === rollNumber.toLowerCase()) {
+        userSnap = doc;
+        break;
+      }
+    }
+  }
+
+  if (!userSnap || !userSnap.exists) {
+    throw Object.assign(new Error('Caller user record not found'), { status: 403 });
+  }
+
+  const userType = (userSnap.data() || {}).userType || '';
+  if (!['admin', 'Admin', 'ADMIN'].includes(userType)) {
+    throw Object.assign(new Error('Caller is not an admin'), { status: 403 });
+  }
 }
 
 /**
@@ -417,7 +481,7 @@ exports.markAttendance = onRequest({ region: REGION, invoker: 'public' }, async 
       tx.set(attendanceDocRef, normalizedAttendee);
       tx.update(eventRef, {
         attendees: FieldValue.arrayUnion(normalizedAttendee),
-        total_marked: FieldValue.increment(1),
+        // NOTE: total_marked is handled exclusively by the onAttendanceCreate trigger to avoid double-counting
       });
     });
 
@@ -430,6 +494,60 @@ exports.markAttendance = onRequest({ region: REGION, invoker: 'public' }, async 
   }
 });
 
+function calculateSemester(eventDate, eventId) {
+  try {
+    let day, monthIndex;
+    const months = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+
+    function parseMonthStr(str) {
+      if (!str) return -1;
+      const clean = str.toLowerCase().replace(/[^a-z]/g, '').slice(0, 3);
+      return months.indexOf(clean);
+    }
+
+    if (eventDate && typeof eventDate === 'string') {
+      const trimmed = eventDate.trim();
+      const parts = trimmed.split(/[\s\-/\.]+/);
+      if (parts.length >= 2) {
+        if (/^\d{4}$/.test(parts[0])) {
+          // Format: yyyy-mm-dd
+          monthIndex = parseInt(parts[1], 10) - 1;
+          day = parseInt(parts[2], 10);
+        } else if (/^\d{1,2}$/.test(parts[0])) {
+          // Format: dd-mm-yyyy or dd MMM yyyy
+          day = parseInt(parts[0], 10);
+          const mParse = parseMonthStr(parts[1]);
+          if (mParse !== -1) {
+            monthIndex = mParse;
+          } else if (/^\d{1,2}$/.test(parts[1])) {
+            monthIndex = parseInt(parts[1], 10) - 1;
+          }
+        }
+      }
+    }
+
+    // Fallback: parse eventId format like "22_Jul_EventName" or "22_Jul_2025_EventName"
+    if ((isNaN(day) || monthIndex === undefined || monthIndex === -1) && eventId && typeof eventId === 'string') {
+      const idParts = eventId.split('_');
+      if (idParts.length >= 2 && /^\d{1,2}$/.test(idParts[0])) {
+        day = parseInt(idParts[0], 10);
+        monthIndex = parseMonthStr(idParts[1]);
+      }
+    }
+
+    if (isNaN(day) || monthIndex === undefined || monthIndex === -1 || monthIndex < 0 || monthIndex > 11) return 0;
+
+    const m = monthIndex + 1;
+    // Semester 1: July 1 - December 10
+    if (m >= 7 && m <= 11) return 1;
+    if (m === 12 && day <= 10) return 1;
+    // Semester 2: December 11 - June 30
+    if (m === 12 && day >= 11) return 2;
+    if (m >= 1 && m <= 6) return 2;
+  } catch (e) {}
+  return 0;
+}
+
 // Increment counters and update user stats when a new attendance record is written
 exports.onAttendanceCreate = onDocumentCreated(
   { document: 'NSS_Events_Attendence/{eventId}/attendance/{rollNumber}', region: REGION },
@@ -439,6 +557,10 @@ exports.onAttendanceCreate = onDocumentCreated(
     const { eventId, rollNumber } = context.params;
     const db = admin.firestore();
     const attendee = snap.data() || {};
+    if (attendee.isMigration === true) {
+      console.log(`[onAttendanceCreate] Skipping hour credit for ${rollNumber} (event ${eventId}) — document is an event recreation migration copy.`);
+      return null;
+    }
     try {
       // Increment total_marked on parent event
       const eventRef = db.collection('NSS_Events_Attendence').doc(eventId);
@@ -453,37 +575,9 @@ exports.onAttendanceCreate = onDocumentCreated(
 
       await eventRef.update({ total_marked: FieldValue.increment(1) });
 
-      // Ensure meta.totalEvents exists and is equal to number of events documents
-      // Increment events count only when event document is newly created elsewhere.
-
       // Update user stats atomically
       const userRef = db.collection('users').doc(rollNumber);
-      const semester = (() => {
-        // Expecting format like "dd MMM yyyy"; fallback to 0 if unknown
-        try {
-          const parts = eventDate.split(' ');
-          if (parts.length < 3) return 0;
-          const day = parseInt(parts[0], 10);
-          const month = parts[1];
-          const monthIndex = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(month);
-          if (monthIndex === -1) return 0;
-          
-          const month1Based = monthIndex + 1;
-          // Semester 1: July 1 - December 10
-          if (month1Based >= 7 && month1Based <= 11) {
-            return 1;
-          } else if (month1Based === 12 && day <= 10) {
-            return 1;
-          }
-          // Semester 2: December 11 - June 30
-          else if (month1Based === 12 && day >= 11) {
-            return 2;
-          } else if (month1Based >= 1 && month1Based <= 6) {
-            return 2;
-          }
-        } catch (e) { }
-        return 0;
-      })();
+      const semester = calculateSemester(eventDate, eventId);
 
       const updates = {
         eventsAttended: FieldValue.increment(1),
@@ -552,10 +646,11 @@ exports.applyAbsentPenalty = onRequest({ region: REGION, invoker: 'public' }, as
     if (req.method !== 'POST') throw Object.assign(new Error('Method not allowed'), { status: 405 });
 
     const decoded = await verifyAuthToken(req);
+    const db = admin.firestore();
+    await assertCallerIsAdmin(db, decoded);
     const { eventId, positiveRollNumbers, negativeRollNumbers, zeroRollNumbers } = req.body || {};
     if (!eventId) throw Object.assign(new Error('Missing eventId'), { status: 400 });
 
-    const db = admin.firestore();
     const eventRef = db.collection('NSS_Events_Attendence').doc(eventId);
     const eventSnap = await eventRef.get();
 
@@ -576,24 +671,7 @@ exports.applyAbsentPenalty = onRequest({ region: REGION, invoker: 'public' }, as
     }
 
     const eventDate = event.eventDate || '';
-    const semester = (() => {
-      try {
-        const parts = eventDate.split(' ');
-        if (parts.length < 3) return 0;
-        const day = parseInt(parts[0], 10);
-        const month = parts[1];
-        const monthIndex = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].indexOf(month);
-        if (monthIndex === -1) return 0;
-        const m = monthIndex + 1;
-        // Semester 1: July 1 - December 10
-        if (m >= 7 && m <= 11) return 1;
-        if (m === 12 && day <= 10) return 1;
-        // Semester 2: December 11 - June 30
-        if (m === 12 && day >= 11) return 2;
-        if (m >= 1 && m <= 6) return 2;
-      } catch (e) {}
-      return 0;
-    })();
+    const semester = calculateSemester(eventDate, eventId);
 
     const usersSnap = await db.collection('users').get();
     const attendanceSnap = await eventRef.collection('attendance').get();
@@ -607,8 +685,12 @@ exports.applyAbsentPenalty = onRequest({ region: REGION, invoker: 'public' }, as
     }
 
     const eventWings = event.wings || [];
+    // Students who have already been penalized for this event (across all rounds).
+    // We never penalize the same student twice for the same event.
+    const alreadyPenalized = new Set((event.penalizedRollNumbers || []).map(r => r.toUpperCase()));
     const batch = db.batch();
     let penaltyCount = 0;
+    const newlyPenalized = []; // roll numbers penalized in THIS round
 
     // Bug fix: all three lists must be present (use && not ||).
     // With ||, a request missing two of the three lists would still pass the guard.
@@ -650,7 +732,7 @@ exports.applyAbsentPenalty = onRequest({ region: REGION, invoker: 'public' }, as
 
     let updatedAttendees = [...(event.attendees || [])];
     let updatedExempted = [...(event.exemptedRollNumbers || [])];
-    let totalMarked = event.totalMarked || updatedAttendees.length;
+    let totalMarked = Number(event.total_marked || event.totalMarked) || updatedAttendees.length;
     let attendeesChanged = false;
     let exemptedChanged = false;
 
@@ -699,12 +781,16 @@ exports.applyAbsentPenalty = onRequest({ region: REGION, invoker: 'public' }, as
           batch.set(attendanceDocRef, attendeeData);
           
           updatedAttendees.push(attendeeData);
-          totalMarked++;
+          // Note: total_marked increment is handled by the onAttendanceCreate trigger when attendanceDocRef is set.
           attendeesChanged = true;
-          
-          // Note: We do NOT manually add hours here because the `onAttendanceCreate` trigger will automatically fire and add the hours when the attendance document is created.
         }
       } else if (negSet.has(rollNumber)) {
+        // Skip if this student was already penalized in a previous round
+        if (alreadyPenalized.has(rollNumber)) {
+          console.log(`[AbsentPenalty] Skipping ${rollNumber} — already penalized in a previous round.`);
+          continue;
+        }
+
         // Deduct negative hours
         const updates = {
           hours: admin.firestore.FieldValue.increment(-negativeHours),
@@ -720,7 +806,7 @@ exports.applyAbsentPenalty = onRequest({ region: REGION, invoker: 'public' }, as
           const initialLength = updatedAttendees.length;
           updatedAttendees = updatedAttendees.filter(a => (a.rollNumber || '').toUpperCase() !== rollNumber);
           if (updatedAttendees.length < initialLength) {
-            totalMarked--;
+            totalMarked = Math.max(0, totalMarked - 1);
             attendeesChanged = true;
           }
 
@@ -732,6 +818,7 @@ exports.applyAbsentPenalty = onRequest({ region: REGION, invoker: 'public' }, as
           updates.eventsList = admin.firestore.FieldValue.arrayRemove(eventId);
         }
         batch.set(userRef, updates, { merge: true });
+        newlyPenalized.push(rollNumber);
         penaltyCount++;
       } else if (zeroSet.has(rollNumber)) {
         if (hadAttendance) {
@@ -742,7 +829,7 @@ exports.applyAbsentPenalty = onRequest({ region: REGION, invoker: 'public' }, as
           const initialLength = updatedAttendees.length;
           updatedAttendees = updatedAttendees.filter(a => (a.rollNumber || '').toUpperCase() !== rollNumber);
           if (updatedAttendees.length < initialLength) {
-            totalMarked--;
+            totalMarked = Math.max(0, totalMarked - 1);
             attendeesChanged = true;
           }
 
@@ -766,10 +853,17 @@ exports.applyAbsentPenalty = onRequest({ region: REGION, invoker: 'public' }, as
       }
     }
 
-    const eventUpdates = { absentPenaltyApplied: true };
+    const eventUpdates = {
+      absentPenaltyApplied: true,
+      penaltyEverApplied: true  // persists across reopens; used by client for latecomer refund logic
+    };
+    // Accumulate newly penalized roll numbers so future rounds can skip them
+    if (newlyPenalized.length > 0) {
+      eventUpdates.penalizedRollNumbers = admin.firestore.FieldValue.arrayUnion(...newlyPenalized);
+    }
     if (attendeesChanged) {
       eventUpdates.attendees = updatedAttendees;
-      eventUpdates.totalMarked = totalMarked;
+      eventUpdates.total_marked = totalMarked;
     }
     if (exemptedChanged) {
       eventUpdates.exemptedRollNumbers = updatedExempted;
@@ -896,6 +990,13 @@ app.post('/api/attendance/submit-photo', parseMultipart, async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields (userId, eventId, latitude, longitude) or image file' });
     }
 
+    const callerRoll = decoded.email ? decoded.email.split('@')[0].toLowerCase() : '';
+    if (!callerRoll || callerRoll !== userId.toLowerCase()) {
+      console.warn(`[submit-photo] Caller identity mismatch: caller is ${callerRoll}, requested userId is ${userId}`);
+      if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+      return res.status(403).json({ error: 'Forbidden: You can only submit photo attendance for your own account.' });
+    }
+
     const rollNoUpper = userId.toUpperCase();
     console.log(`[submit-photo] User: ${rollNoUpper}, Event: ${eventId}, Lat: ${latitude}, Lon: ${longitude}`);
 
@@ -906,6 +1007,28 @@ app.post('/api/attendance/submit-photo', parseMultipart, async (req, res) => {
     const userSnap = await db.collection('users').doc(rollNoUpper).get();
     const userData = userSnap.data() || {};
     const userName = userData.name || 'Unknown Student';
+
+    const docId = `${eventId}_${rollNoUpper}`;
+    const logRef = db.collection('PhotoAttendanceLog').doc(docId);
+    const existingLogSnap = await logRef.get();
+    if (existingLogSnap.exists) {
+      const existingStatus = existingLogSnap.data().verification_status;
+      if (existingStatus === 'Pending') {
+        if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+        return res.status(400).json({ error: 'You already have a photo verification pending review for this event.' });
+      }
+      if (existingStatus === 'Approved') {
+        if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+        return res.status(400).json({ error: 'Attendance already approved for this event.' });
+      }
+    }
+
+    const attendanceDocRef = db.collection('NSS_Events_Attendence').doc(eventId).collection('attendance').doc(rollNoUpper);
+    const existingAttendanceSnap = await attendanceDocRef.get();
+    if (existingAttendanceSnap.exists) {
+      if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+      return res.status(400).json({ error: 'Attendance already marked for this event.' });
+    }
 
     let photoUrl;
     let storagePath = null;
@@ -924,7 +1047,6 @@ app.post('/api/attendance/submit-photo', parseMultipart, async (req, res) => {
     // Clean up local /tmp file after successful upload
     if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
 
-    const docId = `${eventId}_${rollNoUpper}`;
     const logData = {
       id: docId,
       rollNumber: rollNoUpper,
@@ -1018,7 +1140,9 @@ app.put('/api/attendance/verify/:id', async (req, res) => {
     const docId = req.params.id; // eventId_rollNumber
     console.log(`[verify] Verifying log ID: ${docId}`);
     const decoded = await verifyAuthToken(req);
-    
+    const db = admin.firestore();
+    await assertCallerIsAdmin(db, decoded);
+
     // Extract admin details from body or token
     const adminRoll = decoded.email ? decoded.email.split('@')[0].toUpperCase() : 'ADMIN';
     const { status, adminRollNumber, adminName } = req.body;
@@ -1027,7 +1151,6 @@ app.put('/api/attendance/verify/:id', async (req, res) => {
       return res.status(400).json({ error: 'Invalid or missing status (must be Approved or Rejected)' });
     }
 
-    const db = admin.firestore();
     const logRef = db.collection('PhotoAttendanceLog').doc(docId);
     const logSnap = await logRef.get();
 
@@ -1079,42 +1202,80 @@ app.put('/api/attendance/verify/:id', async (req, res) => {
         if (!eventSnap.exists) {
           if (process.env.FUNCTIONS_EMULATOR === 'true') {
             const parts = eventId.split('_');
-            const eventName = parts.length >= 3 ? parts.slice(2).join(' ').replace(/_/g, ' ') : eventId;
             const eventDate = parts.length >= 2 ? `${parts[0]} ${parts[1]} 2026` : '31 May 2026';
-            
             const mockEvent = {
               description: 'Auto-created mock event for local debugging',
-              createdBy: 'SYSTEM',
-              creatorName: 'System Admin',
-              eventDate: eventDate,
-              eventTime: '10:00 AM - 11:00 AM',
-              hours: 1.5,
-              mandatory: false,
-              negativeHours: 0.0,
-              location: 'IIT Patna',
-              createdAt: Timestamp.now(),
-              attendees: [],
-              closedAt: null,
-              liveCount: 1,
-              wings: [],
-              visibleOnlyToPresent: false,
-              isLive: true,
-              total_marked: 0
+              createdBy: 'SYSTEM', creatorName: 'System Admin',
+              eventDate, eventTime: '10:00 AM - 11:00 AM',
+              hours: 1.5, mandatory: false, negativeHours: 0.0,
+              location: 'IIT Patna', createdAt: Timestamp.now(),
+              attendees: [], closedAt: null, liveCount: 1,
+              wings: [], visibleOnlyToPresent: false, isLive: true, total_marked: 0
             };
             tx.set(eventRef, mockEvent);
           } else {
             throw Object.assign(new Error('Event not found'), { status: 404 });
           }
         }
-        tx.set(attendanceDocRef, normalizedAttendee);
-        tx.update(eventRef, {
-          attendees: FieldValue.arrayUnion(normalizedAttendee),
-          total_marked: FieldValue.increment(1),
-        });
-      });
-      console.log(`[verify] Approved attendance written to consolidated event ${eventId} for ${rollNumber}`);
 
-      // Note: We do NOT manually update user hours here because the `onAttendanceCreate` trigger will automatically fire and add the hours when the attendance document is created.
+        // ── DOUBLE-CREDIT FIX ──────────────────────────────────────────────────
+        // If an attendance doc already exists for this student (e.g. they also
+        // scanned a QR code), do NOT overwrite it. Overwriting via tx.set()
+        // deletes-then-recreates the document, which re-fires onAttendanceCreate
+        // and adds the event hours to the user a second time.
+        const existingAttendance = await tx.get(attendanceDocRef);
+        if (existingAttendance.exists) {
+          console.log(`[verify] Attendance doc already exists for ${rollNumber} in ${eventId} — skipping write to prevent double-credit.`);
+          // Still add to embedded attendees array for UI consistency
+          tx.update(eventRef, { attendees: FieldValue.arrayUnion(normalizedAttendee) });
+        } else {
+          // First-time attendance write — onAttendanceCreate will fire and credit hours once
+          tx.set(attendanceDocRef, normalizedAttendee);
+          tx.update(eventRef, {
+            attendees: FieldValue.arrayUnion(normalizedAttendee),
+            // total_marked is handled exclusively by the onAttendanceCreate trigger
+          });
+
+          // Per-student penalty refund check: verify if THIS specific student was penalized
+          const eventData = eventSnap.data() || {};
+          let penalizedRolls = null;
+          if (Array.isArray(eventData.penalizedRollNumbers)) {
+            penalizedRolls = eventData.penalizedRollNumbers;
+          } else if (Array.isArray(eventData.negativePenaltyRollNumbers)) {
+            penalizedRolls = eventData.negativePenaltyRollNumbers;
+          } else if (Array.isArray(eventData.absenteeRollNumbers)) {
+            penalizedRolls = eventData.absenteeRollNumbers;
+          }
+
+          const upperRoll = rollNumber.toUpperCase();
+          const wasThisStudentPenalized = Array.isArray(penalizedRolls)
+            ? penalizedRolls.map(r => String(r).toUpperCase()).includes(upperRoll)
+            : (eventData.penaltyEverApplied === true);
+
+          if (eventData.mandatory && (eventData.negativeHours || 0) > 0 && wasThisStudentPenalized) {
+            const negHours = Number(eventData.negativeHours);
+            const eventDate = eventData.eventDate || '';
+            const semester = calculateSemester(eventDate, eventId);
+            const userRef = db.collection('users').doc(rollNumber);
+            const refundUpdates = { hours: FieldValue.increment(negHours) };
+            if (semester === 1) refundUpdates.sem1Hours = FieldValue.increment(negHours);
+            if (semester === 2) refundUpdates.sem2Hours = FieldValue.increment(negHours);
+            tx.set(userRef, refundUpdates, { merge: true });
+
+            const targetField = Array.isArray(eventData.penalizedRollNumbers) ? 'penalizedRollNumbers' :
+                                Array.isArray(eventData.negativePenaltyRollNumbers) ? 'negativePenaltyRollNumbers' :
+                                Array.isArray(eventData.absenteeRollNumbers) ? 'absenteeRollNumbers' : null;
+            if (targetField) {
+              tx.update(eventRef, { [targetField]: admin.firestore.FieldValue.arrayRemove(rollNumber, upperRoll) });
+            }
+            console.log(`[verify] Per-student refund of ${negHours}h applied for ${rollNumber} (event ${eventId}, sem ${semester})`);
+          }
+        }
+        // ── END DOUBLE-CREDIT FIX ──────────────────────────────────────────────
+      });
+      console.log(`[verify] Approved attendance processed for event ${eventId}, student ${rollNumber}`);
+
+      // Hours are credited exclusively by the onAttendanceCreate trigger (on first write only).
     }
 
     // 3. Update verification log status and nullify photo_url
@@ -1147,20 +1308,152 @@ app.put('/api/attendance/verify/:id', async (req, res) => {
 });
 
 /**
+ * Endpoint: POST /api/attendance/verify-batch
+ * Admin approves or rejects multiple photo attendance logs in a single request.
+ * Body: { logIds: string[], status: "Approved" | "Rejected", adminRollNumber: string, adminName: string }
+ */
+app.post('/api/attendance/verify-batch', async (req, res) => {
+  try {
+    console.log('[verify-batch] Batch verification request received');
+    const decoded = await verifyAuthToken(req);
+    const db = admin.firestore();
+    await assertCallerIsAdmin(db, decoded);
+    const adminRoll = decoded.email ? decoded.email.split('@')[0].toUpperCase() : 'ADMIN';
+    const { logIds, status, adminRollNumber, adminName } = req.body;
+
+    if (!Array.isArray(logIds) || logIds.length === 0) {
+      return res.status(400).json({ error: 'logIds must be a non-empty array' });
+    }
+    if (!status || !['Approved', 'Rejected'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid or missing status (must be Approved or Rejected)' });
+    }
+
+    console.log(`[verify-batch] Processing ${logIds.length} records with status: ${status}`);
+
+    // Process each log ID in parallel
+    const results = await Promise.allSettled(logIds.map(async (docId) => {
+      const logRef = db.collection('PhotoAttendanceLog').doc(docId);
+      const logSnap = await logRef.get();
+
+      if (!logSnap.exists) throw new Error(`Log ${docId} not found`);
+      const logData = logSnap.data();
+      if (logData.verification_status !== 'Pending') throw new Error(`Log ${docId} already verified`);
+
+      const { rollNumber, name, eventId, latitude, longitude, storage_path } = logData;
+
+      // If Approved, write attendance record
+      if (status === 'Approved') {
+        const eventRef = db.collection('NSS_Events_Attendence').doc(eventId);
+        const attendanceDocRef = eventRef.collection('attendance').doc(rollNumber);
+        const gpLocation = new GeoPoint(latitude, longitude);
+        const scannedFromObj = { adminRollNumber: adminRollNumber || adminRoll, adminName: adminName || 'Admin' };
+        const normalizedAttendee = {
+          rollNumber, roll_number: rollNumber, name,
+          scanTimestamp: Timestamp.now(), scan_timestamp: Timestamp.now(),
+          scannedFrom: scannedFromObj, deviceId: 'Photo_GPS',
+          scanLocation: gpLocation, scan_location: gpLocation,
+          manualEntry: false, attendanceMethod: 'Photo_GPS', attendance_method: 'Photo_GPS',
+          latitude, longitude, photoUrl: null, photo_url: null,
+          verificationStatus: 'Approved', verification_status: 'Approved'
+        };
+        await db.runTransaction(async (tx) => {
+          const eventSnap = await tx.get(eventRef);
+          if (!eventSnap.exists) throw Object.assign(new Error('Event not found'), { status: 404 });
+
+          // DOUBLE-CREDIT FIX: skip write if attendance doc already exists
+          const existingAttendance = await tx.get(attendanceDocRef);
+          if (existingAttendance.exists) {
+            console.log(`[verify-batch] Attendance doc already exists for ${rollNumber} — skipping write.`);
+            tx.update(eventRef, { attendees: FieldValue.arrayUnion(normalizedAttendee) });
+          } else {
+            tx.set(attendanceDocRef, normalizedAttendee);
+            tx.update(eventRef, {
+              attendees: FieldValue.arrayUnion(normalizedAttendee),
+            });
+            // Per-student penalty refund check: verify if THIS specific student was penalized
+            const eventData = eventSnap.data() || {};
+            let penalizedRolls = null;
+            if (Array.isArray(eventData.penalizedRollNumbers)) {
+              penalizedRolls = eventData.penalizedRollNumbers;
+            } else if (Array.isArray(eventData.negativePenaltyRollNumbers)) {
+              penalizedRolls = eventData.negativePenaltyRollNumbers;
+            } else if (Array.isArray(eventData.absenteeRollNumbers)) {
+              penalizedRolls = eventData.absenteeRollNumbers;
+            }
+
+            const upperRoll = rollNumber.toUpperCase();
+            const wasThisStudentPenalized = Array.isArray(penalizedRolls)
+              ? penalizedRolls.map(r => String(r).toUpperCase()).includes(upperRoll)
+              : (eventData.penaltyEverApplied === true);
+
+            if (eventData.mandatory && (eventData.negativeHours || 0) > 0 && wasThisStudentPenalized) {
+              const negHours = Number(eventData.negativeHours);
+              const semester = calculateSemester(eventData.eventDate || '', eventId);
+              const userRef = db.collection('users').doc(rollNumber);
+              const refundUpdates = { hours: FieldValue.increment(negHours) };
+              if (semester === 1) refundUpdates.sem1Hours = FieldValue.increment(negHours);
+              if (semester === 2) refundUpdates.sem2Hours = FieldValue.increment(negHours);
+              tx.set(userRef, refundUpdates, { merge: true });
+
+              const targetField = Array.isArray(eventData.penalizedRollNumbers) ? 'penalizedRollNumbers' :
+                                  Array.isArray(eventData.negativePenaltyRollNumbers) ? 'negativePenaltyRollNumbers' :
+                                  Array.isArray(eventData.absenteeRollNumbers) ? 'absenteeRollNumbers' : null;
+              if (targetField) {
+                tx.update(eventRef, { [targetField]: admin.firestore.FieldValue.arrayRemove(rollNumber, upperRoll) });
+              }
+              console.log(`[verify-batch] Per-student refund of ${negHours}h applied for ${rollNumber} (event ${eventId})`);
+            }
+          }
+        });
+        console.log(`[verify-batch] Approved attendance for ${rollNumber} in event ${eventId}`);
+      }
+
+      // Update log status
+      await logRef.update({
+        photo_url: null,
+        verification_status: status,
+        verifiedAt: Timestamp.now(),
+        verifiedBy: adminRollNumber || adminRoll
+      });
+
+      // Delete photo from Cloudinary (non-fatal)
+      if (storage_path) {
+        try {
+          await cloudinary.uploader.destroy(storage_path);
+        } catch (cloudErr) {
+          console.error(`[verify-batch] Failed to delete Cloudinary file ${storage_path}:`, cloudErr);
+        }
+      }
+      return docId;
+    }));
+
+    const succeeded = results.filter(r => r.status === 'fulfilled').map(r => r.value);
+    const failed = results.filter(r => r.status === 'rejected').map(r => r.reason?.message || 'Unknown error');
+
+    console.log(`[verify-batch] Done. Succeeded: ${succeeded.length}, Failed: ${failed.length}`);
+    res.status(200).json({ ok: true, succeeded: succeeded.length, failed: failed.length, errors: failed });
+  } catch (err) {
+    console.error('[verify-batch] Error:', err);
+    res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
+  }
+});
+
+/**
  * Endpoint: POST /api/attendance/notify
  * Sends push notifications to FCM topics for an event. Includes a 10-min cooldown.
  */
 app.post('/api/attendance/notify', async (req, res) => {
   try {
     console.log('[notify] Notification request received');
-    await verifyAuthToken(req); // Ensure caller is authenticated
+    const decoded = await verifyAuthToken(req); // Ensure caller is authenticated
+    const db = admin.firestore();
+    await assertCallerIsAdmin(db, decoded); // Ensure caller is an admin
 
     const { eventId, title, body, targetWings } = req.body;
     if (!eventId || !title || !body) {
       return res.status(400).json({ error: 'Missing required fields: eventId, title, body' });
     }
 
-    const db = admin.firestore();
     const eventRef = db.collection('NSS_Events_Attendence').doc(eventId);
     let topicsToNotify = [];
 

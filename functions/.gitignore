@@ -19,3 +19,6 @@ desktop.ini
 database_backup*
 *backup*.json
 *.bak
+
+# Service Accounts
+service-account*.json

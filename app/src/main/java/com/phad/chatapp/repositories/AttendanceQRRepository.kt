@@ -401,64 +401,89 @@ class AttendanceQRRepository {
             // Attempt idempotent update without pre-reads.
             // We rely on UI/device checks to minimize duplicates; server uses atomic increments.
             val updates = mapOf(
-                "attendees" to FieldValue.arrayUnion(normalizedAttendee),
-                "totalMarked" to FieldValue.increment(1)
+                "attendees" to FieldValue.arrayUnion(normalizedAttendee)
+                // NOTE: total_marked is handled exclusively by the onAttendanceCreate Cloud Function trigger.
+                // Do NOT increment it here — that would double-count every scan.
             )
 
             Log.d(TAG, "Performing Firestore update with: $updates")
 
             val docRef = eventsAttendanceCollection.document(eventId)
-            // Write subcollection attendance document (idempotent: onCreate triggers only on first time)
             val attendanceDocRef = docRef.collection("attendance").document(normalizedAttendee.rollNumber)
-            attendanceDocRef.set(normalizedAttendee).await()
 
-            // Update parent event counters and embedded list for backward compatibility
+            // BUG 1 FIX: Check existence before writing the subcollection doc.
+            // attendanceDocRef.set() always overwrites, which deletes-and-recreates the document
+            // and re-fires onAttendanceCreate on the server — double-crediting hours.
+            // Only write if the doc doesn't already exist.
+            val existingAttendanceDoc = attendanceDocRef.get().await()
+            if (!existingAttendanceDoc.exists()) {
+                // First-time write — onAttendanceCreate will fire and credit hours once.
+                attendanceDocRef.set(normalizedAttendee).await()
+                Log.d(TAG, "✅ Subcollection attendance doc written for ${normalizedAttendee.rollNumber}")
+            } else {
+                Log.d(TAG, "⚠️ Attendance doc already exists for ${normalizedAttendee.rollNumber} — skipping write to prevent double onAttendanceCreate trigger")
+            }
+
+            // Update embedded attendees array on parent event for UI display
             docRef.update(updates).await()
 
             Log.d(TAG, "✅ Firestore update completed successfully")
 
-            // Update student statistics in users collection without prior reads using atomic increments
+            // PENALTY REFUND ONLY: If this is a mandatory event that was re-opened (liveCount > 1)
+            // and the penalty was already applied, refund the negative hours.
+            // NOTE: The regular positive hours credit (eventsAttended, hours, sem1Hours, sem2Hours,
+            // eventsList, total_marked) is handled EXCLUSIVELY by the onAttendanceCreate Cloud
+            // Function trigger to avoid double-counting. Do NOT add those increments here.
             try {
-                Log.d(TAG, "Updating student statistics for: ${normalizedAttendee.rollNumber}")
-                val userRef = firestore.collection("users").document(normalizedAttendee.rollNumber)
-                // Compute increments from event data without fetching the user
                 val eventSnapshot = docRef.get().await()
                 val event = eventSnapshot.toObject(AttendanceEvent::class.java)
                 if (event != null) {
-                    val eventHours = event.hours
-                    val semester = getSemesterFromDate(event.eventDate)
                     val liveCount = (eventSnapshot.get("liveCount") as? Number)?.toInt() ?: 1
                     val isMandatory = event.isMandatory
                     val negativeHours = event.negativeHours
-                    val absentPenaltyApplied = event.absentPenaltyApplied
-                    
-                    // Calculate hours to add
-                    var hoursToAdd = eventHours
-                    var sem1HoursToAdd = if (semester == 1) eventHours else 0.0
-                    var sem2HoursToAdd = if (semester == 2) eventHours else 0.0
-                    
-                    // For mandatory events with liveCount > 1, also refund negative hours
-                    // Bug fix: only refund if penalty was actually applied
-                    if (isMandatory && liveCount > 1 && negativeHours > 0.0 && absentPenaltyApplied) {
-                        Log.d(TAG, "Mandatory event with liveCount > 1: adding refund of negative hours")
-                        hoursToAdd += negativeHours
-                        if (semester == 1) sem1HoursToAdd += negativeHours
-                        if (semester == 2) sem2HoursToAdd += negativeHours
+                    // Per-student penalty refund check: verify if THIS specific student was penalized
+                    val studentRoll = normalizedAttendee.rollNumber.uppercase()
+                    val penalizedRolls: List<String>? = when {
+                        eventSnapshot.contains("penalizedRollNumbers") ->
+                            (eventSnapshot.get("penalizedRollNumbers") as? List<*>)?.filterIsInstance<String>() ?: emptyList()
+                        eventSnapshot.contains("negativePenaltyRollNumbers") ->
+                            (eventSnapshot.get("negativePenaltyRollNumbers") as? List<*>)?.filterIsInstance<String>() ?: emptyList()
+                        eventSnapshot.contains("absenteeRollNumbers") ->
+                            (eventSnapshot.get("absenteeRollNumbers") as? List<*>)?.filterIsInstance<String>() ?: emptyList()
+                        else -> null
                     }
-                    
-                    val userUpdates = mapOf(
-                        "eventsAttended" to FieldValue.increment(1),
-                        "hours" to FieldValue.increment(hoursToAdd),
-                        "sem1Hours" to FieldValue.increment(sem1HoursToAdd),
-                        "sem2Hours" to FieldValue.increment(sem2HoursToAdd),
-                        "eventsList" to FieldValue.arrayUnion(eventId)
-                    )
-                    userRef.set(userUpdates, com.google.firebase.firestore.SetOptions.merge()).await()
-                    Log.d(TAG, "✅ User statistics updated atomically (hours: $hoursToAdd, sem1: $sem1HoursToAdd, sem2: $sem2HoursToAdd)")
+
+                    val wasThisStudentPenalized = if (penalizedRolls != null) {
+                        penalizedRolls.map { it.uppercase() }.contains(studentRoll)
+                    } else {
+                        eventSnapshot.getBoolean("penaltyEverApplied") ?: event.absentPenaltyApplied
+                    }
+
+                    if (isMandatory && negativeHours > 0.0 && wasThisStudentPenalized) {
+                        val semester = getSemesterFromDate(event.eventDate)
+                        val userRef = firestore.collection("users").document(normalizedAttendee.rollNumber)
+                        val refundUpdates = mutableMapOf<String, Any>(
+                            "hours" to FieldValue.increment(negativeHours)
+                        )
+                        if (semester == 1) refundUpdates["sem1Hours"] = FieldValue.increment(negativeHours)
+                        if (semester == 2) refundUpdates["sem2Hours"] = FieldValue.increment(negativeHours)
+                        userRef.set(refundUpdates, com.google.firebase.firestore.SetOptions.merge()).await()
+
+                        val targetField = when {
+                            eventSnapshot.contains("penalizedRollNumbers") -> "penalizedRollNumbers"
+                            eventSnapshot.contains("negativePenaltyRollNumbers") -> "negativePenaltyRollNumbers"
+                            eventSnapshot.contains("absenteeRollNumbers") -> "absenteeRollNumbers"
+                            else -> null
+                        }
+                        if (targetField != null) {
+                            docRef.update(targetField, FieldValue.arrayRemove(normalizedAttendee.rollNumber, studentRoll)).await()
+                        }
+                        Log.d(TAG, "✅ Per-student penalty refund applied: +$negativeHours hours for $studentRoll (removed from $targetField)")
+                    }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "❌ Error updating user statistics: ${e.message}", e)
-                // Don't fail the attendance marking if user stats update fails
+                Log.e(TAG, "❌ Error processing penalty refund: ${e.message}", e)
+                // Non-fatal — attendance write already succeeded
             }
 
             Log.d(TAG, "=== REPOSITORY: ATTENDEE ADDED SUCCESSFULLY ===")
@@ -512,7 +537,7 @@ class AttendanceQRRepository {
             // Remove from attendees array and decrement total_marked
             val updates = mapOf(
                 "attendees" to FieldValue.arrayRemove(attendeeToRemove),
-                "totalMarked" to FieldValue.increment(-1)
+                "total_marked" to FieldValue.increment(-1)
             )
 
             Log.d(TAG, "Performing Firestore update with: $updates")
@@ -532,20 +557,31 @@ class AttendanceQRRepository {
                 val userRef = firestore.collection("users").document(attendeeToRemove.rollNumber)
                 val eventHours = event.hours
                 val semester = getSemesterFromDate(event.eventDate)
-                val liveCount = (eventSnapshot.get("liveCount") as? Number)?.toInt() ?: 1
                 val isMandatory = event.isMandatory
                 val negativeHours = event.negativeHours
-                val absentPenaltyApplied = event.absentPenaltyApplied
-                
+
+                // BUG 2 FIX: Use per-student penalizedRollNumbers list instead of the event-level
+                // penaltyEverApplied flag. penaltyEverApplied = true just means SOME students were
+                // penalized — it does NOT mean THIS specific student was penalized.
+                // A student who joined after the event was reopened was never penalized, so
+                // re-applying negative hours on their removal would be incorrect.
+                @Suppress("UNCHECKED_CAST")
+                val penalizedRollNumbers = (eventSnapshot.get("penalizedRollNumbers") as? List<*>)
+                    ?.filterIsInstance<String>()
+                    ?.map { it.uppercase() }
+                    ?: emptyList()
+                val wasThisStudentPenalized = penalizedRollNumbers.contains(normalizedRollNumber)
+                Log.d(TAG, "penalizedRollNumbers=$penalizedRollNumbers, wasThisStudentPenalized=$wasThisStudentPenalized")
+
                 // Calculate hours to remove
                 var hoursToRemove = eventHours
                 var sem1HoursToRemove = if (semester == 1) eventHours else 0.0
                 var sem2HoursToRemove = if (semester == 2) eventHours else 0.0
-                
-                // For mandatory events with liveCount > 1, also re-apply negative hours penalty
-                // Bug fix: only re-apply if penalty was actually applied
-                if (isMandatory && liveCount > 1 && negativeHours > 0.0 && absentPenaltyApplied) {
-                    Log.d(TAG, "Mandatory event with liveCount > 1: re-applying negative hours penalty")
+
+                // Re-apply penalty ONLY if this specific student was personally penalized before.
+                // They were previously present (escaped penalty), but are now absent after removal.
+                if (isMandatory && negativeHours > 0.0 && wasThisStudentPenalized) {
+                    Log.d(TAG, "Student $normalizedRollNumber was personally penalized — re-applying negative hours after removal")
                     hoursToRemove += negativeHours
                     if (semester == 1) sem1HoursToRemove += negativeHours
                     if (semester == 2) sem2HoursToRemove += negativeHours
@@ -800,13 +836,20 @@ class AttendanceQRRepository {
             if ((oldPenalty != newPenalty || oldSemester != newSemester) && penaltyApplied) {
                 // Determine absentee set: prefer stored metadata, else recompute
                 @Suppress("UNCHECKED_CAST")
-                val storedAbsentees = (existingSnapshot.get("absenteeRollNumbers") as? List<String>)
+                val negativePenaltyRolls = (existingSnapshot.get("negativePenaltyRollNumbers") as? List<String>)
+                    ?: (existingSnapshot.get("absenteeRollNumbers") as? List<String>)
                     ?: (existingSnapshot.get("absentee_roll_numbers") as? List<String>)
                     ?: emptyList()
 
-                val absentees = if (storedAbsentees.isNotEmpty()) {
-                    Log.d(TAG, "Using stored absentee list of size: ${storedAbsentees.size}")
-                    storedAbsentees
+                @Suppress("UNCHECKED_CAST")
+                val zeroPenaltyRolls = (existingSnapshot.get("zeroPenaltyRollNumbers") as? List<String>)?.map { it.uppercase() }?.toSet() ?: emptySet()
+                @Suppress("UNCHECKED_CAST")
+                val positivePenaltyRolls = (existingSnapshot.get("positivePenaltyRollNumbers") as? List<String>)?.map { it.uppercase() }?.toSet() ?: emptySet()
+                val excludedRolls = zeroPenaltyRolls + positivePenaltyRolls
+
+                val rawAbsentees = if (negativePenaltyRolls.isNotEmpty()) {
+                    Log.d(TAG, "Using stored negative penalty absentee list of size: ${negativePenaltyRolls.size}")
+                    negativePenaltyRolls
                 } else {
                     Log.d(TAG, "No stored absentee list found, recomputing with wing logic...")
                     val attendeeRolls = (oldEvent.attendees.map { it.rollNumber } + event.attendees.map { it.rollNumber }).toSet()
@@ -835,6 +878,9 @@ class AttendanceQRRepository {
                         if (shouldDeduct) roll else null
                     }
                 }
+
+                // Exclude custom zero and positive penalty override rolls
+                val absentees = rawAbsentees.filter { it !in excludedRolls }
 
                 // If semester unchanged, apply delta in place
                 if (oldSemester == newSemester) {
@@ -1021,7 +1067,9 @@ class AttendanceQRRepository {
             attendanceSnapshot.documents.forEach { doc ->
                 val newAttendanceDocRef = newEventDocRef.collection("attendance").document(doc.id)
                 doc.data?.let { data ->
-                    batch.set(newAttendanceDocRef, data)
+                    val copyData = data.toMutableMap()
+                    copyData["isMigration"] = true
+                    batch.set(newAttendanceDocRef, copyData)
                 }
             }
 
@@ -1043,31 +1091,52 @@ class AttendanceQRRepository {
             if (oldPenalty != newPenalty && penaltyApplied) {
                 val oldSemester = getSemesterFromDate(oldEvent.eventDate)
                 val newSemester = getSemesterFromDate(newEvent.eventDate)
-                val attendeeRolls = oldEvent.attendees.map { it.rollNumber }.toSet()
-                var allUsersDocs = usersCollection.get().await().documents
-                if (allUsersDocs.isEmpty()) {
-                    Log.w(TAG, "users collection is empty; falling back to ttwStudents")
-                    allUsersDocs = firestore.collection("ttwStudents").get().await().documents
-                }
-                
-                // Bug fix: Filter using wing logic (like updateAttendanceEvent)
-                val absentees = allUsersDocs.mapNotNull { doc ->
-                    val roll = doc.id
-                    val isPresent = attendeeRolls.contains(roll)
-                    if (roll.isBlank() || isPresent) return@mapNotNull null
-                    
-                    @Suppress("UNCHECKED_CAST")
-                    val userWings = (doc.get("wings") as? List<String>) ?: emptyList()
-                    val isDNCEvent = newEvent.wings.contains("Design and Curation Wing")
-                    
-                    val shouldDeduct = when {
-                        isDNCEvent -> true
-                        newEvent.wings.isEmpty() -> true
-                        else -> newEvent.wings.any { it in userWings }
+
+                @Suppress("UNCHECKED_CAST")
+                val negativePenaltyRolls = (oldEventSnapshot.get("negativePenaltyRollNumbers") as? List<String>)
+                    ?: (oldEventSnapshot.get("absenteeRollNumbers") as? List<String>)
+                    ?: (oldEventSnapshot.get("absentee_roll_numbers") as? List<String>)
+                    ?: emptyList()
+
+                @Suppress("UNCHECKED_CAST")
+                val zeroPenaltyRolls = (oldEventSnapshot.get("zeroPenaltyRollNumbers") as? List<String>)?.map { it.uppercase() }?.toSet() ?: emptySet()
+                @Suppress("UNCHECKED_CAST")
+                val positivePenaltyRolls = (oldEventSnapshot.get("positivePenaltyRollNumbers") as? List<String>)?.map { it.uppercase() }?.toSet() ?: emptySet()
+                val excludedRolls = zeroPenaltyRolls + positivePenaltyRolls
+
+                val rawAbsentees = if (negativePenaltyRolls.isNotEmpty()) {
+                    Log.d(TAG, "Recreate: Using stored negative penalty absentee list of size: ${negativePenaltyRolls.size}")
+                    negativePenaltyRolls
+                } else {
+                    Log.d(TAG, "Recreate: No stored absentee list found, recomputing with wing logic...")
+                    val attendeeRolls = oldEvent.attendees.map { it.rollNumber }.toSet()
+                    var allUsersDocs = usersCollection.get().await().documents
+                    if (allUsersDocs.isEmpty()) {
+                        Log.w(TAG, "users collection is empty; falling back to ttwStudents")
+                        allUsersDocs = firestore.collection("ttwStudents").get().await().documents
                     }
                     
-                    if (shouldDeduct) roll else null
+                    // Filter using wing logic
+                    allUsersDocs.mapNotNull { doc ->
+                        val roll = doc.id
+                        val isPresent = attendeeRolls.contains(roll)
+                        if (roll.isBlank() || isPresent) return@mapNotNull null
+                        
+                        @Suppress("UNCHECKED_CAST")
+                        val userWings = (doc.get("wings") as? List<String>) ?: emptyList()
+                        val isDNCEvent = newEvent.wings.contains("Design and Curation Wing")
+                        
+                        val shouldDeduct = when {
+                            isDNCEvent -> true
+                            newEvent.wings.isEmpty() -> true
+                            else -> newEvent.wings.any { it in userWings }
+                        }
+                        
+                        if (shouldDeduct) roll else null
+                    }
                 }
+
+                val absentees = rawAbsentees.filter { it !in excludedRolls }
 
                 Log.d(TAG, "Handling mandatory penalties: oldPenalty=$oldPenalty, newPenalty=$newPenalty, absentees=${absentees.size}")
 
@@ -1485,29 +1554,25 @@ class AttendanceQRRepository {
         try {
             Log.d(TAG, "Making attendance event live: $eventId")
 
-            // First, get the current event to check if it's mandatory and get current liveCount
-            val eventSnap = eventsAttendanceCollection.document(eventId).get().await()
-            val event = eventSnap.toObject(AttendanceEvent::class.java)
-            val currentLiveCount = (eventSnap.get("liveCount") as? Number)?.toInt() ?: 1
-            val newLiveCount = currentLiveCount + 1
-
-            // Update isLive field to true, increment liveCount, and remove closedAt timestamp
+            // Use atomic increment for liveCount to avoid race condition when
+            // two admins tap "Make Live" simultaneously. Previously this did a
+            // read-then-write which could result in both writes setting the same value.
+            // NOTE: penaltyEverApplied is intentionally NOT reset here so that the
+            // per-student refund logic in addAttendeeToEvent still works correctly.
             val updates = mapOf(
                 "is_live" to true,
-                "liveCount" to newLiveCount,
-                "closedAt" to FieldValue.delete(), // Remove closedAt timestamp
-                "live" to FieldValue.delete(), // Remove duplicate field if it exists
-                "absentPenaltyApplied" to false // Reset penalty flag
+                "liveCount" to FieldValue.increment(1),  // atomic — race-condition-safe
+                "closedAt" to FieldValue.delete(),
+                "live" to FieldValue.delete(),
+                "absentPenaltyApplied" to false
+                // penaltyEverApplied intentionally NOT reset here
             )
 
             eventsAttendanceCollection.document(eventId)
                 .update(updates)
                 .await()
 
-            Log.d(TAG, "Attendance event made live successfully: $eventId, liveCount: $newLiveCount")
-
-            // Note: Mandatory event re-opening logic is now handled in addAttendeeToEvent/removeAttendeeFromEvent
-
+            Log.d(TAG, "Attendance event made live successfully: $eventId")
             return@withContext Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Error making attendance event live", e)
@@ -1660,37 +1725,75 @@ class AttendanceQRRepository {
     }
     
     /**
-     * Determine semester from event date
+     * Determine semester from event date (supports multi-format parsing & eventId fallback)
      * Semester 1: July 1 - December 10 (any year)
      * Semester 2: December 11 - June 30 (any year)
      */
-    private fun getSemesterFromDate(eventDate: String): Int {
+    private fun getSemesterFromDate(eventDate: String, eventId: String? = null): Int {
         try {
-            val dateFormat = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.ENGLISH)
-            val date = dateFormat.parse(eventDate)
-            if (date != null) {
-                val calendar = java.util.Calendar.getInstance()
-                calendar.time = date
-                
-                val month = calendar.get(java.util.Calendar.MONTH) + 1 // Calendar.MONTH is 0-based
-                val day = calendar.get(java.util.Calendar.DAY_OF_MONTH)
-                
-                // Semester 1: July 1 - December 10
-                if (month in 7..11) {
-                    return 1
-                } else if (month == 12 && day <= 10) {
-                    return 1
-                }
-                // Semester 2: December 11 - June 30
-                else if (month == 12 && day >= 11) {
-                    return 2
-                } else if (month in 1..6) {
-                    return 2
+            var month = -1
+            var day = -1
+
+            val trimmed = eventDate.trim()
+            if (trimmed.isNotEmpty()) {
+                val dateFormats = arrayOf(
+                    "dd MMM yyyy", "d MMM yyyy",
+                    "dd MMMM yyyy", "d MMMM yyyy",
+                    "dd MMM", "d MMM",
+                    "yyyy-MM-dd", "yyyy/MM/dd",
+                    "dd-MM-yyyy", "dd/MM/yyyy"
+                )
+
+                for (fmt in dateFormats) {
+                    try {
+                        val sdf = java.text.SimpleDateFormat(fmt, java.util.Locale.ENGLISH)
+                        sdf.isLenient = true
+                        val parsed = sdf.parse(trimmed)
+                        if (parsed != null) {
+                            val cal = java.util.Calendar.getInstance()
+                            cal.time = parsed
+                            month = cal.get(java.util.Calendar.MONTH) + 1
+                            day = cal.get(java.util.Calendar.DAY_OF_MONTH)
+                            break
+                        }
+                    } catch (_: Exception) {}
                 }
             }
+
+            // Fallback: extract date from eventId (e.g. "15_Aug_2025_EventName" or "15_Aug_EventName")
+            if ((month == -1 || day == -1) && !eventId.isNullOrBlank()) {
+                val parts = eventId.split("_")
+                if (parts.size >= 2) {
+                    val candidateStr = "${parts[0]} ${parts[1]} ${parts.getOrNull(2) ?: ""}".trim()
+                    val fallbackFormats = arrayOf("d MMM yyyy", "dd MMM yyyy", "d MMM", "dd MMM")
+                    for (fmt in fallbackFormats) {
+                        try {
+                            val sdf = java.text.SimpleDateFormat(fmt, java.util.Locale.ENGLISH)
+                            sdf.isLenient = true
+                            val parsed = sdf.parse(candidateStr)
+                            if (parsed != null) {
+                                val cal = java.util.Calendar.getInstance()
+                                cal.time = parsed
+                                month = cal.get(java.util.Calendar.MONTH) + 1
+                                day = cal.get(java.util.Calendar.DAY_OF_MONTH)
+                                break
+                            }
+                        } catch (_: Exception) {}
+                    }
+                }
+            }
+
+            if (month != -1 && day != -1) {
+                // Semester 1: July 1 - December 10
+                if (month in 7..11) return 1
+                if (month == 12 && day <= 10) return 1
+                // Semester 2: December 11 - June 30
+                if (month == 12 && day >= 11) return 2
+                if (month in 1..6) return 2
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "Error parsing event date: $eventDate", e)
+            Log.e(TAG, "Error parsing semester date: '$eventDate'", e)
         }
-        return 0 // Unknown semester
+        return 0
     }
 }

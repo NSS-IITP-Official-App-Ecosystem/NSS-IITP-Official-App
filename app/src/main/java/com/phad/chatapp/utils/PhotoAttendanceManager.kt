@@ -31,6 +31,27 @@ object PhotoAttendanceManager {
     private val SUBMIT_URL get() = "$BASE_URL/api/attendance/submit-photo"
     private val PENDING_URL get() = "$BASE_URL/api/attendance/pending-photos"
     private val VERIFY_URL get() = "$BASE_URL/api/attendance/verify" // will append /:id
+    private val VERIFY_BATCH_URL get() = "$BASE_URL/api/attendance/verify-batch"
+
+    /**
+     * Returns the number of photo submissions that are still 'Pending' for a given event.
+     * Used to gate the "Apply Penalty" button so admins can't apply penalties before
+     * all geo-photo submissions have been reviewed.
+     */
+    suspend fun getPendingPhotoCountForEvent(eventId: String): Int = withContext(Dispatchers.IO) {
+        try {
+            val snapshot = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                .collection("PhotoAttendanceLog")
+                .whereEqualTo("eventId", eventId)
+                .whereEqualTo("verification_status", "Pending")
+                .get()
+                .await()
+            snapshot.size()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get pending photo count for event $eventId", e)
+            0 // fail open — don't block the button if the query errors
+        }
+    }
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
@@ -224,6 +245,52 @@ object PhotoAttendanceManager {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to verify photo", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Approve or reject multiple pending photo submissions in a single batch request
+     */
+    suspend fun verifyPhotoBatch(
+        logIds: List<String>,
+        status: String, // "Approved" or "Rejected"
+        adminRollNumber: String,
+        adminName: String
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val token = getIdToken() ?: return@withContext Result.failure(Exception("Not authenticated"))
+
+            val jsonBody = JSONObject().apply {
+                put("logIds", JSONArray(logIds))
+                put("status", status)
+                put("adminRollNumber", adminRollNumber)
+                put("adminName", adminName)
+            }
+
+            val requestBody = jsonBody.toString().toRequestBody("application/json".toMediaTypeOrNull())
+
+            val request = Request.Builder()
+                .url(VERIFY_BATCH_URL)
+                .header("Authorization", "Bearer $token")
+                .post(requestBody)
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    Result.success(Unit)
+                } else {
+                    val errorMsg = response.body?.string() ?: "Unknown error"
+                    val parsedError = try {
+                        JSONObject(errorMsg).optString("error", errorMsg)
+                    } catch (e: Exception) {
+                        errorMsg
+                    }
+                    Result.failure(Exception("Batch verify failed: Code ${response.code} - $parsedError"))
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to batch verify photos", e)
             Result.failure(e)
         }
     }

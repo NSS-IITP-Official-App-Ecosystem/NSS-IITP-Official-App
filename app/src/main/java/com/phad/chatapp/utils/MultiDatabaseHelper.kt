@@ -31,7 +31,7 @@ class MultiDatabaseHelper {
                 
                 // TWApp Firebase project values
                 val options = FirebaseOptions.Builder()
-                    .setApiKey("AIzaSyCrPVN2D-vy5aHGsmgUDqfJXspKLjvUkgs")
+                    .setApiKey(com.phad.chatapp.BuildConfig.SECONDARY_FIREBASE_API_KEY)
                     .setApplicationId("1:295879966372:android:3d48ffc9aecf7a56d46d16")
                     .setProjectId("twapp-9bf5f")
                     .build()

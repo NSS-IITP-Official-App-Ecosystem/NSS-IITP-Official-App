@@ -109,7 +109,7 @@ class ImageViewActivity : AppCompatActivity() {
                     
                     // Try different URL formats for Google Drive - some work better than others
                     // Order: googleapis content, direct download, alternative photosapi
-                    val contentUrl = "https://www.googleapis.com/drive/v3/files/$fileId?alt=media&key=AIzaSyAa8yy0GdcGPHdtD083HiGGx_S0vMPScDM"
+                    val contentUrl = "https://www.googleapis.com/drive/v3/files/$fileId?alt=media&key=${com.phad.chatapp.BuildConfig.GOOGLE_DRIVE_API_KEY}"
                     Log.d(TAG, "Trying Google API content URL: $contentUrl")
                     return contentUrl
                 }

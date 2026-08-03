@@ -110,55 +110,8 @@ object FileStorageUtils {
         fileUrl: String,
         fileType: FileTypeEnum
     ): File? = withContext(Dispatchers.IO) {
-        try {
-            val driveHelper = DriveServiceHelper.getInstance(context)
-            
-            // Extract the file ID from the URL
-            val fileId = driveHelper.getFileIdFromUrl(fileUrl)
-                ?: return@withContext null
-            
-            // Create the appropriate directory based on file type
-            val directory = when (fileType) {
-                FileTypeEnum.IMAGE -> File(context.getExternalFilesDir(Environment.DIRECTORY_PICTURES), "ChatApp")
-                FileTypeEnum.DOCUMENT -> File(context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "ChatApp")
-            }
-            
-            // Ensure the directory exists
-            if (!directory.exists()) {
-                directory.mkdirs()
-            }
-            
-            // Download the file
-            val result = driveHelper.downloadFile(fileId)
-            
-            if (result.isSuccess) {
-                // Create a file to save the content
-                val fileName = "download_${System.currentTimeMillis()}"
-                val extension = when (fileType) {
-                    FileTypeEnum.IMAGE -> ".jpg"
-                    FileTypeEnum.DOCUMENT -> ".pdf"
-                }
-                
-                val file = File(directory, "$fileName$extension")
-                
-                // Write the content to the file
-                FileOutputStream(file).use { it.write(result.getOrNull()) }
-                
-                return@withContext file
-            } else {
-                Log.e(TAG, "Failed to download file: ${result.exceptionOrNull()?.message}")
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "Failed to download file", Toast.LENGTH_SHORT).show()
-                }
-                return@withContext null
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error downloading file", e)
-            withContext(Dispatchers.Main) {
-                Toast.makeText(context, "Error downloading file: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-            return@withContext null
-        }
+        Log.w(TAG, "Legacy Google Drive download requested for URL: $fileUrl (no-op)")
+        return@withContext null
     }
     
     /**

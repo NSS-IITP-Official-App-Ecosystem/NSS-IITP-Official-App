@@ -606,8 +606,13 @@ fun QRAttendanceAdminScreen(
                                         }
                                     )
                                 }
+                            },
+                            onBatchRemoveRecords = { processedIds ->
+                                // Remove all batch-processed records from the list without extra network calls
+                                pendingPhotos = pendingPhotos.filter { it.id !in processedIds }
                             }
                         )
+
                     } else {
                         if (uiState.isLoading) {
                             // Loading state
@@ -2218,6 +2223,26 @@ fun EventCard(
                 }
                 
                 if (event.isMandatory && event.negativeHours > 0 && onApplyPenalty != null) {
+                    // Smart gate: count pending photo submissions only when event uses geo/photo mode
+                    val needsPhotoCheck = event.allowedAttendanceMode in listOf("GEO", "BOTH")
+                    var pendingPhotoCount by remember(event.id) { mutableIntStateOf(0) }
+                    LaunchedEffect(event.id) {
+                        if (needsPhotoCheck) {
+                            pendingPhotoCount = com.phad.chatapp.utils.PhotoAttendanceManager
+                                .getPendingPhotoCountForEvent(event.id)
+                        }
+                    }
+
+                    // Penalty is available anytime, except when:
+                    // 1. Penalty has already been applied for this event
+                    // 2. If GEO or BOTH mode, there are still pending photo submissions to review
+                    val penaltyBlocked = event.absentPenaltyApplied || (needsPhotoCheck && pendingPhotoCount > 0)
+                    val buttonLabel = when {
+                        event.absentPenaltyApplied -> "Penalty Applied"
+                        needsPhotoCheck && pendingPhotoCount > 0 -> "$pendingPhotoCount Photo(s) Pending"
+                        else -> "Apply Penalty"
+                    }
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -2226,7 +2251,7 @@ fun EventCard(
                     ) {
                         Button(
                             onClick = { onApplyPenalty(event) },
-                            enabled = !event.absentPenaltyApplied,
+                            enabled = !penaltyBlocked,
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = Color(0xFFE53935),
                                 disabledContainerColor = Color(0xFFE0E0E0),
@@ -2240,7 +2265,7 @@ fun EventCard(
                             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
                         ) {
                             Text(
-                                text = if (event.absentPenaltyApplied) "Penalty Applied" else "Apply Penalty",
+                                text = buttonLabel,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold
                             )
@@ -3534,349 +3559,396 @@ fun PendingVerificationsScreen(
     isLoading: Boolean,
     error: String?,
     eventList: List<AttendanceEvent>,
-    onVerifyClick: (PhotoAttendanceManager.PendingPhotoRecord, Boolean) -> Unit
+    onVerifyClick: (PhotoAttendanceManager.PendingPhotoRecord, Boolean) -> Unit,
+    onBatchRemoveRecords: (Set<String>) -> Unit = {}
 ) {
     val context = LocalContext.current
-    
+    val coroutineScope = rememberCoroutineScope()
+
     // State to track which event is selected for viewing details
     var selectedEventId by remember { mutableStateOf<String?>(null) }
-    
+
+    // Multi-select mode state
+    var isMultiSelectMode by remember { mutableStateOf(false) }
+    var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+
+    // Batch action confirmation dialog state
+    var batchAction by remember { mutableStateOf<String?>(null) } // "Approved" or "Rejected"
+    var isBatchProcessing by remember { mutableStateOf(false) }
+
     if (isLoading) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(color = Color(0xFF2196F3))
         }
     } else if (error != null) {
-        Box(
-            modifier = Modifier.fillMaxSize().padding(16.dp),
-            contentAlignment = Alignment.Center
-        ) {
+        Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "Error",
-                    tint = Color.Red,
-                    modifier = Modifier.size(48.dp)
-                )
+                Icon(imageVector = Icons.Default.Close, contentDescription = "Error", tint = Color.Red, modifier = Modifier.size(48.dp))
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(text = error, color = Color.Red, textAlign = TextAlign.Center)
             }
         }
     } else if (pendingRecords.isEmpty()) {
-        Box(
-            modifier = Modifier.fillMaxSize().padding(32.dp),
-            contentAlignment = Alignment.Center
-        ) {
+        Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(
-                    imageVector = Icons.Default.People,
-                    contentDescription = "No Pending",
-                    tint = Color.Gray,
-                    modifier = Modifier.size(64.dp)
-                )
+                Icon(imageVector = Icons.Default.People, contentDescription = "No Pending", tint = Color.Gray, modifier = Modifier.size(64.dp))
                 Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = "No Pending Verifications",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
-                    color = Color.Gray
-                )
-                Text(
-                    text = "All geo-tagged photo submissions have been reviewed.",
-                    fontSize = 14.sp,
-                    color = Color.Gray,
-                    textAlign = TextAlign.Center
-                )
+                Text(text = "No Pending Verifications", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.Gray)
+                Text(text = "All geo-tagged photo submissions have been reviewed.", fontSize = 14.sp, color = Color.Gray, textAlign = TextAlign.Center)
             }
         }
     } else {
         // Group pending records by eventId
-        val groupedRecords = remember(pendingRecords) {
-            pendingRecords.groupBy { it.eventId }
-        }
-        
+        val groupedRecords = remember(pendingRecords) { pendingRecords.groupBy { it.eventId } }
+
         if (selectedEventId == null) {
-            // Render Menu of Events
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+            // ── Event list ──
+            LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 item {
-                    Text(
-                        text = "Select Event to Review Photos",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        color = Color.DarkGray,
-                        modifier = Modifier.padding(bottom = 4.dp)
-                    )
+                    Text(text = "Select Event to Review Photos", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.DarkGray, modifier = Modifier.padding(bottom = 4.dp))
                 }
-                
                 items(groupedRecords.keys.toList()) { eventId ->
                     val eventRecords = groupedRecords[eventId] ?: emptyList()
                     val eventObj = eventList.find { it.id == eventId }
                     val eventName = eventObj?.getEventName() ?: eventId
                     val eventDate = eventObj?.getFormattedEventDate() ?: ""
-                    
                     Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { selectedEventId = eventId },
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            selectedEventId = eventId
+                            isMultiSelectMode = false
+                            selectedIds = emptySet()
+                        },
                         shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(containerColor = Color.White),
                         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
+                        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = eventName,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 16.sp,
-                                    color = Color(0xFF212121)
-                                )
+                                Text(text = eventName, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF212121))
                                 if (eventDate.isNotEmpty()) {
                                     Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = eventDate,
-                                        fontSize = 12.sp,
-                                        color = Color.Gray
-                                    )
+                                    Text(text = eventDate, fontSize = 12.sp, color = Color.Gray)
                                 }
                             }
-                            
-                            // Badge showing count of pending submissions
-                            Card(
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD)),
-                                shape = RoundedCornerShape(16.dp)
-                            ) {
-                                Text(
-                                    text = "${eventRecords.size} Pending",
-                                    color = Color(0xFF1976D2),
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                                )
+                            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD)), shape = RoundedCornerShape(16.dp)) {
+                                Text(text = "${eventRecords.size} Pending", color = Color(0xFF1976D2), fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
                             }
                         }
                     }
                 }
             }
         } else {
-            // Render Pending Photos for the selected event
+            // ── Photo detail view for selected event ──
             val eventRecords = groupedRecords[selectedEventId] ?: emptyList()
-            
-            // Auto-navigate back to events list if all records for this event are reviewed/removed
+
             LaunchedEffect(eventRecords) {
                 if (eventRecords.isEmpty()) {
                     selectedEventId = null
+                    isMultiSelectMode = false
+                    selectedIds = emptySet()
                 }
             }
-            
+
             val selectedEventObj = eventList.find { it.id == selectedEventId }
             val selectedEventName = selectedEventObj?.getEventName() ?: selectedEventId ?: ""
-            
-            Column(modifier = Modifier.fillMaxSize()) {
-                // Detail Header with Back Button and Event Title
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = { selectedEventId = null }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Go back to event list",
-                            tint = Color(0xFF2196F3)
+            val allSelected = eventRecords.isNotEmpty() && selectedIds.containsAll(eventRecords.map { it.id })
+
+            // Batch confirmation dialog
+            batchAction?.let { action ->
+                val actionLabel = if (action == "Approved") "Approve" else "Reject"
+                val count = selectedIds.size
+                AlertDialog(
+                    onDismissRequest = { if (!isBatchProcessing) batchAction = null },
+                    containerColor = Color.White,
+                    title = { Text("$actionLabel $count Photo${if (count > 1) "s" else ""}?", fontWeight = FontWeight.Bold) },
+                    text = {
+                        Text(
+                            text = "Are you sure you want to ${actionLabel.lowercase()} $count selected photo submission${if (count > 1) "s" else ""}? This action cannot be undone.",
+                            color = Color.DarkGray
                         )
-                    }
-                    Text(
-                        text = selectedEventName,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        color = Color(0xFF2196F3),
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(start = 4.dp)
-                    )
-                }
-                
-                HorizontalDivider(color = Color(0xFFF5F5F5))
-                
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 100.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(eventRecords) { record ->
-                        val formattedDate = remember(record.submittedAtMs) {
-                            val date = Date(record.submittedAtMs)
-                            val formatter = java.text.SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault())
-                            formatter.format(date)
-                        }
-                        
-                        var resolvedAddress by remember(record.latitude, record.longitude) { mutableStateOf("Loading address...") }
-                        LaunchedEffect(record.latitude, record.longitude) {
-                            resolvedAddress = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                try {
-                                    val geocoder = android.location.Geocoder(context, Locale.getDefault())
-                                    @Suppress("DEPRECATION")
-                                    val addresses = geocoder.getFromLocation(record.latitude, record.longitude, 1)
-                                    if (!addresses.isNullOrEmpty()) {
-                                        val address = addresses[0]
-                                        val fullAddress = address.getAddressLine(0)
-                                        if (!fullAddress.isNullOrEmpty()) {
-                                            val parts = fullAddress.split(",")
-                                            parts.take(3).joinToString(",").trim()
-                                        } else {
-                                            "Unknown Location"
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                // Capture snapshot of ids and count before launching coroutine
+                                val idsToProcess = selectedIds.toList()
+                                val processCount = idsToProcess.size
+                                coroutineScope.launch {
+                                    isBatchProcessing = true
+                                    val adminRollNumber = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email?.split("@")?.get(0)?.uppercase() ?: "ADMIN"
+                                    val adminName = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.displayName ?: "Admin"
+                                    val res = PhotoAttendanceManager.verifyPhotoBatch(
+                                        logIds = idsToProcess,
+                                        status = action,
+                                        adminRollNumber = adminRollNumber,
+                                        adminName = adminName
+                                    )
+                                    isBatchProcessing = false
+                                    batchAction = null
+                                    res.fold(
+                                        onSuccess = {
+                                            val processedSet = idsToProcess.toSet()
+                                            selectedIds = emptySet()
+                                            isMultiSelectMode = false
+                                            // Only update UI — do NOT call onVerifyClick (that fires a network call per record)
+                                            onBatchRemoveRecords(processedSet)
+                                            val actionLabel = if (action == "Approved") "Approved" else "Rejected"
+                                            Toast.makeText(context, "$actionLabel $processCount photo${if (processCount > 1) "s" else ""} successfully!", Toast.LENGTH_SHORT).show()
+                                        },
+                                        onFailure = { err ->
+                                            Toast.makeText(context, "Batch action failed: ${err.message}", Toast.LENGTH_LONG).show()
                                         }
-                                    } else {
+                                    )
+                                }
+                            },
+                            enabled = !isBatchProcessing,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (action == "Approved") Color(0xFF66BB6A) else Color(0xFFEF5350)
+                            )
+                        ) {
+                            if (isBatchProcessing) {
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                            } else {
+                                Text(actionLabel, color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { if (!isBatchProcessing) batchAction = null }) {
+                            Text("Cancel", color = Color.Gray)
+                        }
+                    }
+                )
+            }
+
+            Box(modifier = Modifier.fillMaxSize()) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // ── Header Row ──
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Back button
+                        IconButton(onClick = {
+                            if (isMultiSelectMode) {
+                                isMultiSelectMode = false
+                                selectedIds = emptySet()
+                            } else {
+                                selectedEventId = null
+                            }
+                        }) {
+                            Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Go back", tint = Color(0xFF2196F3))
+                        }
+
+                        // If in multi-select: show "Select All" checkbox + count; else show event name
+                        if (isMultiSelectMode) {
+                            Checkbox(
+                                checked = allSelected,
+                                onCheckedChange = { checked ->
+                                    selectedIds = if (checked) eventRecords.map { it.id }.toSet() else emptySet()
+                                },
+                                colors = CheckboxDefaults.colors(checkedColor = Color(0xFF2196F3))
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (selectedIds.isEmpty()) "Select All" else "${selectedIds.size} selected",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = Color(0xFF2196F3),
+                                modifier = Modifier.weight(1f)
+                            )
+                            // Cancel multi-select
+                            TextButton(onClick = { isMultiSelectMode = false; selectedIds = emptySet() }) {
+                                Text("Cancel", color = Color.Gray)
+                            }
+                        } else {
+                            Text(
+                                text = selectedEventName,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp,
+                                color = Color(0xFF2196F3),
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f).padding(start = 4.dp)
+                            )
+                            // Enter multi-select mode
+                            TextButton(onClick = { isMultiSelectMode = true }) {
+                                Text("Select", color = Color(0xFF2196F3), fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(color = Color(0xFFF5F5F5))
+
+                    // ── Photo cards list ──
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = if (isMultiSelectMode) 120.dp else 100.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(eventRecords) { record ->
+                            val isChecked = selectedIds.contains(record.id)
+                            val formattedDate = remember(record.submittedAtMs) {
+                                val date = java.util.Date(record.submittedAtMs)
+                                val formatter = java.text.SimpleDateFormat("dd MMM yyyy, hh:mm a", java.util.Locale.getDefault())
+                                formatter.format(date)
+                            }
+
+                            var resolvedAddress by remember(record.latitude, record.longitude) { mutableStateOf("Loading address...") }
+                            LaunchedEffect(record.latitude, record.longitude) {
+                                resolvedAddress = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                    try {
+                                        val geocoder = android.location.Geocoder(context, java.util.Locale.getDefault())
+                                        @Suppress("DEPRECATION")
+                                        val addresses = geocoder.getFromLocation(record.latitude, record.longitude, 1)
+                                        if (!addresses.isNullOrEmpty()) {
+                                            val address = addresses[0]
+                                            val fullAddress = address.getAddressLine(0)
+                                            if (!fullAddress.isNullOrEmpty()) {
+                                                fullAddress.split(",").take(3).joinToString(",").trim()
+                                            } else "Unknown Location"
+                                        } else "Unknown Location"
+                                    } catch (e: Exception) {
                                         "Unknown Location"
                                     }
-                                } catch (e: Exception) {
-                                    "Unknown Location"
+                                }
+                            }
+
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .then(
+                                        if (isMultiSelectMode)
+                                            Modifier.clickable {
+                                                selectedIds = if (isChecked) selectedIds - record.id else selectedIds + record.id
+                                            }
+                                        else Modifier
+                                    ),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isChecked) Color(0xFFE3F2FD) else Color.White
+                                ),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                            ) {
+                                Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                                    // Header: checkbox (in multi-select) + student info + status badge
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        if (isMultiSelectMode) {
+                                            Checkbox(
+                                                checked = isChecked,
+                                                onCheckedChange = { checked ->
+                                                    selectedIds = if (checked) selectedIds + record.id else selectedIds - record.id
+                                                },
+                                                colors = CheckboxDefaults.colors(checkedColor = Color(0xFF2196F3))
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                        }
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(text = record.name, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF212121))
+                                            Text(text = "Roll: ${record.rollNumber}", fontSize = 13.sp, color = Color.Gray)
+                                            record.wing?.let { wingName ->
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Text(text = "Wing: $wingName", fontSize = 13.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
+                                            }
+                                        }
+                                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)), shape = RoundedCornerShape(8.dp)) {
+                                            Text(text = "Pending", color = Color(0xFFE65100), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    HorizontalDivider(color = Color(0xFFF5F5F5))
+                                    Spacer(modifier = Modifier.height(12.dp))
+
+                                    // Submission and location info
+                                    Text(text = "Submitted: $formattedDate", fontSize = 12.sp, color = Color.Gray)
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Icon(imageVector = Icons.Default.LocationOn, contentDescription = "Location", tint = Color.Gray, modifier = Modifier.size(14.dp))
+                                        Column {
+                                            Text(text = String.format("GPS: %.6f, %.6f", record.latitude, record.longitude), fontSize = 12.sp, color = Color.DarkGray)
+                                            Text(text = resolvedAddress, fontSize = 11.sp, color = Color.Gray)
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(12.dp))
+
+                                    // Image display
+                                    if (record.photoUrl.isNotEmpty()) {
+                                        AsyncImage(
+                                            model = record.photoUrl,
+                                            contentDescription = "Volunteer Geo-Tagged Photo",
+                                            modifier = Modifier.fillMaxWidth().wrapContentHeight().clip(RoundedCornerShape(8.dp)).background(Color(0xFFEEEEEE)),
+                                            contentScale = androidx.compose.ui.layout.ContentScale.FillWidth
+                                        )
+                                        Spacer(modifier = Modifier.height(16.dp))
+                                    }
+
+                                    // Individual Approve / Reject buttons (hidden in multi-select mode)
+                                    if (!isMultiSelectMode) {
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                            Button(
+                                                onClick = { onVerifyClick(record, false) },
+                                                modifier = Modifier.weight(1f),
+                                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF5350)),
+                                                shape = RoundedCornerShape(8.dp)
+                                            ) {
+                                                Text("Reject", color = Color.White, fontWeight = FontWeight.Bold)
+                                            }
+                                            Button(
+                                                onClick = { onVerifyClick(record, true) },
+                                                modifier = Modifier.weight(1f),
+                                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF66BB6A)),
+                                                shape = RoundedCornerShape(8.dp)
+                                            ) {
+                                                Text("Approve", color = Color.White, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
-                        
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp)
-                            ) {
-                                // Header details
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
+                    }
+                }
+
+                // ── Sticky bottom action bar (only in multi-select mode) ──
+                if (isMultiSelectMode) {
+                    Card(
+                        modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+                        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 76.dp)) {
+                            Text(
+                                text = if (selectedIds.isEmpty()) "No photos selected" else "${selectedIds.size} photo${if (selectedIds.size > 1) "s" else ""} selected",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = if (selectedIds.isEmpty()) Color.Gray else Color(0xFF2196F3),
+                                modifier = Modifier.padding(bottom = 10.dp)
+                            )
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Button(
+                                    onClick = { if (selectedIds.isNotEmpty()) batchAction = "Rejected" },
+                                    enabled = selectedIds.isNotEmpty(),
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(containerColor = if (selectedIds.isNotEmpty()) Color(0xFFEF5350) else Color.LightGray),
+                                    shape = RoundedCornerShape(8.dp)
                                 ) {
-                                    Column {
-                                        Text(
-                                            text = record.name,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 16.sp,
-                                            color = Color(0xFF212121)
-                                        )
-                                        Text(
-                                            text = "Roll: ${record.rollNumber}",
-                                            fontSize = 13.sp,
-                                            color = Color.Gray
-                                        )
-                                        record.wing?.let { wingName ->
-                                            Spacer(modifier = Modifier.height(2.dp))
-                                            Text(
-                                                text = "Wing: $wingName",
-                                                fontSize = 13.sp,
-                                                color = Color.Gray,
-                                                fontWeight = FontWeight.Medium
-                                            )
-                                        }
-                                    }
-                                    Card(
-                                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
-                                        shape = RoundedCornerShape(8.dp)
-                                    ) {
-                                        Text(
-                                            text = "Pending",
-                                            color = Color(0xFFE65100),
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                        )
-                                    }
+                                    Text("Reject Selected", color = Color.White, fontWeight = FontWeight.Bold)
                                 }
-                                
-                                Spacer(modifier = Modifier.height(12.dp))
-                                HorizontalDivider(color = Color(0xFFF5F5F5))
-                                Spacer(modifier = Modifier.height(12.dp))
-                                
-                                // Submission and Location info
-                                Text(
-                                    text = "Submitted: $formattedDate",
-                                    fontSize = 12.sp,
-                                    color = Color.Gray
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                Button(
+                                    onClick = { if (selectedIds.isNotEmpty()) batchAction = "Approved" },
+                                    enabled = selectedIds.isNotEmpty(),
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(containerColor = if (selectedIds.isNotEmpty()) Color(0xFF66BB6A) else Color.LightGray),
+                                    shape = RoundedCornerShape(8.dp)
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.LocationOn,
-                                        contentDescription = "Location",
-                                        tint = Color.Gray,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Column {
-                                        Text(
-                                            text = String.format("GPS: %.6f, %.6f", record.latitude, record.longitude),
-                                            fontSize = 12.sp,
-                                            color = Color.DarkGray
-                                        )
-                                        Text(
-                                            text = resolvedAddress,
-                                            fontSize = 11.sp,
-                                            color = Color.Gray
-                                        )
-                                    }
-                                }
-                                
-                                Spacer(modifier = Modifier.height(12.dp))
-                                
-                                // Image display
-                                if (record.photoUrl.isNotEmpty()) {
-                                    AsyncImage(
-                                        model = record.photoUrl,
-                                        contentDescription = "Volunteer Geo-Tagged Photo",
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .wrapContentHeight()
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(Color(0xFFEEEEEE)),
-                                        contentScale = androidx.compose.ui.layout.ContentScale.FillWidth
-                                    )
-                                    Spacer(modifier = Modifier.height(16.dp))
-                                }
-                                
-                                // Approve / Reject Actions
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    // Reject Button
-                                    Button(
-                                        onClick = { onVerifyClick(record, false) },
-                                        modifier = Modifier.weight(1f),
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF5350)),
-                                        shape = RoundedCornerShape(8.dp)
-                                    ) {
-                                        Text("Reject", color = Color.White, fontWeight = FontWeight.Bold)
-                                    }
-                                    
-                                    // Approve Button
-                                    Button(
-                                        onClick = { onVerifyClick(record, true) },
-                                        modifier = Modifier.weight(1f),
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF66BB6A)),
-                                        shape = RoundedCornerShape(8.dp)
-                                    ) {
-                                        Text("Approve", color = Color.White, fontWeight = FontWeight.Bold)
-                                    }
+                                    Text("Approve Selected", color = Color.White, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -3886,6 +3958,7 @@ fun PendingVerificationsScreen(
         }
     }
 }
+
 
 
 @Composable

@@ -47,16 +47,16 @@ object AttendanceStatsCalculator {
                 val allFields = userDoc.data?.keys ?: emptySet()
                 Log.d(TAG, "Available fields in document: $allFields")
                 
-                val eventsAttended = userDoc.getLong("eventsAttended") ?: 0L
-                val sem1HoursDouble = userDoc.getDouble("sem1Hours")
-                val sem2HoursDouble = userDoc.getDouble("sem2Hours")
+                val eventsAttended = (userDoc.get("eventsAttended") as? Number)?.toLong() ?: 0L
+                val sem1HoursDouble = (userDoc.get("sem1Hours") as? Number)?.toDouble()
+                val sem2HoursDouble = (userDoc.get("sem2Hours") as? Number)?.toDouble()
                 
                 Log.d(TAG, "Raw values - eventsAttended: $eventsAttended, sem1Hours: ${sem1HoursDouble}, sem2Hours: ${sem2HoursDouble}")
                 
                 // Also check for old field names in case they exist
-                val eventsAttendedOld = userDoc.getLong("events_attended") ?: 0L
-                val sem1HoursOldDouble = userDoc.getDouble("sem1_hours")
-                val sem2HoursOldDouble = userDoc.getDouble("sem2_hours")
+                val eventsAttendedOld = (userDoc.get("events_attended") as? Number)?.toLong() ?: 0L
+                val sem1HoursOldDouble = (userDoc.get("sem1_hours") as? Number)?.toDouble()
+                val sem2HoursOldDouble = (userDoc.get("sem2_hours") as? Number)?.toDouble()
                 
                 Log.d(TAG, "Old field values - events_attended: $eventsAttendedOld, sem1_hours: ${sem1HoursOldDouble}, sem2_hours: ${sem2HoursOldDouble}")
                 
@@ -142,49 +142,76 @@ object AttendanceStatsCalculator {
     }
 
     /**
-     * Determine semester from event date
+     * Determine semester from event date (supports multi-format parsing & eventId fallback)
      * Semester 1: July 1 - December 10 (any year)
      * Semester 2: December 11 - June 30 (any year)
      */
-    private fun getSemesterFromDate(eventDate: String): Int {
+    private fun getSemesterFromDate(eventDate: String, eventId: String? = null): Int {
         try {
-            Log.d(TAG, "Parsing date: '$eventDate'")
-            val date = dateFormat.parse(eventDate)
-            if (date != null) {
-                val calendar = Calendar.getInstance()
-                calendar.time = date
-                
-                val month = calendar.get(Calendar.MONTH) + 1 // Calendar.MONTH is 0-based
-                val day = calendar.get(Calendar.DAY_OF_MONTH)
-                
-                Log.d(TAG, "Parsed date: month=$month, day=$day")
-                
+            var month = -1
+            var day = -1
+
+            val trimmed = eventDate.trim()
+            if (trimmed.isNotEmpty()) {
+                val dateFormats = arrayOf(
+                    "dd MMM yyyy", "d MMM yyyy",
+                    "dd MMMM yyyy", "d MMMM yyyy",
+                    "dd MMM", "d MMM",
+                    "yyyy-MM-dd", "yyyy/MM/dd",
+                    "dd-MM-yyyy", "dd/MM/yyyy"
+                )
+
+                for (fmt in dateFormats) {
+                    try {
+                        val sdf = SimpleDateFormat(fmt, Locale.ENGLISH)
+                        sdf.isLenient = true
+                        val parsed = sdf.parse(trimmed)
+                        if (parsed != null) {
+                            val cal = Calendar.getInstance()
+                            cal.time = parsed
+                            month = cal.get(Calendar.MONTH) + 1
+                            day = cal.get(Calendar.DAY_OF_MONTH)
+                            break
+                        }
+                    } catch (_: Exception) {}
+                }
+            }
+
+            // Fallback: extract date from eventId (e.g. "15_Aug_2025_EventName" or "15_Aug_EventName")
+            if ((month == -1 || day == -1) && !eventId.isNullOrBlank()) {
+                val parts = eventId.split("_")
+                if (parts.size >= 2) {
+                    val candidateStr = "${parts[0]} ${parts[1]} ${parts.getOrNull(2) ?: ""}".trim()
+                    val fallbackFormats = arrayOf("d MMM yyyy", "dd MMM yyyy", "d MMM", "dd MMM")
+                    for (fmt in fallbackFormats) {
+                        try {
+                            val sdf = SimpleDateFormat(fmt, Locale.ENGLISH)
+                            sdf.isLenient = true
+                            val parsed = sdf.parse(candidateStr)
+                            if (parsed != null) {
+                                val cal = Calendar.getInstance()
+                                cal.time = parsed
+                                month = cal.get(Calendar.MONTH) + 1
+                                day = cal.get(Calendar.DAY_OF_MONTH)
+                                break
+                            }
+                        } catch (_: Exception) {}
+                    }
+                }
+            }
+
+            if (month != -1 && day != -1) {
                 // Semester 1: July 1 - December 10
-                if (month in 7..11) {
-                    Log.d(TAG, "Date belongs to Semester 1")
-                    return 1
-                } else if (month == 12 && day <= 10) {
-                    Log.d(TAG, "Date belongs to Semester 1")
-                    return 1
-                }
+                if (month in 7..11) return 1
+                if (month == 12 && day <= 10) return 1
                 // Semester 2: December 11 - June 30
-                else if (month == 12 && day >= 11) {
-                    Log.d(TAG, "Date belongs to Semester 2")
-                    return 2
-                } else if (month in 1..6) {
-                    Log.d(TAG, "Date belongs to Semester 2")
-                    return 2
-                } else {
-                    Log.d(TAG, "Date does not belong to any semester")
-                }
-            } else {
-                Log.w(TAG, "Failed to parse date: '$eventDate'")
+                if (month == 12 && day >= 11) return 2
+                if (month in 1..6) return 2
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error parsing date: '$eventDate'", e)
+            Log.e(TAG, "Error parsing semester date: '$eventDate'", e)
         }
-        
-        return 0 // Not in any semester
+        return 0
     }
     
     /**

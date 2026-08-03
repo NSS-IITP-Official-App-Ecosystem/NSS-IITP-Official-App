@@ -128,7 +128,7 @@ class SplashActivity : AppCompatActivity() {
 				videoEnded = true
 				tryNavigate()
 			}
-		}, 3000)
+		}, 12000)
 	}
 
 	private fun checkForUpdates() {

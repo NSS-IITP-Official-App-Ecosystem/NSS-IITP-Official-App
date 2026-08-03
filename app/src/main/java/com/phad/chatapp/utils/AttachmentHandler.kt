@@ -87,7 +87,7 @@ class AttachmentHandler(private val activity: AppCompatActivity) {
     /**
      * Launch camera to take a photo
      */
-    fun takePhoto() {
+    private fun launchCameraIntent() {
         try {
             // Create the photo file
             photoFile = FileStorageUtils.createImageFile(activity)
@@ -108,6 +108,30 @@ class AttachmentHandler(private val activity: AppCompatActivity) {
         } catch (e: Exception) {
             Log.e(TAG, "Error taking photo", e)
             Toast.makeText(activity, "Error launching camera", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Launch camera to take a photo
+     */
+    fun takePhoto() {
+        val prefs = activity.getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
+        val hasSeenIntro = prefs.getBoolean("has_seen_camera_intro", false)
+
+        if (hasSeenIntro) {
+            launchCameraIntent()
+        } else {
+            // Mark as seen immediately so it never reappears
+            prefs.edit().putBoolean("has_seen_camera_intro", true).apply()
+
+            androidx.appcompat.app.AlertDialog.Builder(activity)
+                .setTitle("Camera Notice")
+                .setMessage("This will open your device's camera app to capture a photo.")
+                .setPositiveButton("Open Camera") { _, _ ->
+                    launchCameraIntent()
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
         }
     }
     
@@ -160,15 +184,8 @@ class AttachmentHandler(private val activity: AppCompatActivity) {
      * Initialize the Drive service and folders
      */
     fun initDriveService() {
-        CoroutineScope(Dispatchers.Main).launch {
-            try {
-                val driveHelper = DriveServiceHelper.getInstance(activity)
-                driveHelper.initFolders()
-                Log.d(TAG, "Drive service initialized")
-            } catch (e: Exception) {
-                Log.e(TAG, "Error initializing Drive service", e)
-                Toast.makeText(activity, "Error connecting to Drive: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
+        // No-op: Drive folder initialization is obsolete since uploads use Cloudinary
+        // and downloads use the authenticated server endpoint.
+        Log.d(TAG, "Drive service initialization skipped (no-op)")
     }
 } 

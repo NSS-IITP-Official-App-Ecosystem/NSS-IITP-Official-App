@@ -103,11 +103,6 @@ class LoginActivity : AppCompatActivity() {
     private lateinit var progressBar: ProgressBar
     private lateinit var textViewStatus: TextView
     
-    // Passkeys for user types
-    private val STUDENT_PASSKEY = "9410408989"
-    private val ADMIN1_PASSKEY = "9319308989"
-    private val ADMIN2_PASSKEY = "9897209798"
-    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityLoginBinding.inflate(layoutInflater)

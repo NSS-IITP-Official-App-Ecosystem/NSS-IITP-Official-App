@@ -42,6 +42,8 @@ android {
         buildConfigField("String", "CLOUDINARY_CLOUD_NAME", "\"${localProperties.getProperty("cloudinary.cloud_name") ?: ""}\"")
         buildConfigField("String", "CLOUDINARY_API_KEY", "\"${localProperties.getProperty("cloudinary.api_key") ?: ""}\"")
         buildConfigField("String", "CLOUDINARY_API_SECRET", "\"${localProperties.getProperty("cloudinary.api_secret") ?: ""}\"")
+        buildConfigField("String", "GOOGLE_DRIVE_API_KEY", "\"${localProperties.getProperty("google.drive.api_key") ?: ""}\"")
+        buildConfigField("String", "SECONDARY_FIREBASE_API_KEY", "\"${localProperties.getProperty("secondary.firebase.api_key") ?: ""}\"")
     }
 
     signingConfigs {

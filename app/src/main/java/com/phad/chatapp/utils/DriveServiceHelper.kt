@@ -72,57 +72,14 @@ class DriveServiceHelper(private val context: Context) {
     }
     
     /**
-     * Initialize media folders
+     * Initialize media folders (Obsolete stub)
      */
     suspend fun initFolders() = withContext(Dispatchers.IO) {
-        try {
-            // Check if media folders exist, create them if they don't
-            IMAGES_FOLDER_ID = getOrCreateFolder("images")
-            DOCUMENTS_FOLDER_ID = getOrCreateFolder("documents")
-            
-            Log.d(TAG, "Folders initialized - Images: $IMAGES_FOLDER_ID, Documents: $DOCUMENTS_FOLDER_ID")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error initializing folders", e)
-        }
+        Log.d(TAG, "initFolders called (no-op stub)")
     }
     
     /**
-     * Get a folder ID by name, or create it if it doesn't exist
-     */
-    private suspend fun getOrCreateFolder(folderName: String): String = withContext(Dispatchers.IO) {
-        // Search for the folder first
-        val result = driveService.files().list()
-            .setQ("name = '$folderName' and '$ROOT_FOLDER_ID' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false")
-            .setSpaces("drive")
-            .setFields("files(id, name)")
-            .execute()
-        
-        // If folder exists, return its ID
-        if (result.files.isNotEmpty()) {
-            return@withContext result.files[0].id
-        }
-        
-        // If folder doesn't exist, create it
-        val folderMetadata = DriveFile()
-            .setName(folderName)
-            .setMimeType("application/vnd.google-apps.folder")
-            .setParents(listOf(ROOT_FOLDER_ID))
-        
-        val folder = driveService.files().create(folderMetadata)
-            .setFields("id")
-            .execute()
-        
-        return@withContext folder.id
-    }
-    
-    /**
-     * Upload a file to Google Drive
-     * 
-     * @param fileUri The URI of the file to upload
-     * @param fileName The name to give the file in Drive
-     * @param mimeType The MIME type of the file
-     * @param fileType The type of file (IMAGE, DOCUMENT)
-     * @return The share URL for the uploaded file
+     * Upload a file to Google Drive (Obsolete stub - uploads use Cloudinary)
      */
     suspend fun uploadFile(
         fileUri: Uri,
@@ -130,139 +87,45 @@ class DriveServiceHelper(private val context: Context) {
         mimeType: String,
         fileType: FileTypeEnum
     ): Result<String> = withContext(Dispatchers.IO) {
-        try {
-            // Get the parent folder ID based on file type
-            val parentFolderId = when (fileType) {
-                FileTypeEnum.IMAGE -> IMAGES_FOLDER_ID
-                FileTypeEnum.DOCUMENT -> DOCUMENTS_FOLDER_ID
-            } ?: run {
-                // Initialize folders if they're not set
-                initFolders()
-                when (fileType) {
-                    FileTypeEnum.IMAGE -> IMAGES_FOLDER_ID
-                    FileTypeEnum.DOCUMENT -> DOCUMENTS_FOLDER_ID
-                }
-            }
-            
-            if (parentFolderId == null) {
-                return@withContext Result.failure(IOException("Failed to create or access parent folder"))
-            }
-            
-            // Create a temporary file
-            val inputStream = context.contentResolver.openInputStream(fileUri)
-                ?: return@withContext Result.failure(IOException("Failed to open input stream"))
-            
-            val tempFile = java.io.File.createTempFile("upload", null)
-            FileOutputStream(tempFile).use { output ->
-                inputStream.use { input ->
-                    input.copyTo(output)
-                }
-            }
-            
-            // Prepare file metadata
-            val fileMetadata = DriveFile()
-                .setName(fileName)
-                .setParents(listOf(parentFolderId))
-            
-            // Create file content from the temp file
-            val fileContent = FileContent(mimeType, tempFile)
-            
-            // Upload the file
-            val uploadedFile = driveService.files().create(fileMetadata, fileContent)
-                .setFields("id, webViewLink")
-                .execute()
-            
-            // Make the file publicly accessible
-            val permission = com.google.api.services.drive.model.Permission()
-                .setType("anyone")
-                .setRole("reader")
-            
-            driveService.permissions().create(uploadedFile.id, permission)
-                .setFields("id")
-                .execute()
-            
-            // Clean up the temp file
-            tempFile.delete()
-            
-            // Return the webViewLink that can be used to access the file
-            val webViewLink = uploadedFile.webViewLink ?: 
-                "https://drive.google.com/file/d/${uploadedFile.id}/view"
-            
-            Log.d(TAG, "File uploaded successfully: $webViewLink")
-            Result.success(webViewLink)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error uploading file", e)
-            Result.failure(e)
-        }
+        Log.w(TAG, "Legacy Google Drive upload requested (no-op stub)")
+        Result.failure(UnsupportedOperationException("Google Drive direct uploads are disabled"))
     }
     
     /**
-     * Download a file from Google Drive
-     *
-     * @param fileId The ID of the file to download
-     * @return The file content as a byte array
+     * Download a file from Google Drive (Obsolete stub)
      */
     suspend fun downloadFile(fileId: String): Result<ByteArray> = withContext(Dispatchers.IO) {
-        try {
-            val outputStream = ByteArrayOutputStream()
-            driveService.files().get(fileId)
-                .executeMediaAndDownloadTo(outputStream)
-            
-            Result.success(outputStream.toByteArray())
-        } catch (e: Exception) {
-            Log.e(TAG, "Error downloading file", e)
-            Result.failure(e)
-        }
+        Log.w(TAG, "Legacy Google Drive download requested (no-op stub)")
+        Result.failure(UnsupportedOperationException("Google Drive direct downloads are disabled"))
     }
     
     /**
      * Get the file ID from a Drive URL
-     * 
-     * @param driveUrl The Google Drive URL
-     * @return The file ID
      */
     fun getFileIdFromUrl(driveUrl: String): String? {
-        // Pattern: https://drive.google.com/file/d/FILE_ID/view
         val regex = "/file/d/([a-zA-Z0-9_-]+)".toRegex()
         val matchResult = regex.find(driveUrl)
         return matchResult?.groupValues?.get(1)
     }
     
     /**
-     * Delete a file from Google Drive
-     *
-     * @param fileId The ID of the file to delete
+     * Delete a file from Google Drive (Obsolete stub)
      */
     suspend fun deleteFile(fileId: String): Result<Unit> = withContext(Dispatchers.IO) {
-        try {
-            driveService.files().delete(fileId).execute()
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error deleting file", e)
-            Result.failure(e)
-        }
+        Log.w(TAG, "Legacy Google Drive delete requested (no-op stub)")
+        Result.failure(UnsupportedOperationException("Google Drive direct deletions are disabled"))
     }
 
     /**
-     * Upload a file to Google Drive with callback interface for use in non-coroutine contexts
-     * 
-     * @param fileUri The URI of the file to upload
-     * @param fileName The name to give the file in Drive
-     * @param mimeType The MIME type of the file
-     * @param callback A callback to report success/failure and file data
+     * Upload a file to Google Drive with callback interface (Obsolete stub)
      */
     fun uploadFileToDrive(
-        fileUri: Uri, 
-        fileName: String, 
+        fileUri: Uri,
+        fileName: String,
         mimeType: String,
-        callback: (Boolean, String?, String?) -> Unit
+        fileType: FileTypeEnum,
+        callback: (Result<String>) -> Unit
     ) {
-        // Determine file type based on MIME type
-        val fileType = if (mimeType.startsWith("image/")) {
-            FileTypeEnum.IMAGE
-        } else {
-            FileTypeEnum.DOCUMENT
-        }
         
         // Launch a coroutine to perform the upload
         CoroutineScope(Dispatchers.IO).launch {
@@ -276,19 +139,17 @@ class DriveServiceHelper(private val context: Context) {
                 
                 withContext(Dispatchers.Main) {
                     if (result.isSuccess) {
-                        val webViewLink = result.getOrNull()
-                        // Get file ID from link
-                        val fileId = getFileIdFromUrl(webViewLink ?: "")
-                        callback(true, fileId, webViewLink)
+                        val webViewLink = result.getOrNull() ?: ""
+                        callback(Result.success(webViewLink))
                     } else {
                         Log.e(TAG, "Failed to upload file: ${result.exceptionOrNull()?.message}")
-                        callback(false, null, null)
+                        callback(Result.failure(result.exceptionOrNull() ?: Exception("Upload failed")))
                     }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error in uploadFileToDrive", e)
                 withContext(Dispatchers.Main) {
-                    callback(false, null, null)
+                    callback(Result.failure(e))
                 }
             }
         }
