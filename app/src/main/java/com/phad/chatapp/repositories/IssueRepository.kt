@@ -144,6 +144,7 @@ class IssueRepository(
 
     fun getAdminOpenIssues(adminUserType: String, adminWings: List<String>, adminRollNumber: String): Flow<List<Issue>> = callbackFlow {
         val targetAddresses = mutableListOf<String>()
+        android.util.Log.d("AdminIssueDebug", "getAdminOpenIssues started for adminRollNumber: $adminRollNumber, userType: $adminUserType")
         
         try {
             // First fetch the help contacts to see what this user's EXACT roles are
@@ -160,21 +161,32 @@ class IssueRepository(
                     val contact = contactObj as? Map<*, *> ?: continue
                     val rollNum = contact["rollNumber"] as? String
                     
+                    android.util.Log.d("AdminIssueDebug", "Checking contact in doc ${doc.id}: rollNum=$rollNum vs admin=$adminRollNumber")
                     if (rollNum.equals(adminRollNumber, ignoreCase = true)) {
-                        val role = contact["role"] as? String ?: ""
+                        android.util.Log.d("AdminIssueDebug", "Match found in doc ${doc.id}!")
+                        
+                        // The student app populates the "Addressed To" dropdown using the 'title' field
+                        // of the help_contacts document. Therefore, to see issues addressed to their group, 
+                        // the admin needs to filter by that exact title.
+                        val groupTitle = groupData["title"] as? String
+                        if (!groupTitle.isNullOrEmpty()) {
+                            targetAddresses.add(groupTitle)
+                        }
+                        
+                        // Fallbacks for legacy/hardcoded addressedTo strings just in case
                         when (doc.id) {
                             "deputy_gensecs" -> {
                                 targetAddresses.add("General Secretary")
                                 targetAddresses.add("NSS Admin")
                             }
                             "technical_team" -> targetAddresses.add("Technical Team")
-                            "wing_subcoords" -> targetAddresses.add("Wing SubCoord - $role")
-                            "wing_secretaries" -> targetAddresses.add("Wing Secretary - $role")
                         }
                     }
                 }
             }
+            android.util.Log.d("AdminIssueDebug", "Finished help_contacts loop. targetAddresses: $targetAddresses")
         } catch (e: Exception) {
+            android.util.Log.e("AdminIssueDebug", "Error fetching help contacts", e)
             // If fetching help contacts fails, targetAddresses might be empty, which is safer (fail closed).
         }
 
@@ -186,10 +198,13 @@ class IssueRepository(
         }
 
         if (targetAddresses.isEmpty()) {
+            android.util.Log.d("AdminIssueDebug", "targetAddresses is empty! Returning empty list.")
             trySend(emptyList()).isSuccess
             awaitClose { }
             return@callbackFlow
         }
+        
+        android.util.Log.d("AdminIssueDebug", "Setting up snapshot listener for issues with status OPEN")
 
         // We only fetch OPEN issues from DB to avoid downloading thousands of closed issues.
         // We filter by targetAddresses locally, preventing ANY composite index requirements!
@@ -202,11 +217,16 @@ class IssueRepository(
                 }
 
                 if (snapshot != null) {
+                    android.util.Log.d("AdminIssueDebug", "Received ${snapshot.documents.size} OPEN issues from Firestore")
                     val issues = snapshot.documents.mapNotNull { doc ->
                         doc.toObject(Issue::class.java)
-                    }.filter { it.addressedTo in targetAddresses }
-                     .sortedByDescending { it.timestamp }
+                    }.filter { 
+                        val matches = it.addressedTo in targetAddresses
+                        if (!matches) android.util.Log.d("AdminIssueDebug", "Filtered out issue ${it.id} (addressedTo: '${it.addressedTo}' not in $targetAddresses)")
+                        matches
+                    }.sortedByDescending { it.timestamp }
                      
+                    android.util.Log.d("AdminIssueDebug", "Sending ${issues.size} issues to UI")
                     trySend(issues).isSuccess
                 }
             }
