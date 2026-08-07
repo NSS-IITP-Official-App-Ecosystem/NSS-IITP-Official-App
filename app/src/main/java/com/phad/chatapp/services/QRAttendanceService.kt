@@ -217,7 +217,7 @@ class QRAttendanceService {
     /**
      * Register a new attendance session for security validation
      */
-    fun registerSession(sessionId: String, adminId: String, eventId: String) {
+    suspend fun registerSession(sessionId: String, adminId: String, eventId: String) {
         securityValidator.registerSession(sessionId, adminId, eventId)
     }
 

@@ -2,10 +2,10 @@ package com.phad.chatapp.utils
 
 import android.location.Location
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import com.phad.chatapp.models.QRAttendanceData
 import com.phad.chatapp.models.AttendeeRecord
 import com.phad.chatapp.repositories.AttendanceQRRepository
-import kotlinx.coroutines.runBlocking
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 
@@ -44,12 +44,13 @@ class QRSecurityValidator {
     private val validSessions = ConcurrentHashMap<String, SessionValidationInfo>()
 
     // Repository for Firestore access
-    private val repository = AttendanceQRRepository()
+    @VisibleForTesting
+    var repository = AttendanceQRRepository()
     
     /**
      * Comprehensive QR code validation
      */
-    fun validateQRCode(
+    suspend fun validateQRCode(
         qrData: QRAttendanceData,
         studentId: String,
         sessionId: String? = null
@@ -214,7 +215,7 @@ class QRSecurityValidator {
     /**
      * Validate session consistency
      */
-    private fun validateSession(qrData: QRAttendanceData, expectedSessionId: String): ValidationResult {
+    private suspend fun validateSession(qrData: QRAttendanceData, expectedSessionId: String): ValidationResult {
         if (qrData.sessionId != expectedSessionId) {
             return ValidationResult(
                 false,
@@ -232,9 +233,8 @@ class QRSecurityValidator {
             Log.d(TAG, "Expected session not found in cache, checking consolidated event: $expectedSessionId")
             try {
                 // In consolidated schema, session ID is the event ID
-                val firestoreEvent = runBlocking {
-                    repository.getAttendanceEvent(expectedSessionId).getOrNull()
-                }
+                val firestoreEvent = repository.getAttendanceEvent(expectedSessionId).getOrNull()
+                
 
                 // Check if event is live by examining raw Firestore data
                 // This handles the case where is_live field is not serialized due to @get:Exclude
@@ -293,7 +293,7 @@ class QRSecurityValidator {
         if (!sessionInfo.isActive) {
             // DEBUG: Deep dive before returning SESSION_ENDED
             try {
-                val firestoreEvent = runBlocking { repository.getAttendanceEventForDuplicateCheck(expectedSessionId).getOrNull() }
+                val firestoreEvent = repository.getAttendanceEventForDuplicateCheck(expectedSessionId).getOrNull() 
                 Log.w(TAG, "SESSION_ENDED DEBUG (validateSession): expectedSessionId='$expectedSessionId'")
                 Log.w(TAG, "Source='$sessionInfoSource', cacheKeys='${validSessions.keys.joinToString()}'")
                 Log.w(TAG, "sessionInfo: adminId='${sessionInfo.adminId}', eventId='${sessionInfo.eventId}', startTime=${sessionInfo.startTime}, endTime=${sessionInfo.endTime}, isActive=${sessionInfo.isActive}")
@@ -318,7 +318,7 @@ class QRSecurityValidator {
     /**
      * Validate that the session in QR data is active (without expected session check)
      */
-    private fun validateQRSession(qrData: QRAttendanceData): ValidationResult {
+    private suspend fun validateQRSession(qrData: QRAttendanceData): ValidationResult {
         val sessionId = qrData.sessionId
 
         Log.d(TAG, "=== QR SESSION VALIDATION START ===")
@@ -339,10 +339,9 @@ class QRSecurityValidator {
             if (!sessionInfo.isActive) {
                 Log.w(TAG, "⚠️ Cached session shows isActive=false - verifying against Firestore before rejecting")
                 try {
-                    val firestoreEvent = runBlocking {
-                        repository.getAttendanceEventForDuplicateCheck(sessionId).getOrNull()
+                    val firestoreEvent = repository.getAttendanceEventForDuplicateCheck(sessionId).getOrNull()
                             ?: repository.getAttendanceEvent(sessionId).getOrNull()
-                    }
+                    
                     
                     if (firestoreEvent != null) {
                         val isFirestoreLive = firestoreEvent.isLive && firestoreEvent.closedAt == null
@@ -392,7 +391,7 @@ class QRSecurityValidator {
                     
                 // In consolidated schema, session ID is the event ID
                     Log.d(TAG, "Attempting to fetch event from Firestore with ID: '$sessionId'")
-                val firestoreEvent = runBlocking {
+                val firestoreEvent = try {
                         // Try to get event - if cache fails, force server read
                         val result = repository.getAttendanceEvent(sessionId)
                         Log.d(TAG, "Repository result: isSuccess=${result.isSuccess}")
@@ -425,6 +424,9 @@ class QRSecurityValidator {
                                 event
                             }
                         }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error fetching from Firestore", e)
+                        null
                     }
 
                     Log.d(TAG, "Firestore event fetch result: ${firestoreEvent != null}")
@@ -552,7 +554,7 @@ class QRSecurityValidator {
             Log.w(TAG, "❌ Session is not active")
             // DEBUG: Deep dive before returning SESSION_ENDED
             try {
-                val firestoreEvent = runBlocking { repository.getAttendanceEventForDuplicateCheck(sessionId).getOrNull() }
+                val firestoreEvent = repository.getAttendanceEventForDuplicateCheck(sessionId).getOrNull() 
                 Log.w(TAG, "SESSION_ENDED DEBUG (validateQRSession): sessionId='$sessionId'")
                 Log.w(TAG, "Source='$sessionInfoSource', cacheKeys='${validSessions.keys.joinToString()}'")
                 Log.w(TAG, "sessionInfo: adminId='${sessionInfo.adminId}', eventId='${sessionInfo.eventId}', startTime=${sessionInfo.startTime}, endTime=${sessionInfo.endTime}, isActive=${sessionInfo.isActive}")
@@ -586,11 +588,8 @@ class QRSecurityValidator {
         // Use server read to ensure we get the latest data
         var eventCreatorId: String? = null
         try {
-            val firestoreEvent = runBlocking {
-                // Force server read to get latest event data
-                repository.getAttendanceEventForDuplicateCheck(sessionId).getOrNull()
+            val firestoreEvent = repository.getAttendanceEventForDuplicateCheck(sessionId).getOrNull()
                     ?: repository.getAttendanceEvent(sessionId).getOrNull()
-            }
             eventCreatorId = firestoreEvent?.createdBy
             Log.d(TAG, "Event creator from Firestore: '$eventCreatorId'")
         } catch (e: Exception) {
@@ -644,7 +643,7 @@ class QRSecurityValidator {
     /**
      * Register an active session with enhanced logging and validation
      */
-    fun registerSession(sessionId: String, adminId: String, eventId: String) {
+    suspend fun registerSession(sessionId: String, adminId: String, eventId: String) {
         Log.d(TAG, "=== SESSION REGISTRATION START ===")
         Log.d(TAG, "Registering session: $sessionId")
         Log.d(TAG, "Session details - AdminId: '$adminId', EventId: '$eventId'")
@@ -703,14 +702,13 @@ class QRSecurityValidator {
     /**
      * Store session in Firestore for persistence
      */
-    private fun storeSessionInFirestore(sessionInfo: SessionValidationInfo) {
+    private suspend fun storeSessionInFirestore(sessionInfo: SessionValidationInfo) {
         // Store session in Firestore asynchronously
         try {
             Log.d(TAG, "Storing session in Firestore: ${sessionInfo.sessionId}")
             // Use runBlocking to handle the suspend function
-            runBlocking {
-                repository.storeSession(sessionInfo)
-            }
+            repository.storeSession(sessionInfo)
+            
             Log.d(TAG, "Session stored in Firestore successfully")
         } catch (e: Exception) {
             Log.e(TAG, "Error storing session in Firestore", e)
@@ -744,7 +742,7 @@ class QRSecurityValidator {
      * Force refresh session cache from Firestore
      * This is useful when there might be timing issues between event creation and QR scanning
      */
-    fun forceRefreshSessionCache(sessionId: String): Boolean {
+    suspend fun forceRefreshSessionCache(sessionId: String): Boolean {
         Log.d(TAG, "=== FORCE REFRESH SESSION CACHE START ===")
         Log.d(TAG, "Force refreshing session cache for: $sessionId")
         
@@ -754,9 +752,8 @@ class QRSecurityValidator {
             Log.d(TAG, "Removed session from cache: $sessionId")
             
             // Try to fetch from Firestore
-            val firestoreEvent = runBlocking {
-                repository.getAttendanceEvent(sessionId).getOrNull()
-            }
+            val firestoreEvent = repository.getAttendanceEvent(sessionId).getOrNull()
+            
             
             if (firestoreEvent != null) {
                 val isEventLive = firestoreEvent.closedAt == null
@@ -815,9 +812,8 @@ class QRSecurityValidator {
     suspend fun debugListAllEvents() {
         Log.d(TAG, "=== DEBUG: LISTING ALL EVENTS IN DATABASE ===")
         try {
-            val allEvents = runBlocking {
-                repository.getAllEvents(forceRefresh = true).getOrNull() ?: emptyList()
-            }
+            val allEvents = repository.getAllEvents(forceRefresh = true).getOrNull() ?: emptyList()
+            
             
             Log.d(TAG, "Total events found: ${allEvents.size}")
             allEvents.forEachIndexed { index, event ->

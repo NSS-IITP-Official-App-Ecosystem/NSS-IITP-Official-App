@@ -119,7 +119,7 @@ class QRAttendanceUIEnhancementTest {
         )
 
         // Test hours field
-        assertEquals("Hours should be set correctly", 5.0, eventWithHours.hours)
+        assertEquals("Hours should be set correctly", 5.0, eventWithHours.hours, 0.001)
         assertTrue("Hours should be non-negative", eventWithHours.hours >= 0)
 
         // Test default hours value
@@ -135,7 +135,7 @@ class QRAttendanceUIEnhancementTest {
             closedAt = null
         )
 
-        assertEquals("Default hours should be 0", 0.0, eventWithDefaultHours.hours)
+        assertEquals("Default hours should be 0", 0.0, eventWithDefaultHours.hours, 0.001)
     }
 
     @Test

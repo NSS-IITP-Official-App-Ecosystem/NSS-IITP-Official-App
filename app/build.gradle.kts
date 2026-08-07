@@ -74,6 +74,12 @@ android {
         abortOnError = false
     }
     
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
+    }
+    
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -252,6 +258,8 @@ dependencies {
 
     // Testing dependencies
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.11.1")
+    testImplementation("io.mockk:mockk:1.13.8")
     testImplementation("org.mockito:mockito-core:5.0.0")
     testImplementation("org.mockito:mockito-inline:5.0.0")
     testImplementation("org.powermock:powermock-api-mockito2:2.0.9")

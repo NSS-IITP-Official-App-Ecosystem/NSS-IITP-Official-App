@@ -20,11 +20,13 @@ const logger = require("firebase-functions/logger");
 
 // firebase-functions v6: Gen 2 API (functions are deployed as Gen 2 on nssiitp-app)
 const { onRequest } = require('firebase-functions/v2/https');
-const { onDocumentCreated, onDocumentDeleted } = require('firebase-functions/v2/firestore');
+const { onDocumentCreated, onDocumentDeleted, onDocumentUpdated } = require('firebase-functions/v2/firestore');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const REGION = 'asia-south1';
 const admin = require('firebase-admin');
-admin.initializeApp();
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
 const { Timestamp, FieldValue, GeoPoint } = require('firebase-admin/firestore');
 
 // Utilities for HTTPS endpoints
@@ -478,11 +480,18 @@ exports.markAttendance = onRequest({ region: REGION, invoker: 'public' }, async 
           throw Object.assign(new Error('Event not found'), { status: 404 });
         }
       }
-      tx.set(attendanceDocRef, normalizedAttendee);
-      tx.update(eventRef, {
-        attendees: FieldValue.arrayUnion(normalizedAttendee),
-        // NOTE: total_marked is handled exclusively by the onAttendanceCreate trigger to avoid double-counting
-      });
+      
+      const existingAttendance = await tx.get(attendanceDocRef);
+      if (existingAttendance.exists) {
+        console.log(`Attendance doc already exists for ${rollNumber} in ${eventId} — skipping write to prevent double-booking.`);
+        tx.update(eventRef, { attendees: FieldValue.arrayUnion(normalizedAttendee) });
+      } else {
+        tx.set(attendanceDocRef, normalizedAttendee);
+        tx.update(eventRef, {
+          attendees: FieldValue.arrayUnion(normalizedAttendee),
+          // NOTE: total_marked is handled exclusively by the onAttendanceCreate trigger to avoid double-counting
+        });
+      }
     });
 
     await challengeRef.delete();
@@ -600,6 +609,62 @@ exports.onAttendanceCreate = onDocumentCreated(
     }
   });
 
+// Deduct counters and update user stats when an attendance record is deleted
+exports.onAttendanceDelete = onDocumentDeleted(
+  { document: 'NSS_Events_Attendence/{eventId}/attendance/{rollNumber}', region: REGION },
+  async (event) => {
+    const snap = event.data;
+    const context = { params: event.params };
+    const { eventId, rollNumber } = context.params;
+    const db = admin.firestore();
+    const attendee = snap.data() || {};
+    if (attendee.isMigration === true) {
+      console.log(`[onAttendanceDelete] Skipping hour deduction for ${rollNumber} (event ${eventId}) — document is an event recreation migration copy.`);
+      return null;
+    }
+    try {
+      // Decrement total_marked on parent event
+      const eventRef = db.collection('NSS_Events_Attendence').doc(eventId);
+      const eventSnap = await eventRef.get();
+      if (!eventSnap.exists) {
+        // Event might have been deleted, meaning we can't reliably read its hours. 
+        // We still need to decrement the user's hours if possible.
+        console.warn('Event not found for attendance delete (might have been deleted first):', eventId);
+      }
+      
+      const eventData = eventSnap.exists ? eventSnap.data() || {} : {};
+      const hours = Number(eventData.hours) || 0; // If event was deleted, this defaults to 0, which is a flaw, but we can't do much without event data unless we store hours in attendance doc.
+      const eventDate = eventData.eventDate || '';
+
+      if (eventSnap.exists) {
+        await eventRef.update({ total_marked: FieldValue.increment(-1) });
+      }
+
+      // Update user stats atomically
+      const userRef = db.collection('users').doc(rollNumber);
+      const semester = calculateSemester(eventDate, eventId);
+
+      // We only deduct if we know the hours (i.e. event exists). If event was deleted, we assume the hours were 0 or already handled, or it's an edge case.
+      // Ideally, attendance docs should duplicate the `hours` field to handle event deletion robustly.
+      const updates = {
+        eventsAttended: FieldValue.increment(-1),
+        hours: FieldValue.increment(-hours),
+        eventsList: FieldValue.arrayRemove(eventId)
+      };
+      if (semester === 1) updates.sem1Hours = FieldValue.increment(-hours);
+      if (semester === 2) updates.sem2Hours = FieldValue.increment(-hours);
+
+      await userRef.set(updates, { merge: true });
+
+      console.log('Attendance deleted for', rollNumber, 'event', eventId);
+      return null;
+    } catch (e) {
+      console.error('onAttendanceDelete error', e);
+      return null;
+    }
+  }
+);
+
 // Maintain meta.statistics when an event is created or deleted
 exports.onEventWrite = onDocumentCreated(
   { document: 'NSS_Events_Attendence/{eventId}', region: REGION },
@@ -635,6 +700,78 @@ exports.onEventDelete = onDocumentDeleted(
   }
 );
 
+exports.onEventUpdate = onDocumentUpdated(
+  { document: 'NSS_Events_Attendence/{eventId}', region: REGION },
+  async (event) => {
+    const db = admin.firestore();
+    const eventId = event.params.eventId;
+    
+    const beforeData = event.data.before.data() || {};
+    const afterData = event.data.after.data() || {};
+    
+    const beforeHours = Number(beforeData.hours) || 0;
+    const afterHours = Number(afterData.hours) || 0;
+    
+    const hourDiff = afterHours - beforeHours;
+    
+    if (hourDiff === 0) {
+      return null; // No change in hours
+    }
+
+    const eventDate = afterData.eventDate || beforeData.eventDate || '';
+    const semester = calculateSemester(eventDate, eventId);
+
+    console.log(`Event ${eventId} hours changed from ${beforeHours} to ${afterHours}. Applying diff ${hourDiff} to attendees.`);
+
+    try {
+      const attendanceRef = db.collection('NSS_Events_Attendence').doc(eventId).collection('attendance');
+      const attendeesSnap = await attendanceRef.get();
+      
+      if (attendeesSnap.empty) {
+        return null;
+      }
+      
+      const batches = [];
+      let currentBatch = db.batch();
+      let opCount = 0;
+
+      attendeesSnap.forEach((doc) => {
+        const rollNumber = doc.id;
+        // Exclude migrations if we marked them as such in the attendance doc, 
+        // though typically updates to a normal event affect all attendees.
+        if (doc.data().isMigration) return; 
+
+        const userRef = db.collection('users').doc(rollNumber);
+        const updates = {
+          hours: FieldValue.increment(hourDiff)
+        };
+        if (semester === 1) updates.sem1Hours = FieldValue.increment(hourDiff);
+        if (semester === 2) updates.sem2Hours = FieldValue.increment(hourDiff);
+
+        currentBatch.set(userRef, updates, { merge: true });
+        opCount++;
+        
+        if (opCount === 500) {
+          batches.push(currentBatch);
+          currentBatch = db.batch();
+          opCount = 0;
+        }
+      });
+      
+      if (opCount > 0) {
+        batches.push(currentBatch);
+      }
+      
+      await Promise.all(batches.map(batch => batch.commit()));
+      console.log(`Successfully updated hours for ${attendeesSnap.size} attendees of event ${eventId}.`);
+      return null;
+    } catch (e) {
+      console.error('onEventUpdate error', e);
+      return null;
+    }
+  }
+);
+
 
 /**
  * Apply negative hours to volunteers who missed a mandatory event.
@@ -652,18 +789,25 @@ exports.applyAbsentPenalty = onRequest({ region: REGION, invoker: 'public' }, as
     if (!eventId) throw Object.assign(new Error('Missing eventId'), { status: 400 });
 
     const eventRef = db.collection('NSS_Events_Attendence').doc(eventId);
-    const eventSnap = await eventRef.get();
+    
+    // Acquire lock transactionally to prevent double-penalty race conditions
+    let eventData = null;
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(eventRef);
+      if (!snap.exists) throw Object.assign(new Error('Event not found'), { status: 404 });
+      eventData = snap.data() || {};
+      
+      if (!eventData.mandatory) {
+        throw Object.assign(new Error('Event is not mandatory. No penalty applied.'), { status: 400 });
+      }
+      if (eventData.absentPenaltyApplied) {
+        throw Object.assign(new Error('Penalty already applied for this event.'), { status: 400 });
+      }
+      
+      tx.update(eventRef, { absentPenaltyApplied: true }); // Lock it
+    });
 
-    if (!eventSnap.exists) throw Object.assign(new Error('Event not found'), { status: 404 });
-
-    const event = eventSnap.data() || {};
-
-    if (!event.mandatory) {
-      return res.json({ ok: false, reason: 'Event is not mandatory. No penalty applied.' });
-    }
-    if (event.absentPenaltyApplied) {
-      return res.json({ ok: false, reason: 'Penalty already applied for this event.' });
-    }
+    const event = eventData;
 
     const negativeHours = Number(event.negativeHours) || 0;
     if (negativeHours <= 0) {
@@ -810,12 +954,9 @@ exports.applyAbsentPenalty = onRequest({ region: REGION, invoker: 'public' }, as
             attendeesChanged = true;
           }
 
-          const eventHours = Number(event.hours) || 0;
-          updates.eventsAttended = admin.firestore.FieldValue.increment(-1);
-          updates.hours = admin.firestore.FieldValue.increment(-eventHours - negativeHours);
-          if (semester === 1) updates.sem1Hours = admin.firestore.FieldValue.increment(-eventHours - negativeHours);
-          if (semester === 2) updates.sem2Hours = admin.firestore.FieldValue.increment(-eventHours - negativeHours);
-          updates.eventsList = admin.firestore.FieldValue.arrayRemove(eventId);
+          // We do NOT deduct the eventHours here. The onAttendanceDelete trigger will handle 
+          // deducting the positive hours, eventsAttended, and removing the eventId from eventsList.
+          // The penalty updates we pushed earlier (just the -negativeHours) are sufficient.
         }
         batch.set(userRef, updates, { merge: true });
         newlyPenalized.push(rollNumber);
@@ -833,16 +974,8 @@ exports.applyAbsentPenalty = onRequest({ region: REGION, invoker: 'public' }, as
             attendeesChanged = true;
           }
 
-          const eventHours = Number(event.hours) || 0;
-          const updates = {
-            eventsAttended: admin.firestore.FieldValue.increment(-1),
-            hours: admin.firestore.FieldValue.increment(-eventHours),
-            eventsList: admin.firestore.FieldValue.arrayRemove(eventId)
-          };
-          if (semester === 1) updates.sem1Hours = admin.firestore.FieldValue.increment(-eventHours);
-          if (semester === 2) updates.sem2Hours = admin.firestore.FieldValue.increment(-eventHours);
-
-          batch.set(userRef, updates, { merge: true });
+          // We do NOT deduct the eventHours here. The onAttendanceDelete trigger will handle 
+          // deducting the positive hours, eventsAttended, and removing the eventId from eventsList.
         }
         
         // Ensure they are marked as exempted
