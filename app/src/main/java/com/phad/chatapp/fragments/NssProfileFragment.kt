@@ -408,7 +408,7 @@ class NssProfileFragment : Fragment() {
                         val isRelevant = isOpenEvent || isDncEvent || userWings.any { it in event.wings }
 
                         // Only penalize for non-visible-only-to-present events if relevant to student
-                        if (isRelevant && !event.visibleOnlyToPresent && event.isMandatory && event.id !in eventsList) {
+                        if (isRelevant && !event.visibleOnlyToPresent && event.isMandatory && event.id !in eventsList && roll !in event.exemptedRollNumbers) {
                             perEvent[event.id] = -event.negativeHours
                         }
                     }
@@ -494,7 +494,7 @@ class NssProfileFragment : Fragment() {
                         val isDncEvent = event.wings.contains("Design and Curation Wing")
                         val isRelevant = isOpenEvent || isDncEvent || userWings.any { it in event.wings }
 
-                        if (isRelevant && !event.visibleOnlyToPresent && event.isMandatory && event.id !in eventsList) {
+                        if (isRelevant && !event.visibleOnlyToPresent && event.isMandatory && event.id !in eventsList && roll !in event.exemptedRollNumbers) {
                             perEvent[event.id] = -event.negativeHours
                         }
                     }

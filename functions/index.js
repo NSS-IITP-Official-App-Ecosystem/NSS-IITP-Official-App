@@ -31,6 +31,7 @@ const { Timestamp, FieldValue, GeoPoint } = require('firebase-admin/firestore');
 const crypto = require('crypto');
 
 // Play Integrity API configuration
+const { GoogleAuth } = require('google-auth-library');
 const PLAY_INTEGRITY_API_URL = 'https://playintegrity.googleapis.com/v1';
 // Replace with your actual package name
 const EXPECTED_PACKAGE_NAME = 'com.phad.chatapp';
@@ -690,7 +691,8 @@ exports.applyAbsentPenalty = onRequest({ region: REGION, invoker: 'public' }, as
     const alreadyPenalized = new Set((event.penalizedRollNumbers || []).map(r => r.toUpperCase()));
     const batch = db.batch();
     let penaltyCount = 0;
-    const newlyPenalized = []; // roll numbers penalized in THIS round
+    let updatedPenalizedRolls = [...(event.penalizedRollNumbers || [])];
+    let penalizedChanged = false;
 
     // Bug fix: all three lists must be present (use && not ||).
     // With ||, a request missing two of the three lists would still pass the guard.
@@ -784,6 +786,21 @@ exports.applyAbsentPenalty = onRequest({ region: REGION, invoker: 'public' }, as
           // Note: total_marked increment is handled by the onAttendanceCreate trigger when attendanceDocRef is set.
           attendeesChanged = true;
         }
+
+        // Refund penalty if they were previously penalized
+        if (alreadyPenalized.has(rollNumber)) {
+          const updates = {
+            hours: admin.firestore.FieldValue.increment(negativeHours),
+          };
+          if (semester === 1) updates.sem1Hours = admin.firestore.FieldValue.increment(negativeHours);
+          if (semester === 2) updates.sem2Hours = admin.firestore.FieldValue.increment(negativeHours);
+          
+          batch.set(userRef, updates, { merge: true });
+          
+          updatedPenalizedRolls = updatedPenalizedRolls.filter(r => r.toUpperCase() !== rollNumber);
+          penalizedChanged = true;
+          console.log(`[AbsentPenalty] Refunded penalty for ${rollNumber} (marked Present).`);
+        }
       } else if (negSet.has(rollNumber)) {
         // Skip if this student was already penalized in a previous round
         if (alreadyPenalized.has(rollNumber)) {
@@ -818,9 +835,18 @@ exports.applyAbsentPenalty = onRequest({ region: REGION, invoker: 'public' }, as
           updates.eventsList = admin.firestore.FieldValue.arrayRemove(eventId);
         }
         batch.set(userRef, updates, { merge: true });
-        newlyPenalized.push(rollNumber);
+        
+        if (!updatedPenalizedRolls.includes(rollNumber)) {
+          updatedPenalizedRolls.push(rollNumber);
+          penalizedChanged = true;
+        }
         penaltyCount++;
       } else if (zeroSet.has(rollNumber)) {
+        let hoursDelta = 0;
+        let eventsDelta = 0;
+        const updates = {};
+        let needsUserUpdate = false;
+
         if (hadAttendance) {
           // Deduct positive hours they received since we are nullifying their attendance
           const attendanceDocRef = eventRef.collection('attendance').doc(rollNumber);
@@ -834,14 +860,28 @@ exports.applyAbsentPenalty = onRequest({ region: REGION, invoker: 'public' }, as
           }
 
           const eventHours = Number(event.hours) || 0;
-          const updates = {
-            eventsAttended: admin.firestore.FieldValue.increment(-1),
-            hours: admin.firestore.FieldValue.increment(-eventHours),
-            eventsList: admin.firestore.FieldValue.arrayRemove(eventId)
-          };
-          if (semester === 1) updates.sem1Hours = admin.firestore.FieldValue.increment(-eventHours);
-          if (semester === 2) updates.sem2Hours = admin.firestore.FieldValue.increment(-eventHours);
+          eventsDelta -= 1;
+          hoursDelta -= eventHours;
+          updates.eventsList = admin.firestore.FieldValue.arrayRemove(eventId);
+          needsUserUpdate = true;
+        }
 
+        // Refund penalty if they were previously penalized
+        if (alreadyPenalized.has(rollNumber)) {
+          hoursDelta += negativeHours;
+          updatedPenalizedRolls = updatedPenalizedRolls.filter(r => r.toUpperCase() !== rollNumber);
+          penalizedChanged = true;
+          console.log(`[AbsentPenalty] Refunded penalty for ${rollNumber} (marked Exempt).`);
+          needsUserUpdate = true;
+        }
+
+        if (needsUserUpdate) {
+          if (eventsDelta !== 0) updates.eventsAttended = admin.firestore.FieldValue.increment(eventsDelta);
+          if (hoursDelta !== 0) {
+            updates.hours = admin.firestore.FieldValue.increment(hoursDelta);
+            if (semester === 1) updates.sem1Hours = admin.firestore.FieldValue.increment(hoursDelta);
+            if (semester === 2) updates.sem2Hours = admin.firestore.FieldValue.increment(hoursDelta);
+          }
           batch.set(userRef, updates, { merge: true });
         }
         
@@ -857,9 +897,9 @@ exports.applyAbsentPenalty = onRequest({ region: REGION, invoker: 'public' }, as
       absentPenaltyApplied: true,
       penaltyEverApplied: true  // persists across reopens; used by client for latecomer refund logic
     };
-    // Accumulate newly penalized roll numbers so future rounds can skip them
-    if (newlyPenalized.length > 0) {
-      eventUpdates.penalizedRollNumbers = admin.firestore.FieldValue.arrayUnion(...newlyPenalized);
+    
+    if (penalizedChanged) {
+      eventUpdates.penalizedRollNumbers = updatedPenalizedRolls;
     }
     if (attendeesChanged) {
       eventUpdates.attendees = updatedAttendees;

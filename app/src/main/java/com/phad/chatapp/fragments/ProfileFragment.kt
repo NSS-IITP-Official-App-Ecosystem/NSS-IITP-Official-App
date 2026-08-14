@@ -194,7 +194,7 @@ class ProfileFragment : Fragment() {
                     
                     // Add negative hours for mandatory events where student is absent
                     events.forEach { event ->
-                        if (event.isMandatory && event.id !in eventsList) {
+                        if (event.isMandatory && event.id !in eventsList && roll !in event.exemptedRollNumbers) {
                             perEvent[event.id] = -event.negativeHours
                         }
                     }
@@ -275,7 +275,7 @@ class ProfileFragment : Fragment() {
                     
                     // Add negative hours for mandatory events where student is absent
                     events.forEach { event ->
-                        if (event.isMandatory && event.id !in eventsList) {
+                        if (event.isMandatory && event.id !in eventsList && roll !in event.exemptedRollNumbers) {
                             perEvent[event.id] = -event.negativeHours
                         }
                     }
