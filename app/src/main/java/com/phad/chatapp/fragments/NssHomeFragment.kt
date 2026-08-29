@@ -362,6 +362,10 @@ class NssHomeFragment : Fragment() {
                         val documentNames = doc.get("documentNames") as? List<String>
                         @Suppress("UNCHECKED_CAST")
                         val externalLinks = doc.get("externalLinks") as? List<String>
+                        @Suppress("UNCHECKED_CAST")
+                        val targetWings = doc.get("targetWings") as? List<String>
+
+                        Log.d(TAG, "REEL_DEBUG [doc=${doc.id}] postType=$postType | instagramUrl=$instagramUrl | targetWings=$targetWings | title=$title | content='$content'")
 
                         var update = Update(
                             id = id,
@@ -386,7 +390,8 @@ class NssHomeFragment : Fragment() {
                             imageUrls = imageUrls,
                             documentUrls = documentUrls,
                             documentNames = documentNames,
-                            externalLinks = externalLinks
+                            externalLinks = externalLinks,
+                            targetWings = targetWings
                         )
                         
                         update
@@ -395,16 +400,28 @@ class NssHomeFragment : Fragment() {
                         null
                     }
                 }.filter { update ->
-                    // Filter out truly invalid updates (e.g. no title AND no content AND no media)
-                    // But we allow empty titles now, so let's just check if it's not effectively empty
+                    val userType = sessionManager.fetchUserType()
+                    val isAdmin = userType.equals("Admin", ignoreCase = true)
+                    val userWings = sessionManager.getProfileFromSession().wings
+                    
+                    val isWingMatch = isAdmin || 
+                        update.targetWings.isNullOrEmpty() || 
+                        update.targetWings!!.contains("All") ||
+                        update.targetWings!!.any { it in userWings }
+
                     val hasContent = !update.content.isNullOrEmpty() || 
                                      !update.title.isNullOrEmpty() || 
                                      !update.mediaUrl.isNullOrEmpty() || 
                                      !update.instagramUrl.isNullOrEmpty()
-                    hasContent
+
+                    Log.d(TAG, "REEL_FILTER [${update.id}] postType=${update.postType} | isAdmin=$isAdmin | userWings=$userWings | isWingMatch=$isWingMatch | hasContent=$hasContent | PASS=${hasContent && isWingMatch}")
+
+                    hasContent && isWingMatch
                 }
                 
-                Log.d(TAG, "NssHomeFragment - After manual parsing, ${updates.size} valid updates remaining")
+                val reelCount = updates.count { it.postType == "reel" }
+                val textCount = updates.count { it.postType == "text" }
+                Log.d(TAG, "NssHomeFragment - After filtering: ${updates.size} total (reels=$reelCount, text=$textCount)")
                 
                 // Update cache
                 updateCache = CachedUpdate(updates, System.currentTimeMillis())
@@ -498,17 +515,35 @@ class NssHomeFragment : Fragment() {
             dialog.dismiss()
         }
 
-        // Add checkbox for cross-posting to Teaching Wing
-        val crossPostCheckbox = dialog.findViewById<android.widget.CheckBox>(R.id.crossPostCheckbox)
+        // Wing Target Checkboxes
+        val wingAllCheckbox = dialog.findViewById<android.widget.CheckBox>(R.id.wingAllCheckbox)
+        val wingTtwCheckbox = dialog.findViewById<android.widget.CheckBox>(R.id.wingTtwCheckbox)
+        val wingPrernaCheckbox = dialog.findViewById<android.widget.CheckBox>(R.id.wingPrernaCheckbox)
+        val wingEnvironmentCheckbox = dialog.findViewById<android.widget.CheckBox>(R.id.wingEnvironmentCheckbox)
+        val wingCurationCheckbox = dialog.findViewById<android.widget.CheckBox>(R.id.wingCurationCheckbox)
+        val wingRdCheckbox = dialog.findViewById<android.widget.CheckBox>(R.id.wingRdCheckbox)
         
-        // Checkbox visibility
-        // Only show for Teaching Wing admins (Dual role)
-        if (sessionManager.getTeachingWing()) {
-            crossPostCheckbox?.visibility = View.VISIBLE
-        } else {
-            crossPostCheckbox?.visibility = View.GONE
+        wingAllCheckbox?.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) {
+                wingTtwCheckbox?.isChecked = false
+                wingPrernaCheckbox?.isChecked = false
+                wingEnvironmentCheckbox?.isChecked = false
+                wingCurationCheckbox?.isChecked = false
+                wingRdCheckbox?.isChecked = false
+            }
         }
         
+        val individualWingListener = android.widget.CompoundButton.OnCheckedChangeListener { _, isChecked ->
+            if (isChecked) {
+                wingAllCheckbox?.isChecked = false
+            }
+        }
+        
+        wingTtwCheckbox?.setOnCheckedChangeListener(individualWingListener)
+        wingPrernaCheckbox?.setOnCheckedChangeListener(individualWingListener)
+        wingEnvironmentCheckbox?.setOnCheckedChangeListener(individualWingListener)
+        wingCurationCheckbox?.setOnCheckedChangeListener(individualWingListener)
+        wingRdCheckbox?.setOnCheckedChangeListener(individualWingListener)
         // Enable internal scrolling for content input
         updateContentInput?.setOnTouchListener { v, event ->
             v.parent.requestDisallowInterceptTouchEvent(true)
@@ -517,8 +552,6 @@ class NssHomeFragment : Fragment() {
             }
             false
         }
-        
-        crossPostCheckbox?.text = "Also post to Teaching Wing interface"
 
         // Post Type Toggle Group
         val postTypeToggleGroup = dialog.findViewById<com.google.android.material.button.MaterialButtonToggleGroup>(R.id.postTypeToggleGroup)
@@ -633,9 +666,18 @@ class NssHomeFragment : Fragment() {
             dialogTitle?.text = "Update Post"
             updateTitleInput?.setText(existingUpdate.title)
             updateContentInput?.setText(existingUpdate.content)
-            updateLinkInput?.setText(existingUpdate.externalLink)
+            updateLinkInput?.setText(existingUpdate.getAllLinks().joinToString(", "))
             instagramLinkInput?.setText(existingUpdate.instagramUrl)
-            crossPostCheckbox?.isChecked = (existingUpdate.updateType == 3)
+            if (existingUpdate.targetWings.isNullOrEmpty() || existingUpdate.targetWings!!.contains("All")) {
+                wingAllCheckbox?.isChecked = true
+            } else {
+                wingAllCheckbox?.isChecked = false
+                wingTtwCheckbox?.isChecked = existingUpdate.targetWings!!.contains(com.phad.chatapp.utils.Constants.WING_TTW)
+                wingPrernaCheckbox?.isChecked = existingUpdate.targetWings!!.contains(com.phad.chatapp.utils.Constants.WING_PRN)
+                wingEnvironmentCheckbox?.isChecked = existingUpdate.targetWings!!.contains(com.phad.chatapp.utils.Constants.WING_ENV)
+                wingCurationCheckbox?.isChecked = existingUpdate.targetWings!!.contains(com.phad.chatapp.utils.Constants.WING_DCW)
+                wingRdCheckbox?.isChecked = existingUpdate.targetWings!!.contains(com.phad.chatapp.utils.Constants.WING_RDW)
+            }
 
             // Pre-fill images
             existingUpdate.getAllImages().forEach { url ->
@@ -724,6 +766,18 @@ class NssHomeFragment : Fragment() {
             val link = if (currentPostType == "text") updateLinkInput.text.toString().trim() else ""
             val instagramLink = if (currentPostType == "reel") instagramLinkInput.text.toString().trim() else ""
             
+            val targetWings = mutableListOf<String>()
+            if (wingAllCheckbox?.isChecked == true) {
+                targetWings.add("All")
+            } else {
+                if (wingTtwCheckbox?.isChecked == true) targetWings.add(com.phad.chatapp.utils.Constants.WING_TTW)
+                if (wingPrernaCheckbox?.isChecked == true) targetWings.add(com.phad.chatapp.utils.Constants.WING_PRN)
+                if (wingEnvironmentCheckbox?.isChecked == true) targetWings.add(com.phad.chatapp.utils.Constants.WING_ENV)
+                if (wingCurationCheckbox?.isChecked == true) targetWings.add(com.phad.chatapp.utils.Constants.WING_DCW)
+                if (wingRdCheckbox?.isChecked == true) targetWings.add(com.phad.chatapp.utils.Constants.WING_RDW)
+            }
+            if (targetWings.isEmpty()) targetWings.add("All")
+            
             // Launch Upload Job
             uploadJob = lifecycleScope.launch(Dispatchers.IO) {
                 val scope = this
@@ -737,9 +791,12 @@ class NssHomeFragment : Fragment() {
                     val documentNames = mutableListOf<String>()
                     val externalLinksList = mutableListOf<String>()
 
-                    // Add manual link if present
+                    // Process manual links (separated by comma or newline)
                     if (link.isNotEmpty()) {
-                        externalLinksList.add(link)
+                        val splitLinks = link.split(",", "\n")
+                            .map { it.trim() }
+                            .filter { it.isNotEmpty() }
+                        externalLinksList.addAll(splitLinks)
                     }
 
                     // Total items to upload
@@ -848,7 +905,7 @@ class NssHomeFragment : Fragment() {
                                 instagramUrl = if (currentPostType == "reel") instagramLink else null,
                                 postType = currentPostType,
                                 hasExternalLink = externalLinksList.isNotEmpty(),
-                                crossPost = crossPostCheckbox?.isChecked == true,
+                                targetWings = targetWings,
                                 uploadedImageIds = uploadedImageIds,
                                 uploadedDocumentIds = uploadedDocumentIds
                             )
@@ -865,7 +922,7 @@ class NssHomeFragment : Fragment() {
                                 instagramUrl = if (currentPostType == "reel") instagramLink else null,
                                 postType = currentPostType,
                                 hasExternalLink = externalLinksList.isNotEmpty(),
-                                crossPost = crossPostCheckbox?.isChecked == true,
+                                targetWings = targetWings,
                                 uploadedImageIds = uploadedImageIds,
                                 uploadedDocumentIds = uploadedDocumentIds
                             )
@@ -898,10 +955,33 @@ class NssHomeFragment : Fragment() {
                         }
                     }
                 }
-            }
+            } // Close launch
         } // Close setOnClickListener
 
         dialog.show()
+    }
+
+    private fun finishUpdateSuccess(title: String?, content: String, postType: String, authorName: String, targetTopics: List<String>) {
+        createUpdateDialog?.dismiss()
+        updateCache = null
+        loadUpdates()
+
+        db.collection("app_notifications").add(mapOf(
+            "title" to (title?.takeIf { it.isNotBlank() } ?: "New Update"),
+            "body" to (content.takeIf { it.isNotBlank() } ?: "A new post has been published."),
+            "targetTopics" to targetTopics,
+            "type" to "UPDATE_NOTIFICATION",
+            "creatorId" to authorName,
+            "isRead" to false,
+            "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+        ))
+
+        lifecycleScope.launch {
+            val notifTitle = title?.takeIf { it.isNotBlank() } ?: "New Update"
+            val notifBody = if (postType == "reel") "🎥 A new Reel has been published: ${title ?: "Check it out!"}" else (content.take(100).takeIf { it.isNotBlank() } ?: "A new post has been published.")
+            
+            com.phad.chatapp.utils.FcmSender.sendToTopic("nss", notifTitle, notifBody)
+        }
     }
 
     private fun showUpdateOptionsDialog() {
@@ -992,7 +1072,7 @@ class NssHomeFragment : Fragment() {
         instagramUrl: String? = null,
         postType: String = "text",
         hasExternalLink: Boolean = false,
-        crossPost: Boolean = false,
+        targetWings: List<String> = emptyList(),
         uploadedImageIds: List<String> = emptyList(),
         uploadedDocumentIds: List<String> = emptyList()
     ) {
@@ -1012,6 +1092,7 @@ class NssHomeFragment : Fragment() {
         // Create a custom document ID combining timestamp and roll number (without underscore)
         val customDocId = "${timestamp}${numericRollNumber}"
 
+        val crossPost = targetWings.contains("All") || targetWings.contains(com.phad.chatapp.utils.Constants.WING_TTW)
         // Determine updateType based on cross-post setting
         val updateType = if (crossPost) 3 else 2 // 3=Both, 2=NSS only
 
@@ -1039,8 +1120,23 @@ class NssHomeFragment : Fragment() {
             imageUrls = if (imageUrls.isNotEmpty()) imageUrls else null,
             documentUrls = if (documentUrls.isNotEmpty()) documentUrls else null,
             documentNames = if (documentNames.isNotEmpty()) documentNames else null,
-            externalLinks = if (externalLinks.isNotEmpty()) externalLinks else null
+            externalLinks = if (externalLinks.isNotEmpty()) externalLinks else null,
+            targetWings = targetWings
         )
+
+        val targetTopics = mutableListOf<String>("nss_user")
+        if (targetWings.contains("All")) {
+            targetTopics.add("ttw_user")
+            // nss_user covers all NSS users anyway, but we can add specific wing topics if desired.
+        } else {
+            targetWings.forEach { wing ->
+                val topic = "wing_" + wing.lowercase().replace(" ", "_").replace("&", "and")
+                targetTopics.add(topic)
+                if (wing == com.phad.chatapp.utils.Constants.WING_TTW) {
+                    targetTopics.add("ttw_user")
+                }
+            }
+        }
 
         // Save to NSS updates collection first
         db.collection("nss_updates").document(customDocId)
@@ -1051,63 +1147,16 @@ class NssHomeFragment : Fragment() {
                     db.collection("ttw_updates").document(customDocId)
                         .set(update)
                         .addOnSuccessListener {
-                            Toast.makeText(requireContext(), "Update posted to both NSS and Teaching Wing!", Toast.LENGTH_SHORT).show()
-                            createUpdateDialog?.dismiss()
-
-                            // Reload updates and clear cache to show new update
-                            updateCache = null
-                            loadUpdates()
-
-                            // Send notification to all NSS + TTW users
-                            db.collection("app_notifications").add(mapOf(
-                                "title" to (title?.takeIf { it.isNotBlank() } ?: "New Update"),
-                                "body" to (content.takeIf { it.isNotBlank() } ?: "A new post has been published."),
-                                "targetTopics" to listOf("nss_user", "ttw_user"),
-                                "type" to "UPDATE_NOTIFICATION",
-                                "creatorId" to authorName,
-                                "isRead" to false,
-                                "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
-                            ))
-
-                            // Trigger Vercel FCM Push
-                            lifecycleScope.launch {
-                                val notifTitle = title?.takeIf { it.isNotBlank() } ?: "New NSS & TTW Update"
-                                val notifBody = if (postType == "reel") "🎥 A new Reel has been published: ${title ?: "Check it out!"}" else (content.take(100).takeIf { it.isNotBlank() } ?: "A new post has been published.")
-                                com.phad.chatapp.utils.FcmSender.sendToTopic("nss", notifTitle, notifBody)
-                            }
+                            Toast.makeText(requireContext(), "Update posted to NSS and Teaching Wing!", Toast.LENGTH_SHORT).show()
+                            finishUpdateSuccess(title, content, postType, authorName, targetTopics)
                         }
                         .addOnFailureListener { e ->
-                            Toast.makeText(requireContext(), "Posted to NSS but failed to cross-post to Teaching Wing: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
-                            createUpdateDialog?.dismiss()
-                            updateCache = null
-                            loadUpdates()
-        
+                            Toast.makeText(requireContext(), "Posted to NSS but failed to cross-post: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                            finishUpdateSuccess(title, content, postType, authorName, targetTopics)
                         }
                 } else {
                     Toast.makeText(requireContext(), "NSS Update posted", Toast.LENGTH_SHORT).show()
-                    createUpdateDialog?.dismiss()
-
-                    // Reload updates and clear cache to show new update
-                    updateCache = null
-                    loadUpdates()
-
-                    // Send notification to NSS users
-                    db.collection("app_notifications").add(mapOf(
-                        "title" to (title?.takeIf { it.isNotBlank() } ?: "New NSS Update"),
-                        "body" to (content.takeIf { it.isNotBlank() } ?: "A new post has been published."),
-                        "targetTopics" to listOf("nss_user"),
-                        "type" to "UPDATE_NOTIFICATION",
-                        "creatorId" to authorName,
-                        "isRead" to false,
-                        "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
-                    ))
-
-                    // Trigger Vercel FCM Push
-                    lifecycleScope.launch {
-                        val notifTitle = title?.takeIf { it.isNotBlank() } ?: "New NSS Update"
-                        val notifBody = if (postType == "reel") "🎥 A new Reel has been published: ${title ?: "Check it out!"}" else (content.take(100).takeIf { it.isNotBlank() } ?: "A new post has been published.")
-                        com.phad.chatapp.utils.FcmSender.sendToTopic("nss", notifTitle, notifBody)
-                    }
+                    finishUpdateSuccess(title, content, postType, authorName, targetTopics)
                 }
             }
             .addOnFailureListener { e ->
@@ -1148,11 +1197,11 @@ class NssHomeFragment : Fragment() {
         instagramUrl: String?,
         postType: String,
         hasExternalLink: Boolean,
-        crossPost: Boolean,
+        targetWings: List<String> = emptyList(),
         uploadedImageIds: List<String> = emptyList(),
         uploadedDocumentIds: List<String> = emptyList()
     ) {
-        // Determine updateType based on cross-post setting
+        val crossPost = targetWings.contains("All") || targetWings.contains(com.phad.chatapp.utils.Constants.WING_TTW)
         val updateType = if (crossPost) 3 else 2 // 3=Both, 2=NSS only
 
         val updatedUpdate = originalUpdate.copy(
@@ -1172,7 +1221,8 @@ class NssHomeFragment : Fragment() {
             imageUrls = if (imageUrls.isNotEmpty()) imageUrls else null,
             documentUrls = if (documentUrls.isNotEmpty()) documentUrls else null,
             documentNames = if (documentNames.isNotEmpty()) documentNames else null,
-            externalLinks = if (externalLinks.isNotEmpty()) externalLinks else null
+            externalLinks = if (externalLinks.isNotEmpty()) externalLinks else null,
+            targetWings = targetWings
         )
 
         // Detect and delete removed attachments

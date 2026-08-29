@@ -434,7 +434,10 @@ fun UpdatesTab(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(top = 8.dp, bottom = 88.dp)
         ) {
-            items(updates) { update ->
+            items(
+                items = updates,
+                key = { update -> update.id }
+            ) { update ->
                 UpdateCard(
                     update = update,
                     isAdmin = isAdmin,
@@ -468,7 +471,10 @@ fun ReelsTab(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(top = 8.dp, bottom = 88.dp)
         ) {
-            items(updates) { update ->
+            items(
+                items = updates,
+                key = { update -> update.id }
+            ) { update ->
                 ReelCard(
                     update = update,
                     isAdmin = isAdmin,

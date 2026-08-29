@@ -119,6 +119,15 @@ class UpdateDetailActivity : AppCompatActivity() {
                 titleTextView.visibility = View.GONE
             }
             
+            // Target Wings
+            if (!update.targetWings.isNullOrEmpty()) {
+                targetWingsTextView.visibility = View.VISIBLE
+                val wingsText = update.targetWings!!.joinToString(", ")
+                targetWingsTextView.text = "For: $wingsText"
+            } else {
+                targetWingsTextView.visibility = View.GONE
+            }
+            
             // Content
             contentTextView.text = update.content ?: ""
             

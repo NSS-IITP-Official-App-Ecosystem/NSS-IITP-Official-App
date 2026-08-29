@@ -17,10 +17,18 @@ data class Update(
     val imageName: String? = null,
     val imageUrl: String? = null,
     val mediaUrl: String? = null, // Keep for backward compatibility
-    val isVideo: Boolean = false, // New field to identify video updates
+    
+    @get:com.google.firebase.firestore.PropertyName("isVideo")
+    @set:com.google.firebase.firestore.PropertyName("isVideo")
+    var isVideo: Boolean = false, // New field to identify video updates
+    
     val instagramUrl: String? = null, // Store Instagram Reel/Post URL for native engagement
     val postType: String = "text", // "reel" or "text" - determines post display mode
-    val hasExternalLink: Boolean = false, // Flag for posts containing clickable links
+    
+    @get:com.google.firebase.firestore.PropertyName("hasExternalLink")
+    @set:com.google.firebase.firestore.PropertyName("hasExternalLink")
+    var hasExternalLink: Boolean = false, // Flag for posts containing clickable links
+    
     val viewCount: Long = 0, // Track post views for analytics
     val likeCount: Long = 0, // Track post likes for engagement
     val timestamp: Long = 0,
@@ -30,7 +38,10 @@ data class Update(
     val imageUrls: List<String>? = null,        // Multiple images
     val documentUrls: List<String>? = null,     // Multiple document URLs
     val documentNames: List<String>? = null,    // Corresponding document names
-    val externalLinks: List<String>? = null     // Multiple links
+    val externalLinks: List<String>? = null,    // Multiple links
+    
+    // Wing targeting
+    val targetWings: List<String>? = null
 ) : Serializable {
     // No-argument constructor for Firestore
     constructor() : this(
@@ -57,9 +68,11 @@ data class Update(
         imageUrls = null,
         documentUrls = null,
         documentNames = null,
-        externalLinks = null
+        externalLinks = null,
+        targetWings = null
     )
     
+    @com.google.firebase.firestore.Exclude
     fun getTimeAgo(): String {
         val now = Date().time
         val diff = now - timestamp
@@ -78,6 +91,7 @@ data class Update(
     }
     
     // Helper methods to get all attachments (merges old and new fields)
+    @com.google.firebase.firestore.Exclude
     fun getAllImages(): List<String> {
         val images = mutableListOf<String>()
         imageUrl?.let { images.add(it) }
@@ -85,6 +99,7 @@ data class Update(
         return images.distinct()
     }
     
+    @com.google.firebase.firestore.Exclude
     fun getAllDocuments(): List<Pair<String, String>> {
         val documents = mutableListOf<Pair<String, String>>() // Pair of (url, name)
         if (documentUrl != null && documentName != null) {
@@ -98,6 +113,7 @@ data class Update(
         return documents.distinct()
     }
     
+    @com.google.firebase.firestore.Exclude
     fun getAllLinks(): List<String> {
         val links = mutableListOf<String>()
         externalLink?.let { links.add(it) }
@@ -105,7 +121,7 @@ data class Update(
         return links.distinct()
     }
     
-    
+    @com.google.firebase.firestore.Exclude
     fun getUpdateTypeDisplay(): String {
         return when (updateType) {
             1 -> "Teaching Wing"

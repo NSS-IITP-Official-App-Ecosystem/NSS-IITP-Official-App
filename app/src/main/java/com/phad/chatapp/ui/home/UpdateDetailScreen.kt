@@ -105,6 +105,16 @@ fun UpdateDetailScreen(
                     color = Color.Black
                 )
             }
+            
+            if (!update.targetWings.isNullOrEmpty()) {
+                val wingsText = update.targetWings!!.joinToString(", ")
+                Text(
+                    text = "For: $wingsText",
+                    fontSize = 14.sp,
+                    color = Color.Gray,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
+                )
+            }
 
             // Links Section
             val allLinks = update.getAllLinks()

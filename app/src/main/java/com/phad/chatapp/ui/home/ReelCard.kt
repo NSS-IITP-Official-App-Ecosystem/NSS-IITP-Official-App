@@ -87,6 +87,17 @@ fun ReelCard(
                         color = Color.Gray,
                         fontSize = 12.sp
                     )
+                    
+                    // Target Wings
+                    if (!update.targetWings.isNullOrEmpty()) {
+                        val wingsText = update.targetWings.joinToString(", ")
+                        Text(
+                            text = "For: $wingsText",
+                            fontSize = 11.sp,
+                            color = Color.Gray,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
                 }
 
                 // Admin Menu

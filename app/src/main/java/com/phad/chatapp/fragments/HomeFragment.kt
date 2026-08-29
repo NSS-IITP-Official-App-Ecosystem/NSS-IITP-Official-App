@@ -500,6 +500,9 @@ class HomeFragment : Fragment() {
 
         // Add checkbox for cross-posting to NSS (only for Teaching Wing admins)
         val crossPostCheckbox = dialog.findViewById<android.widget.CheckBox>(R.id.crossPostCheckbox)
+        val wingTargetingContainer = dialog.findViewById<View>(R.id.wingTargetingContainer)
+        wingTargetingContainer?.visibility = View.GONE
+        
         val userType = sessionManager.fetchUserType()
         if (userType.equals("Admin", ignoreCase = true)) {
             crossPostCheckbox?.visibility = View.VISIBLE
@@ -630,7 +633,7 @@ class HomeFragment : Fragment() {
             dialogTitle?.text = "Update Post"
             updateTitleInput?.setText(existingUpdate.title)
             updateContentInput?.setText(existingUpdate.content)
-            updateLinkInput?.setText(existingUpdate.externalLink)
+            updateLinkInput?.setText(existingUpdate.getAllLinks().joinToString(", "))
             instagramLinkInput?.setText(existingUpdate.instagramUrl)
             crossPostCheckbox?.isChecked = (existingUpdate.updateType == 3)
 
@@ -734,9 +737,12 @@ class HomeFragment : Fragment() {
                     val documentNames = mutableListOf<String>()
                     val externalLinksList = mutableListOf<String>()
 
-                    // Add manual link if present
+                    // Process manual links (separated by comma or newline)
                     if (link.isNotEmpty()) {
-                        externalLinksList.add(link)
+                        val splitLinks = link.split(",", "\n")
+                            .map { it.trim() }
+                            .filter { it.isNotEmpty() }
+                        externalLinksList.addAll(splitLinks)
                     }
 
                     // Calculate total items to operate on (Local uploads + Remote deletions)

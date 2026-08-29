@@ -344,7 +344,7 @@
                 android:visibility="gone"/>
         </LinearLayout>
 
-        <!-- Cross-Post Checkbox -->
+        <!-- Cross-Post Checkbox (for TTW interface) -->
         <CheckBox
             android:id="@+id/crossPostCheckbox"
             android:layout_width="wrap_content"
@@ -355,6 +355,87 @@
             android:layout_marginBottom="20dp"
             android:visibility="gone"
             android:buttonTint="#888888"/>
+
+        <!-- Wing Targeting Options -->
+        <LinearLayout
+            android:id="@+id/wingTargetingContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginBottom="20dp"
+            android:visibility="visible">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Select Wings"
+                android:textColor="#1A1A1A"
+                android:textSize="14sp"
+                android:layout_marginBottom="8dp"/>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginStart="8dp">
+
+                <CheckBox
+                    android:id="@+id/wingAllCheckbox"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Select All"
+                    android:checked="true"
+                    android:textColor="#1A1A1A"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:buttonTint="#888888"/>
+
+                <CheckBox
+                    android:id="@+id/wingTtwCheckbox"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Teaching and Technical Wing"
+                    android:textColor="#1A1A1A"
+                    android:textSize="14sp"
+                    android:buttonTint="#888888"/>
+
+                <CheckBox
+                    android:id="@+id/wingPrernaCheckbox"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Prerna Wing"
+                    android:textColor="#1A1A1A"
+                    android:textSize="14sp"
+                    android:buttonTint="#888888"/>
+
+                <CheckBox
+                    android:id="@+id/wingRdCheckbox"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Rural Development Wing"
+                    android:textColor="#1A1A1A"
+                    android:textSize="14sp"
+                    android:buttonTint="#888888"/>
+
+                <CheckBox
+                    android:id="@+id/wingEnvironmentCheckbox"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Environmental Wing"
+                    android:textColor="#1A1A1A"
+                    android:textSize="14sp"
+                    android:buttonTint="#888888"/>
+
+                <CheckBox
+                    android:id="@+id/wingCurationCheckbox"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Design and Curation Wing"
+                    android:textColor="#1A1A1A"
+                    android:textSize="14sp"
+                    android:buttonTint="#888888"/>
+            </LinearLayout>
+        </LinearLayout>
 
         <!-- Publish Button -->
         <com.google.android.material.button.MaterialButton

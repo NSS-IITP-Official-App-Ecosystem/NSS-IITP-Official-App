@@ -119,6 +119,19 @@
                 android:textColor="?attr/colorOnSurface"
                 tools:text="Update Title"/>
 
+            <!-- Target Wings (if any) -->
+            <TextView
+                android:id="@+id/targetWingsTextView"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:textSize="14sp"
+                android:textColor="?attr/colorOnSurface"
+                android:alpha="0.7"
+                android:visibility="gone"
+                tools:visibility="visible"
+                tools:text="For: Teaching Wing, Prerna"/>
+
             <!-- Content -->
             <TextView
                 android:id="@+id/contentTextView"
