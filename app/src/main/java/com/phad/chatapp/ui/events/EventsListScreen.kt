@@ -111,15 +111,17 @@ fun EventsListScreen(
             eventsSnapshot.documents.forEach { doc ->
                 val event = doc.toObject(AttendanceEvent::class.java)
                 if (event != null) {
-                    val eventSemester = getSemesterFromDate(event.eventDate)
+                    val eventSemester = getSemesterFromDate(event.eventDate, event.id)
                     if (eventSemester == semester) {
-                        val attended = event.attendees.any { it.rollNumber == rollNumber }
+                        val attended = event.attendees.any { it.rollNumber.equals(rollNumber, ignoreCase = true) }
                         val eventName = extractEventNameFromId(event.id)
                         
                         // Determine if this is a wing event or open event
                         val eventWings = event.wings
                         val isDnc = eventWings.contains("Design and Curation Wing")
                         val isUserWingEvent = eventWings.any { it in userWings }
+                        val isOpenEvent = eventWings.containsAll(AttendanceEvent.ALL_WINGS) || eventWings.isEmpty() || event.getDisplayWings() == "Open Event"
+                        val isRelevantToUser = isDnc || isUserWingEvent || isOpenEvent
                         
                         if (attended) {
                             localAttendedCount++
@@ -133,8 +135,6 @@ fun EventsListScreen(
                             )
                             
                             // Categorize: Open events first, then user's wing events
-                            val isOpenEvent = event.wings.containsAll(AttendanceEvent.ALL_WINGS)
-                            
                             if (isOpenEvent) {
                                 openEventLog.add(eventDetail)
                             } else if (isUserWingEvent) {
@@ -143,37 +143,36 @@ fun EventsListScreen(
                                 // Fallback for pure DNC or other cases
                                 openEventLog.add(eventDetail)
                             }
-                        } else if (!event.visibleOnlyToPresent && event.isMandatory && event.negativeHours > 0.0 && event.absentPenaltyApplied) {
-                            // Absent in a mandatory event: check if relevant to user
-                            val isExempted = event.exemptedRollNumbers.any { it.equals(rollNumber, ignoreCase = true) }
-                            if (isDnc || isUserWingEvent) {
-                                if (isExempted) {
-                                    val eventDetail = EventDetail(
-                                        id = event.id,
-                                        name = eventName,
-                                        date = event.eventDate,
-                                        hours = 0.0, // Exempted: show 0h
-                                        isMandatory = true,
-                                        wings = event.wings
-                                    )
-                                    val isOpenEvent = event.wings.containsAll(AttendanceEvent.ALL_WINGS)
-                                    if (isOpenEvent) openEventLog.add(eventDetail)
-                                    else if (isUserWingEvent) wingEventLog.add(eventDetail)
-                                    else openEventLog.add(eventDetail)
-                                } else {
-                                    val eventDetail = EventDetail(
-                                        id = event.id,
-                                        name = eventName,
-                                        date = event.eventDate,
-                                        hours = -event.negativeHours, // Penalized: show negative
-                                        isMandatory = true,
-                                        wings = event.wings
-                                    )
-                                    val isOpenEvent = event.wings.containsAll(AttendanceEvent.ALL_WINGS)
-                                    if (isOpenEvent) openEventLog.add(eventDetail)
-                                    else if (isUserWingEvent) wingEventLog.add(eventDetail)
-                                    else openEventLog.add(eventDetail)
-                                }
+                        } else if (!event.visibleOnlyToPresent && event.isMandatory && event.absentPenaltyApplied && isRelevantToUser) {
+                            // Absent in a mandatory event: check penalty breakdown for this user
+                            val isExplicitZero = event.zeroPenaltyRollNumbers.any { it.equals(rollNumber, ignoreCase = true) } ||
+                                                 event.exemptedRollNumbers.any { it.equals(rollNumber, ignoreCase = true) }
+                            val isExplicitPositive = event.positivePenaltyRollNumbers.any { it.equals(rollNumber, ignoreCase = true) }
+                            val isExplicitNegative = event.negativePenaltyRollNumbers.any { it.equals(rollNumber, ignoreCase = true) }
+
+                            val penaltyHours = when {
+                                isExplicitPositive -> event.hours
+                                isExplicitZero -> 0.0
+                                isExplicitNegative -> if (event.negativeHours > 0.0) -event.negativeHours else -event.hours
+                                event.negativeHours > 0.0 -> -event.negativeHours
+                                else -> 0.0
+                            }
+
+                            val eventDetail = EventDetail(
+                                id = event.id,
+                                name = eventName,
+                                date = event.eventDate,
+                                hours = penaltyHours,
+                                isMandatory = true,
+                                wings = event.wings
+                            )
+                            
+                            if (isOpenEvent) {
+                                openEventLog.add(eventDetail)
+                            } else if (isUserWingEvent) {
+                                wingEventLog.add(eventDetail)
+                            } else {
+                                openEventLog.add(eventDetail)
                             }
                         }
                     }
@@ -532,7 +531,7 @@ fun EventCard(event: EventDetail) {
             Spacer(modifier = Modifier.width(8.dp))
             
             // Hours badge
-            val badgeColor = if (event.hours < 0) Color(0xFFF57C00) else Color(0xFF4CAF50)
+            val badgeColor = if (event.hours < 0) Color(0xFFE53935) else Color(0xFF4CAF50)
             Box(
                 modifier = Modifier
                     .background(

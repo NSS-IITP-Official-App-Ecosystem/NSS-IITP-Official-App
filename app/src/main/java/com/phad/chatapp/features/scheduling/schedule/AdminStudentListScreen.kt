@@ -68,37 +68,94 @@ fun AdminStudentListScreen(
     // Load Students
     LaunchedEffect(Unit) {
         isLoading = true
+        fun isTtwStudent(doc: com.google.firebase.firestore.DocumentSnapshot): Boolean {
+            val userType = doc.getString("userType") ?: doc.getString("UserType") ?: ""
+            if (userType.equals("Admin", ignoreCase = true)) return false
+
+            val wingsList = when (val wingsObj = doc.get("wings") ?: doc.get("wing")) {
+                is List<*> -> wingsObj.mapNotNull { it?.toString() }
+                is String -> listOf(wingsObj)
+                else -> emptyList()
+            }
+            val nssGro = doc.getString("NSS_gro") ?: ""
+            val allWingStrings = wingsList + (if (nssGro.isNotBlank()) listOf(nssGro) else emptyList())
+
+            val hasTeachingWing = allWingStrings.any { wing ->
+                wing.equals(com.phad.chatapp.utils.Constants.WING_TTW, ignoreCase = true) ||
+                wing.contains("teach", ignoreCase = true) ||
+                wing.equals("TTW", ignoreCase = true)
+            }
+
+            val isTeachingFlag = (doc.getBoolean("Teaching_wing") == true) ||
+                                 (doc.getBoolean("teachingWing") == true) ||
+                                 (doc.getBoolean("isTeachingWing") == true)
+
+            return hasTeachingWing || isTeachingFlag
+        }
+
+        fun parseDocs(docs: List<com.google.firebase.firestore.DocumentSnapshot>, isUsersCollection: Boolean = false): List<Student> {
+            return docs.mapNotNull { doc ->
+                if (isUsersCollection && !isTtwStudent(doc)) return@mapNotNull null
+                try {
+                    val scoreVal = doc.get("interviewScore")
+                    val score = when(scoreVal) {
+                        is Long -> scoreVal.toInt()
+                        is String -> scoreVal.toIntOrNull() ?: 0
+                        else -> 0
+                    }
+                    
+                    Student(
+                        id = doc.id,
+                        name = doc.getString("name") ?: "",
+                        rollNumber = doc.getString("rollNumber") ?: doc.getString("roll_number") ?: doc.id,
+                        interviewScore = score,
+                        academicGroup = (doc.get("academicGroup") ?: doc.get("group") ?: doc.get("Academic_Grp_"))?.toString() ?: ""
+                    )
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing student doc ${doc.id}", e)
+                    null
+                }
+            }
+        }
+
         FirebaseManager.getInstance().getCollection(
             "ttwStudents",
             onSuccess = { snapshot ->
-                val loadedStudents = snapshot.documents.mapNotNull { doc ->
-                    try {
-                        val scoreVal = doc.get("interviewScore")
-                        val score = when(scoreVal) {
-                            is Long -> scoreVal.toInt()
-                            is String -> scoreVal.toIntOrNull() ?: 0
-                            else -> 0
+                if (snapshot.isEmpty) {
+                    FirebaseManager.getInstance().getCollection(
+                        "users",
+                        onSuccess = { userSnap ->
+                            val loaded = parseDocs(userSnap.documents, isUsersCollection = true)
+                            students = loaded
+                            filteredStudents = loaded
+                            isLoading = false
+                        },
+                        onFailure = { e ->
+                            Log.e(TAG, "Error loading users fallback", e)
+                            isLoading = false
                         }
-                        
-                        Student(
-                            id = doc.id,
-                            name = doc.getString("name") ?: "",
-                            rollNumber = doc.getString("rollNumber") ?: doc.id,
-                            interviewScore = score,
-                            academicGroup = doc.getString("academicGroup") ?: ""
-                        )
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error parsing student doc ${doc.id}", e)
-                        null
-                    }
+                    )
+                } else {
+                    val loaded = parseDocs(snapshot.documents, isUsersCollection = false)
+                    students = loaded
+                    filteredStudents = loaded
+                    isLoading = false
                 }
-                students = loadedStudents
-                filteredStudents = loadedStudents
-                isLoading = false
             },
-            onFailure = { e ->
-                Log.e(TAG, "Error loading students", e)
-                isLoading = false
+            onFailure = { _ ->
+                FirebaseManager.getInstance().getCollection(
+                    "users",
+                    onSuccess = { userSnap ->
+                        val loaded = parseDocs(userSnap.documents, isUsersCollection = true)
+                        students = loaded
+                        filteredStudents = loaded
+                        isLoading = false
+                    },
+                    onFailure = { e ->
+                        Log.e(TAG, "Error loading users fallback", e)
+                        isLoading = false
+                    }
+                )
             }
         )
     }

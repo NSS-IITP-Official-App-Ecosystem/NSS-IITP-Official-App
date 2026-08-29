@@ -269,12 +269,37 @@ fun ManageVolunteersScreen(
         return studentsList
     }
 
+    fun isTtwStudent(document: com.google.firebase.firestore.DocumentSnapshot): Boolean {
+        val userType = document.getString("userType") ?: document.getString("UserType") ?: ""
+        if (userType.equals("Admin", ignoreCase = true)) return false
+
+        val wingsList = when (val wingsObj = document.get("wings") ?: document.get("wing")) {
+            is List<*> -> wingsObj.mapNotNull { it?.toString() }
+            is String -> listOf(wingsObj)
+            else -> emptyList()
+        }
+        val nssGro = document.getString("NSS_gro") ?: ""
+        val allWingStrings = wingsList + (if (nssGro.isNotBlank()) listOf(nssGro) else emptyList())
+
+        val hasTeachingWing = allWingStrings.any { wing ->
+            wing.equals(com.phad.chatapp.utils.Constants.WING_TTW, ignoreCase = true) ||
+            wing.contains("teach", ignoreCase = true) ||
+            wing.equals("TTW", ignoreCase = true)
+        }
+
+        val isTeachingFlag = (document.getBoolean("Teaching_wing") == true) ||
+                             (document.getBoolean("teachingWing") == true) ||
+                             (document.getBoolean("isTeachingWing") == true)
+
+        return hasTeachingWing || isTeachingFlag
+    }
+
     // Helper function to try loading from different collections
     fun tryNextCollection(collections: List<String>, index: Int) {
         if (index >= collections.size) {
             Log.e(TAG, "Tried all collections, none worked")
             isLoading = false
-            errorMessage = "Could not find student data in any expected collection. Try checking collections."
+            errorMessage = "Could not find TTW student data in any expected collection. Try checking collections."
             return
         }
 
@@ -308,7 +333,7 @@ fun ManageVolunteersScreen(
 
                             // Map fields with fuzzy matching
                             for (field in fields) {
-                                val lowerField = field.toLowerCase()
+                                val lowerField = field.lowercase()
                                 when {
                                     lowerField.contains("name") -> fieldMappings["name"] = field
                                     lowerField.contains("roll") -> fieldMappings["rollNumber"] = field
@@ -321,7 +346,13 @@ fun ManageVolunteersScreen(
                             Log.d(TAG, "Detected field mappings: $fieldMappings")
                         }
 
+                        val isGeneralCollection = collectionName != "ttwStudents" && collectionName != "generateSchedule"
+
                         for (document in snapshot.documents) {
+                            if (isGeneralCollection && !isTtwStudent(document)) {
+                                continue
+                            }
+
                             val uid = document.id
                             Log.d(TAG, "Processing student document: $uid with data: ${document.data}")
 
@@ -333,7 +364,7 @@ fun ManageVolunteersScreen(
                             val rollNumber = document.getString(fieldMappings["rollNumber"] ?: "Roll_No_")
                                 ?: document.getString("rollNumber")
                                 ?: document.getString("roll_number")
-                                ?: ""
+                                ?: document.id
 
                             val email = document.getString(fieldMappings["email"] ?: "Email")
                                 ?: document.getString("email")
@@ -345,13 +376,14 @@ fun ManageVolunteersScreen(
                                 ?: document.getString("Mobile_no_")
                                 ?: ""
 
+                            val groupLong = document.getLong("group")
                             val groupField = fieldMappings["group"] ?: "Academic_Grp_"
                             val groupStr = document.getString(groupField)
-                                ?: document.getString("group")
                                 ?: document.getString("academicGroup")
+                                ?: document.getString("group")
                                 ?: "0"
 
-                            val group = groupStr.toIntOrNull() ?: 0
+                            val group = groupLong?.toInt() ?: groupStr.filter { it.isDigit() }.toIntOrNull() ?: 0
 
                             // Get subjects (try common field names)
                             val subjects = (document.get("subjectPreferences") as? List<*>)?.mapNotNull { it as? String }
@@ -373,7 +405,7 @@ fun ManageVolunteersScreen(
                         }
 
                         if (usersList.isEmpty()) {
-                            Log.e(TAG, "No users could be extracted from collection '$collectionName', trying next")
+                            Log.e(TAG, "No TTW users could be extracted from collection '$collectionName', trying next")
                             tryNextCollection(collections, index + 1)
                             return@getCollection
                         }
@@ -410,8 +442,8 @@ fun ManageVolunteersScreen(
 
         Log.d(TAG, "Starting to load users from Firestore")
 
-        // Try these collections in order - prefer new ttwStudents collection
-        val collectionsToTry = listOf("ttwStudents", "generateSchedule", "users")
+        // Try TTW specific collections first, then fallback to users filtered by TTW
+        val collectionsToTry = listOf("ttwStudents", "generateSchedule", "users", "students")
         tryNextCollection(collectionsToTry, 0)
     }
 
@@ -613,11 +645,12 @@ fun ManageVolunteersScreen(
         isLoading = true
         coroutineScope.launch {
             try {
-                // Fetch all students from ttwStudents to get latest classesPerWeek
-                val snapshot = FirebaseFirestore.getInstance()
-                    .collection("ttwStudents")
-                    .get()
-                    .await()
+                // Fetch all students from ttwStudents or users to get latest classesPerWeek
+                val db = FirebaseFirestore.getInstance()
+                var snapshot = db.collection("ttwStudents").get().await()
+                if (snapshot.isEmpty) {
+                    snapshot = db.collection("users").get().await()
+                }
 
                 val dbCounts = mutableMapOf<String, Int>()
                 
@@ -669,7 +702,7 @@ fun ManageVolunteersScreen(
             val db = FirebaseFirestore.getInstance()
 
             // Since there's no direct API to list collections, we'll try different possible collection names
-            val possibleCollections = listOf("students", "student", "Student", "Students", "users", "Users")
+            val possibleCollections = listOf("users", "ttwStudents", "students", "generateSchedule", "student", "Student", "Students", "Users")
 
             var collectionsChecked = 0
             val foundCollections = mutableListOf<String>()

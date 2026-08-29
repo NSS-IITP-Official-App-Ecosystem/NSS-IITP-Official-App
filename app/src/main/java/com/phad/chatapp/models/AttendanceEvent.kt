@@ -49,6 +49,15 @@ data class AttendanceEvent(
     @PropertyName("exemptedRollNumbers")
     val exemptedRollNumbers: List<String> = emptyList(), // Roll numbers explicitly exempted from absent penalties
 
+    @PropertyName("zeroPenaltyRollNumbers")
+    val zeroPenaltyRollNumbers: List<String> = emptyList(),
+
+    @PropertyName("positivePenaltyRollNumbers")
+    val positivePenaltyRollNumbers: List<String> = emptyList(),
+
+    @PropertyName("negativePenaltyRollNumbers")
+    val negativePenaltyRollNumbers: List<String> = emptyList(),
+
     @PropertyName("attendanceLocationLatitude")
     val attendanceLocationLatitude: Double? = null, // GPS latitude where attendance is being taken
 

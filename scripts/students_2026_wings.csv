@@ -1,0 +1,355 @@
+S.No,Roll Number,Name,Institute Outlook ID,Assigned Wing
+1,2601AI01,Nukala Venkata Chandrahas,nukala_2601ai01@iitp.ac.in,Environmental Wing
+2,2601AI02,Annamanani Ashwadh,annamanani_2601ai02@iitp.ac.in,Prerna Wing
+3,2601AI03,Yeruva Praharshini,yeruva_2601ai03@iitp.ac.in,Prerna Wing
+4,2601AI04,Kanak Agrawal,kanak_2601ai04@iitp.ac.in,Environmental Wing
+5,2601AI14,Harshit Kumar,harshit_2601ai14@iitp.ac.in,Rural Development Wing
+6,2601AI15,Mulkala Vashista,mulkala_2601ai15@iitp.ac.in,Prerna Wing
+7,2601AI16,Aditi Verma,aditi_2601ai16@iitp.ac.in,Environmental Wing
+8,2601AI17,G YOZAN BABU,gudala_2601ai17@iitp.ac.in,Environmental Wing
+9,2601AI22,Modadugu Venkata Sai Siva,modadugu_2601ai22@iitp.ac.in,Prerna Wing
+10,2601AI24,Viraj Singh,viraj_2601ai24@iitp.ac.in,Rural Development Wing
+11,2601AI28,Patel Lokesh,patel_2601ai28@iitp.ac.in,Environmental Wing
+12,2601AI32,Kandibanda Nehal,kandibanda_2601ai32@iitp.ac.in,Design and Curation Wing
+13,2601AI33,Lakavath Santhosh,lakavath_2601ai33@iitp.ac.in,Rural Development Wing
+14,2601AI41,Gumpu Puneeth Sasank,gumpu_2601ai41@iitp.ac.in,Environmental Wing
+15,2601AI43,Parlapalli Surya Srikar Reddy,parlapalli_2601ai43@iitp.ac.in,Prerna Wing
+16,2601AI44,Tokalwad Parth Anand,tokalwad_2601AI44@iitp.ac.in,Design and Curation Wing
+17,2601AI45,Anushka Gupta,anushka_2601ai45@iitp.ac.in,Environmental Wing
+18,2601AI48,Kada Darshan,kada_2601ai48@iitp.ac.in,Teaching and Technical Wing
+19,2601CB02,Aditi Kumari,aditi_2601cb02@iitp.ac.in,Teaching and Technical Wing
+20,2601CB05,Siriki Hemanth,siriki_2601cb05@iitp.ac.in,Rural Development Wing
+21,2601CB06,Anshul Tyagi,anshul_2601cb06@iitp.ac.in,Teaching and Technical Wing
+22,2601CB11,Jeetesh Kumar Sahu,jeetesh_2601cb11@iitp.ac.in,Teaching and Technical Wing
+23,2601CB12,Utkarsh Yadav,utkarsh_2601cb12@iitp.ac.in,Teaching and Technical Wing
+24,2601CB18,Ishita Singh,ishita_2601cb18@iitp.ac.in,Environmental Wing
+25,2601CB25,Tanushka Sharma,tanushka_2601cb25@iitp.ac.in,Teaching and Technical Wing
+26,2601CB26,Swarit Srivastava,swarit_2601cb26@iitp.ac.in,Teaching and Technical Wing
+27,2601CB29,Gaurav Agnihotri,gaurav_2601cb29@iitp.ac.in,Environmental Wing
+28,2601CB30,Ibrahim Ibrahim,ibrahim_2601cb30@iitp.ac.in,Teaching and Technical Wing
+29,2601CB46,Shobhit Airan,shobhit_2601cb46@iitp.ac.in,Teaching and Technical Wing
+30,2601CB47,Nasir Raza,nasir_2601cb47@iitp.ac.in,Rural Development Wing
+31,2601CB51,Akula Anjana Sowmya,akula_2601cb51@iitp.ac.in,Environmental Wing
+32,2601CB53,Nikhil,nikhil_2601cb53@iitp.ac.in,Teaching and Technical Wing
+33,2601CB54,Pintu Mondal,pintu_2601cb54@iitp.ac.in,Rural Development Wing
+34,2601CB55,Varahi Rohit Pardeshi,varahi_2601cb55@iitp.ac.in,Rural Development Wing
+35,2601CB56,Mudavath Divya,mudavath_2601cb56@iitp.ac.in,Prerna Wing
+36,2601CB59,Illa Ramya,illa_2601cb59@iitp.ac.in,Environmental Wing
+37,2601CB64,Peddaram Sahasra Vardhini,peddaram_2601cb64@iitp.ac.in,Environmental Wing
+38,2601CB65,Gangapatnam Shyam Abhishek,gangapatnam_2601cb65@iitp.ac.in,Environmental Wing
+39,2601CB67,Kevlani Yash Manishbhai,kevlani_2601cb67@iitp.ac.in,Rural Development Wing
+40,2601CE06,Priyamgaurvi,priyamgaurvi_2601ce06@iitp.ac.in,Design and Curation Wing
+41,2601CE10,Anupam Jha,anupam_2601ce10@iitp.ac.in,Environmental Wing
+42,2601CE11,Harsh Pratap Singh,harsh_2601ce11@iitp.ac.in,Teaching and Technical Wing
+43,2601CE13,Chetan Singh,chetan_2601ce13@iitp.ac.in,Teaching and Technical Wing
+44,2601CE15,Snigdh Arindam,snigdh_2601ce15@iitp.ac.in,Teaching and Technical Wing
+45,2601CE17,Vivek Goyal,vivek_2601ce17@iitp.ac.in,Teaching and Technical Wing
+46,2601CE18,Arya Deshmukh,arya_2601ce18@iitp.ac.in,Prerna Wing
+47,2601CE22,Dharamveer Pingoliya,dharamveer_2601ce22@iitp.ac.in,Teaching and Technical Wing
+48,2601CE23,Dasu Jayasree,dasu_2601ce23@iitp.ac.in,Prerna Wing
+49,2601CE26,Ameya Pravin Kamat,ameya_2601ce26@iitp.ac.in,Design and Curation Wing
+50,2601CE29,Prashant Meena,prashant_2601ce29@iitp.ac.in,Teaching and Technical Wing
+51,2601CE30,Rakesh Jangid,rakesh_2601ce30@iitp.ac.in,Teaching and Technical Wing
+52,2601CE35,Vaibhav Anand,vaibhav_2601ce35@iitp.ac.in,Teaching and Technical Wing
+53,2601CE36,Sarvjeet Kumar,sarvjeet_2601ce36@iitp.ac.in,Rural Development Wing
+54,2601CE37,Aanya Verma,aanya_2601ce37@iitp.ac.in,Teaching and Technical Wing
+55,2601CE39,Wriddhi Adhya,wriddhi_2601ce39@iitp.ac.in,Prerna Wing
+56,2601CE40,Pritam Kumar Siddhant,pritam_2601ce40@iitp.ac.in,Teaching and Technical Wing
+57,2601CE43,Kamran Kamran,kamran_2601ce43@iitp.ac.in,Teaching and Technical Wing
+58,2601CE45,Pradip Kumar,pradip_2601ce45@iitp.ac.in,Rural Development Wing
+59,2601CE50,Shaik Arbaaz Ahmed,shaik_2601ce50@iitp.ac.in,Rural Development Wing
+60,2601CE51,Ahon Pansa,ahon_2601ce51@iitp.ac.in,Design and Curation Wing
+61,2601CE54,Mahi Khera,mahi_2601ce54@iitp.ac.in,Teaching and Technical Wing
+62,2601CE55,Deepak Singh,deepak_2601ce55@iitp.ac.in,Rural Development Wing
+63,2601CE57,Abhijeet Kumar,abhijeet_2601ce57@iitp.ac.in,Teaching and Technical Wing
+64,2601CE60,Gaurav Kumar,gaurav_2601ce60@iitp.ac.in,Environmental Wing
+65,2601CE63,Rohit Dulariya,rohit_2601ce63@iitp.ac.in,Teaching and Technical Wing
+66,2601CS01,Vadthyavath Bhuvanendra Naik,vadthyavath_2601cs01@iitp.ac.in,Environmental Wing
+67,2601CS03,Daksh Joshi,daksh_2601cs03@iitp.ac.in,Rural Development Wing
+68,2601CS05,Jakkampudi Tanuj,jakkampudi_2601cs05@iitp.ac.in,Prerna Wing
+69,2601CS10,Vankunavath Shashank Indra Tej,vankunavath_2601cs10@iitp.ac.in,Prerna Wing
+70,2601CS11,Yogyta Verma,yogyta_2601cs11@iitp.ac.in,Environmental Wing
+71,2601CS12,Husain Husain,husain_2601cs12@iitp.ac.in,Teaching and Technical Wing
+72,2601CS15,Narottam Singh Sikarwar,narottam_2601cs15@iitp.ac.in,Teaching and Technical Wing
+73,2601CS16,Biswajit Sahoo,biswajit_2601cs16@iitp.ac.in,Rural Development Wing
+74,2601CS19,Gajibelli Pushpa Vamsi,gajibelli_2601cs19@iitp.ac.in,Environmental Wing
+75,2601CS21,Ankit Mishra,ankit_2601cs21@iitp.ac.in,Prerna Wing
+76,2601CS22,Kalluru Deekshitha Reddy,kalluru_2601cs22@iitp.ac.in,Prerna Wing
+77,2601CS24,Jadhav Prajyot,jadhav_2601cs24@iitp.ac.in,Environmental Wing
+78,2601CS27,Talasani Rithwik Reddy,talasani_2601cs27@iitp.ac.in,Rural Development Wing
+79,2601CS30,Mudokulam Jaikishan Naik,mudokulam_2601cs30@iitp.ac.in,Prerna Wing
+80,2601CS32,K Rahul Kumar Reddy,k_2601cs32@iitp.ac.in,Prerna Wing
+81,2601CS34,Kuluri Venkata Sai Kaushik,kuluri_2601cs34@iitp.ac.in,Rural Development Wing
+82,2601CS39,Kurupudi Sai Sathvika,kurupudi_2601cs39@iitp.ac.in,Environmental Wing
+83,2601CS41,V Varunkumar,v_2601cs41@iitp.ac.in,Environmental Wing
+84,2601CS42,Krishna Kumar,krishna_2601cs42@iitp.ac.in,Teaching and Technical Wing
+85,2601CS43,Dhruv,dhruv_2601cs43@iitp.ac.in,Rural Development Wing
+86,2601CS47,Pramod Yadav,pramod_2601cs47@iitp.ac.in,Teaching and Technical Wing
+87,2601CS49,Lapshetwar Shivam Pradip,lapshetwar_2601cs49@iitp.ac.in,Teaching and Technical Wing
+88,2601CS50,Abhishek Kumar,abhishek_2601cs50@iitp.ac.in,Teaching and Technical Wing
+89,2601CS57,Vemu Manjula,vemu_2601cs57@iitp.ac.in,Prerna Wing
+90,2601CS58,Aamana Khatoon,aamana_2601cs58@iitp.ac.in,Environmental Wing
+91,2601CS62,Utkarsha Ravindra Kakulate,utkarsha_2601cs62@iitp.ac.in,Environmental Wing
+92,2601CS63,Navneet Kumar Nitin,navneet_2601cs63@iitp.ac.in,Rural Development Wing
+93,2601CS64,Noor Jamali,noor_2601cs64@iitp.ac.in,Teaching and Technical Wing
+94,2601CS67,Ambati Keerthi Pranavi,ambati_2601cs67@iitp.ac.in,Prerna Wing
+95,2601CS70,Anmol Kumar Sah,anmol_2601cs70@iitp.ac.in,Environmental Wing
+96,2601CS73,Nihal Shoju,nihal_2601cs73@iitp.ac.in,Rural Development Wing
+97,2601CS74,Utkarsh Raj,utkarsh_2601cs74@iitp.ac.in,Prerna Wing
+98,2601CS78,Shrishant Kumar,shrishant_2601cs78@iitp.ac.in,Environmental Wing
+99,2601CS81,Mukiri Saatwik,mukiri_2601cs81@iitp.ac.in,Prerna Wing
+100,2601CS82,Umesh Kumar Saini,umesh_2601cs82@iitp.ac.in,Teaching and Technical Wing
+101,2601CS84,Krish,krish_2601cs84@iitp.ac.in,Rural Development Wing
+102,2601CS85,Chaitanaya Nathalia,chaitanaya_2601cs85@iitp.ac.in,Teaching and Technical Wing
+103,2601CS87,Vaibhav,vaibhav_2601cs87@iitp.ac.in,Teaching and Technical Wing
+104,2601CS88,Ramavath Vinay,ramavath_2601cs88@iitp.ac.in,Environmental Wing
+105,2601CT01,Shaurya Gupta,shaurya_2601ct01@iitp.ac.in,Design and Curation Wing
+106,2601CT04,Prince,prince_2601ct04@iitp.ac.in,Rural Development Wing
+107,2601CT05,Aarya Pankaj Patil,aarya_2601ct05@iitp.ac.in,Environmental Wing
+108,2601CT06,Mandhani Netal Radheshyam,mandhani_2601ct06@iitp.ac.in,Prerna Wing
+109,2601CT08,Amey Mittal,amey_2601ct08@iitp.ac.in,Teaching and Technical Wing
+110,2601CT09,Nitya Bansal,nitya_2601ct09@iitp.ac.in,Teaching and Technical Wing
+111,2601CT10,Manya Dhirawat,manya_2601ct10@iitp.ac.in,Prerna Wing
+112,2601CT11,Ananya Kumari,ananya_2601ct11@iitp.ac.in,Prerna Wing
+113,2601CT14,Kashvi Verma,kashvi_2601ct14@iitp.ac.in,Prerna Wing
+114,2601CT17,Mayank Jangid,mayank_2601ct17@iitp.ac.in,Environmental Wing
+115,2601CT19,Brijesh Nishad,brijesh_2601ct19@iitp.ac.in,Teaching and Technical Wing
+116,2601CT21,Ritesh Kumar,ritesh_2601ct21@iitp.ac.in,Teaching and Technical Wing
+117,2601CT23,Arnav Agrawal,arnav_2601ct23@iitp.ac.in,Teaching and Technical Wing
+118,2601CT25,Aman Kumar,aman_2601ct25@iitp.ac.in,Rural Development Wing
+119,2601CT31,Dharavath Deepanvitha,dharavath_2601ct31@iitp.ac.in,Prerna Wing
+120,2601CT32,Tanav,tanav_2601ct32@iitp.ac.in,Rural Development Wing
+121,2601CT35,Siddatapu Ajay Kumar,siddatapu_2601ct35@iitp.ac.in,Environmental Wing
+122,2601EC03,Asif Uddaulah,asif_2601ec03@iitp.ac.in,Teaching and Technical Wing
+123,2601EC04,Srirup Saha,srirup_2601ec04@iitp.ac.in,Rural Development Wing
+124,2601EC07,Bondugula Likith Sai,bondugula_2601ec07@iitp.ac.in,Rural Development Wing
+125,2601EC08,Lingam Rohit,lingam_2601ec08@iitp.ac.in,Environmental Wing
+126,2601EC11,Harshit Singh,harshit_2601ec11@iitp.ac.in,Teaching and Technical Wing
+127,2601EC13,Prince Sharma,prince_2601ec13@iitp.ac.in,Teaching and Technical Wing
+128,2601EC14,Garima,garima_2601ec14@iitp.ac.in,Teaching and Technical Wing
+129,2601EC15,Allu Sai Jagan,allu_2601ec15@iitp.ac.in,Environmental Wing
+130,2601EC17,Natte Charan Sai Teja,natte_2601ec17@iitp.ac.in,Rural Development Wing
+131,2601EC20,Deepanshu Jangir,deepanshu_2601ec20@iitp.ac.in,Environmental Wing
+132,2601EC26,Yuvraj Singh,yuvraj_2601ec26@iitp.ac.in,Rural Development Wing
+133,2601EC27,Srinaina Gowru,srinaina_2601ec27@iitp.ac.in,Design and Curation Wing
+134,2601EC28,Threenender Bhukya,threenender_2601ec28@iitp.ac.in,Environmental Wing
+135,2601EC29,Anirudh G,anirudh_2601ec29@iitp.ac.in,Teaching and Technical Wing
+136,2601EC31,Mallika Lokesh,mallika_2601ec31@iitp.ac.in,Environmental Wing
+137,2601EC32,Panthangi Abhishek,panthangi_2601ec32@iitp.ac.in,Environmental Wing
+138,2601EC35,Taneti Venkata Rama Kanth,taneti_2601ec35@iitp.ac.in,Environmental Wing
+139,2601EC41,Suyash Verma,suyash_2601ec41@iitp.ac.in,Environmental Wing
+140,2601EC42,Gavva Abhiram Reddy,gavva_2601ec42@iitp.ac.in,Rural Development Wing
+141,2601EC43,Krishna Sharma,krishna_2601ec43@iitp.ac.in,Teaching and Technical Wing
+142,2601EC44,Shivansh Kumar,shivansh_2601ec44@iitp.ac.in,Environmental Wing
+143,2601EC45,Shah Vraj Ketul,shah_2601ec45@iitp.ac.in,Teaching and Technical Wing
+144,2601EE01,Satya Kumar Shubham,satya_2601ee01@iitp.ac.in,Environmental Wing
+145,2601EE03,Mankhush,mankhush_2601ee03@iitp.ac.in,Rural Development Wing
+146,2601EE04,Bhagat Anushka Satyaprakash,bhagat_2601ee04@iitp.ac.in,Rural Development Wing
+147,2601EE05,Purnim Raj,purnim_2601ee05@iitp.ac.in,Teaching and Technical Wing
+148,2601EE07,Ayush Narayan,ayush_2601ee07@iitp.ac.in,Teaching and Technical Wing
+149,2601EE08,Ayush Raj,ayush_2601ee08@iitp.ac.in,Teaching and Technical Wing
+150,2601EE10,Brajendra Kumar,brajendra_2601ee10@iitp.ac.in,Teaching and Technical Wing
+151,2601EE15,Sumit Sarkar,sumit_2601ee15@iitp.ac.in,Rural Development Wing
+152,2601EE17,Sreeman Buram,sreeman_2601ee17@iitp.ac.in,Environmental Wing
+153,2601EE22,Raj Shekhar,raj_2601ee22@iitp.ac.in,Environmental Wing
+154,2601EE23,Pratyusha Maji,pratyusha_2601ee23@iitp.ac.in,Teaching and Technical Wing
+155,2601EE24,Ambala Athrij,ambala_2601ee24@iitp.ac.in,Environmental Wing
+156,2601EE25,Gugulothu Ram Charan,gugulothu_2601ee25@iitp.ac.in,Environmental Wing
+157,2601EE26,Samir Kumar,samir_2601ee26@iitp.ac.in,Environmental Wing
+158,2601EE27,Abhigyan Singh,abhigyan_2601ee27@iitp.ac.in,Prerna Wing
+159,2601EE28,Abhayanand Kumar,abhayanand_2601ee28@iitp.ac.in,Teaching and Technical Wing
+160,2601EE29,Ranveer Singh,ranveer_2601ee29@iitp.ac.in,Rural Development Wing
+161,2601EE30,Boda Ram Charan,boda_2601ee30@iitp.ac.in,Environmental Wing
+162,2601EE32,Paridhi Agrawal,paridhi_2601ee32@iitp.ac.in,Rural Development Wing
+163,2601EE33,Ryan Mathew,ryan_2601ee33@iitp.ac.in,Teaching and Technical Wing
+164,2601EE37,Kodavath Harshavardhan,kodavath_2601ee37@iitp.ac.in,Environmental Wing
+165,2601EE40,Bhosale Saksham Sanjaykumar,bhosale_2601ee40@iitp.ac.in,Teaching and Technical Wing
+166,2601EE42,Kale Sneha Zelaji,kale_2601ee42@iitp.ac.in,Design and Curation Wing
+167,2601EE44,Lakavath Anirvinya,lakavath_2601ee44@iitp.ac.in,Rural Development Wing
+168,2601EE46,SHAIK NOUSHEER,shaik_2601ee46@iitp.ac.in,Environmental Wing
+169,2601ES05,Maloth Parimala,maloth_2601es05@iitp.ac.in,Prerna Wing
+170,2601ES14,Didde Ramya,didde_2601es14@iitp.ac.in,Rural Development Wing
+171,2601ES17,Abhishek V Singh,abhishek_2601es17@iitp.ac.in,Prerna Wing
+172,2601ES20,Jayshri Agarwal,jayshri_2601es20@iitp.ac.in,Design and Curation Wing
+173,2601ES22,Pradyuman Singh Shekhawat,pradyuman_2601es22@iitp.ac.in,Prerna Wing
+174,2601MC02,Harish Attri,harish_2601mc02@iitp.ac.in,Teaching and Technical Wing
+175,2601MC04,Chandrachur Mondal,chandrachur_2601mc04@iitp.ac.in,Prerna Wing
+176,2601MC05,Lakshya Malkhede,lakshya_2601mc05@iitp.ac.in,Design and Curation Wing
+177,2601MC06,Saksham Mittal,saksham_2601mc06@iitp.ac.in,Teaching and Technical Wing
+178,2601MC09,Anubhu Das,anubhu_2601mc09@iitp.ac.in,Design and Curation Wing
+179,2601MC12,Rehan Riazahmad Mulla,rehan_2601mc12@iitp.ac.in,Prerna Wing
+180,2601MC13,Chirag Kumar,chirag_2601mc13@iitp.ac.in,Teaching and Technical Wing
+181,2601MC15,Devangana Aneesh,devangana_2601mc15@iitp.ac.in,Prerna Wing
+182,2601MC16,Satvik Deorah,satvik_2601mc16@iitp.ac.in,Teaching and Technical Wing
+183,2601MC17,Deepak Kumar,deepak_2601mc17@iitp.ac.in,Teaching and Technical Wing
+184,2601MC20,Yash Purushottam Sawsakade,yash_2601mc20@iitp.ac.in,Teaching and Technical Wing
+185,2601MC24,Madhavaram Saharsh,madhavaram_2601mc24@iitp.ac.in,Environmental Wing
+186,2601MC28,Tejas Babhale,tejas_2601mc28@iitp.ac.in,Prerna Wing
+187,2601MC29,Kumar Naman,kumar_2601mc29@iitp.ac.in,Teaching and Technical Wing
+188,2601MC32,Varun,varun_2601mc32@iitp.ac.in,Environmental Wing
+189,2601MC33,Sourabh Kumar,sourabh_2601mc33@iitp.ac.in,Prerna Wing
+190,2601MC37,Banoth Sidharth,banoth_2601mc37@iitp.ac.in,Design and Curation Wing
+191,2601MC38,Ishan Mittal,ishan_2601mc38@iitp.ac.in,Teaching and Technical Wing
+192,2601MC39,Addala Suhani,addala_2601mc39@iitp.ac.in,Prerna Wing
+193,2601MC40,Yash Prasad,yash_2601mc40@iitp.ac.in,Rural Development Wing
+194,2601MC41,Aayush Paikaray,aayush_2601mc41@iitp.ac.in,Rural Development Wing
+195,2601MC44,Mothukupally Nihal Reddy,mothukupally_2601mc44@iitp.ac.in,Teaching and Technical Wing
+196,2601MC45,Tadi Bhargava Siva Durga,tadi_2601mc45@iitp.ac.in,Rural Development Wing
+197,2601MC50,Lakshmi Patni,lakshmi_2601mc50@iitp.ac.in,Teaching and Technical Wing
+198,2601ME02,Kumar Shankar,kumar_2601me02@iitp.ac.in,Teaching and Technical Wing
+199,2601ME04,Chinmay Aggarwal,chinmay_2601me04@iitp.ac.in,Teaching and Technical Wing
+200,2601ME06,Ali Ali,ali_2601me06@iitp.ac.in,Teaching and Technical Wing
+201,2601ME07,Aryan,aryan_2601me07@iitp.ac.in,Rural Development Wing
+202,2601ME08,Shreyansh Ravi,shreyansh_2601me08@iitp.ac.in,Teaching and Technical Wing
+203,2601ME10,Pradyumna Vasant Patil,pradyumna_2601me10@iitp.ac.in,Prerna Wing
+204,2601ME11,Satyam Singh,satyam_2601me11@iitp.ac.in,Teaching and Technical Wing
+205,2601ME12,Gulshan Kumar,gulshan_2601me12@iitp.ac.in,Rural Development Wing
+206,2601ME14,Varanasi Sai Rishin,varanasi_2601me14@iitp.ac.in,Environmental Wing
+207,2601ME16,Adrita Bej,adrita_2601me16@iitp.ac.in,Environmental Wing
+208,2601ME17,Krishnam,krishnam_2601me17@iitp.ac.in,Teaching and Technical Wing
+209,2601ME21,Anurag Singh,anurag_2601me21@iitp.ac.in,Teaching and Technical Wing
+210,2601ME22,Gorle Gnanadeep,gorle_2601me22@iitp.ac.in,Rural Development Wing
+211,2601ME23,Dulapalli Leela Krishna,dulapalli_2601me23@iitp.ac.in,Rural Development Wing
+212,2601ME24,Hazare Sanvi,hazare_2601me24@iitp.ac.in,Prerna Wing
+213,2601ME29,Navanitha J,navanitha_2601me29@iitp.ac.in,Prerna Wing
+214,2601ME30,Mahika Paliwal,mahika_2601me30@iitp.ac.in,Rural Development Wing
+215,2601ME32,Yashaswi Sudhanv Balanagu,yashaswi_2601me32@iitp.ac.in,Environmental Wing
+216,2601ME34,Singh Aryaman Harendra,singh_2601me34@iitp.ac.in,Environmental Wing
+217,2601ME35,Ashish Jacob,ashish_2601me35@iitp.ac.in,Environmental Wing
+218,2601ME36,Aditya Maurya,aditya_2601me36@iitp.ac.in,Teaching and Technical Wing
+219,2601ME37,Jajimogga Teja,jajimogga_2601me37@iitp.ac.in,Environmental Wing
+220,2601ME38,Namala Yeshwanth Kumar,namala_2601me38@iitp.ac.in,Environmental Wing
+221,2601ME40,Aditya Kumar,aditya_2601me40@iitp.ac.in,Teaching and Technical Wing
+222,2601ME43,Swapnil Chowdhury,swapnil_2601me43@iitp.ac.in,Teaching and Technical Wing
+223,2601ME44,S Lithesh Chetan Vadavelli,s_2601me44@iitp.ac.in,Prerna Wing
+224,2601ME46,Krish Kumar,krish_2601me46@iitp.ac.in,Prerna Wing
+225,2601ME48,Dara Vinoothna,dara_2601me48@iitp.ac.in,Prerna Wing
+226,2601ME50,Yusuf Imtiyaz,yusuf_2601me50@iitp.ac.in,Teaching and Technical Wing
+227,2601ME52,Kottisa Haripreeth,kottisa_2601me52@iitp.ac.in,Environmental Wing
+228,2601ME53,Yelaka Midhun Sai,yelaka_2601me53@iitp.ac.in,Prerna Wing
+229,2601ME55,Ratan Kumar Yadav,ratan_2601me55@iitp.ac.in,Teaching and Technical Wing
+230,2601ME56,Muttamsetti Jayasri Durga,muttamsetti_2601me56@iitp.ac.in,Environmental Wing
+231,2601ME59,Poornima Tiwari,poornima_2601me59@iitp.ac.in,Teaching and Technical Wing
+232,2601ME60,Rudra Mahlawat,rudra_2601me60@iitp.ac.in,Teaching and Technical Wing
+233,2601ME61,Shreya Kumari,shreya_2601me61@iitp.ac.in,Rural Development Wing
+234,2601ME64,Anaghmoy Chatterjee,anaghmoy_2601me64@iitp.ac.in,Teaching and Technical Wing
+235,2601ME66,Aadya Singh,aadya_2601me66@iitp.ac.in,Teaching and Technical Wing
+236,2601ME69,Anurag Nallani,anurag_2601me69@iitp.ac.in,Prerna Wing
+237,2601ME71,Shivjeet Kumar,shivjeet_2601me71@iitp.ac.in,Prerna Wing
+238,2601ME73,Ramavath Nithin kumar naik,ramavath_2601me73@iitp.ac.in,Prerna Wing
+239,2601ME74,Bhukya Mohan,bhukya_2601me74@iitp.ac.in,Environmental Wing
+240,2601ME77,Atharv Joshi,atharv_2601me77@iitp.ac.in,Rural Development Wing
+241,2601ME78,Murukuti Sridhar Reddy,murukuti_2601me78@iitp.ac.in,Environmental Wing
+242,2601ME79,Bakuri Nava Deep Raju,bakuri_2601me79@iitp.ac.in,Rural Development Wing
+243,2601ME80,Gauransh Sharma,gauransh_2601me80@iitp.ac.in,Teaching and Technical Wing
+244,2601ME81,Ritu Kumari,ritu_2601me81@iitp.ac.in,Prerna Wing
+245,2601ME82,Parumandla Jashwanth,parumandla_2601me82@iitp.ac.in,Teaching and Technical Wing
+246,2601MM04,Anushka Ghosh,anushka_2601mm04@iitp.ac.in,Teaching and Technical Wing
+247,2601MM05,Samaksh Vishnoi,samaksh_2601mm05@iitp.ac.in,Teaching and Technical Wing
+248,2601MM06,Dhanjit Das,dhanjit_2601mm06@iitp.ac.in,Prerna Wing
+249,2601MM10,Apurva Pranay,apurva_2601mm10@iitp.ac.in,Prerna Wing
+250,2601MM11,Drishti,drishti_2601mm11@iitp.ac.in,Rural Development Wing
+251,2601MM15,Abhishek,abhishek_2601mm15@iitp.ac.in,Design and Curation Wing
+252,2601MM17,Jayant Raj,jayant_2601mm17@iitp.ac.in,Rural Development Wing
+253,2601MM18,Shivank Goyal,shivank_2601mm18@iitp.ac.in,Rural Development Wing
+254,2601MM19,Harshawardhan Navnath Gaikwad,harshawardhan_2601mm19@iitp.ac.in,Teaching and Technical Wing
+255,2601MM21,Samarth Bajpai,samarth_2601mm21@iitp.ac.in,Teaching and Technical Wing
+256,2601MM23,Arsia,arsia_2601mm23@iitp.ac.in,Design and Curation Wing
+257,2601MM24,Aaranya Ganotra,aaranya_2601mm24@iitp.ac.in,Teaching and Technical Wing
+258,2601MM25,Shivam Krishnan,shivam_2601mm25@iitp.ac.in,Teaching and Technical Wing
+259,2601MM30,Shyam Sundar Ghorui,shyam_2601mm30@iitp.ac.in,Rural Development Wing
+260,2601MM31,Rizwanur Rahman,rizwanur_2601mm31@iitp.ac.in,Teaching and Technical Wing
+261,2601MM32,Bhushan Vijay Barde,bhushan_2601mm32@iitp.ac.in,Teaching and Technical Wing
+262,2601MM33,Kirti Vitthal Fasate,kirti_2601mm33@iitp.ac.in,Rural Development Wing
+263,2601MM34,Chintala Rishitha,chintala_2601mm34@iitp.ac.in,Rural Development Wing
+264,2601MM35,Wagmare Ajay,wagmare_2601mm35@iitp.ac.in,Prerna Wing
+265,2601MM36,Gudala Venkata Pranav Bhanu,gudala_2601mm36@iitp.ac.in,Prerna Wing
+266,2601MM38,Rounak Mandal,rounak_2601mm38@iitp.ac.in,Teaching and Technical Wing
+267,2601MM39,Tamalika Sau,tamalika_2601mm39@iitp.ac.in,Prerna Wing
+268,2601MM40,Trisha Sharma,trisha_2601mm40@iitp.ac.in,Prerna Wing
+269,2601MM42,Ayansh Pathak,ayansh_2601mm42@iitp.ac.in,Teaching and Technical Wing
+270,2601MM44,Ramavath Praveen Kumar,ramavath_2601mm44@iitp.ac.in,Environmental Wing
+271,2601PH02,Amit Dhakad,amit_2601ph02@iitp.ac.in,Prerna Wing
+272,2601PH04,Aarna Niti Pushkar,aarna_2601ph04@iitp.ac.in,Teaching and Technical Wing
+273,2601PH05,Rohan Kumar Singh,rohan_2601ph05@iitp.ac.in,Rural Development Wing
+274,2601PH07,Shlok Tanmaya,shlok_2601ph07@iitp.ac.in,Rural Development Wing
+275,2601PH13,Shaswat Gangopadhyay,shaswat_2601ph13@iitp.ac.in,Teaching and Technical Wing
+276,2601PH14,Ujjwal Priyedarshi,ujjwal_2601ph14@iitp.ac.in,Teaching and Technical Wing
+277,2601PH20,Neha,neha_2601ph20@iitp.ac.in,Design and Curation Wing
+278,2601PH23,Akhil Saini,akhil_2601ph23@iitp.ac.in,Teaching and Technical Wing
+279,2601PH24,Sivani Anamika R,sivani_2601ph24@iitp.ac.in,Prerna Wing
+280,2601PH26,Yenuga Peddireddy Gari Krishna,yenuga_2601ph26@iitp.ac.in,Rural Development Wing
+281,2601PH29,Suraj Singh,suraj_2601ph29@iitp.ac.in,Rural Development Wing
+282,2601PH30,Ponnakanti Vivek Ripunjay,ponnakanti_2601ph30@iitp.ac.in,Teaching and Technical Wing
+283,2601PH31,Banothu Sai Charan,banothu_2601ph31@iitp.ac.in,Rural Development Wing
+284,2602CM04,Jaiveen Kaur,jaiveen_2602cm04@iitp.ac.in,Teaching and Technical Wing
+285,2602CM05,Ayansh Utkarsh Maurya,ayansh_2602cm05@iitp.ac.in,Teaching and Technical Wing
+286,2602CM09,K Naveen Nayak,k_2602cm09@iitp.ac.in,Prerna Wing
+287,2602CS02,Bodapati Veera Venkata Ravi,bodapati_2602cs02@iitp.ac.in,Teaching and Technical Wing
+288,2602CS05,Dev Asati,dev_2602cs05@iitp.ac.in,Teaching and Technical Wing
+289,2602CS06,Somya Tikwani,somya_2602cs06@iitp.ac.in,Teaching and Technical Wing
+290,2602CS07,Muniza Parvin,muniza_2602cs07@iitp.ac.in,Prerna Wing
+291,2602CS08,Anurag Kumar,anurag_2602cs08@iitp.ac.in,Teaching and Technical Wing
+292,2602CS09,Ankit Meena,ankit_2602cs09@iitp.ac.in,Environmental Wing
+293,2602CS11,Rishu Kumar,rishu_2602cs11@iitp.ac.in,Environmental Wing
+294,2602GT01,Satyam Sinha,satyam_2602gt01@iitp.ac.in,Environmental Wing
+295,2602GT02,Aayush Mishra,aayush_2602gt02@iitp.ac.in,Environmental Wing
+296,2602GT03,Aditya Kaushal,aditya_2602gt03@iitp.ac.in,Prerna Wing
+297,2602GT04,Daidipya Dadhich,daidipya_2602gt04@iitp.ac.in,Rural Development Wing
+298,2602GT05,Yashraj Jeph,yashraj_2602gt05@iitp.ac.in,Environmental Wing
+299,2602GT06,Swati,swati_2602gt06@iitp.ac.in,Environmental Wing
+300,2602MC03,Abhishek Kumar,abhishek_2602mc03@iitp.ac.in,Teaching and Technical Wing
+301,2602MC04,Raikwar Shruti Vinod,raikwar_2602mc04@iitp.ac.in,Rural Development Wing
+302,2602MC06,Unhone Pushpak Yogesh,unhone_2602mc06@iitp.ac.in,Rural Development Wing
+303,2602MC07,Potnuru Sartak,potnuru_2602mc07@iitp.ac.in,Rural Development Wing
+304,2602MC08,Mohammad Bohra,bohra_2602mc08@iitp.ac.in,Prerna Wing
+305,2602MT10,S K Tharun,s_2602mt10@iitp.ac.in,Teaching and Technical Wing
+306,2602PC01,R Syam Sundar Reddy,shyam_2602pc01@iitp.ac.in,Rural Development Wing
+307,2602PC02,Mandalapu Sai Sahasra,mandalapu_2602pc02@iitp.ac.in,Environmental Wing
+308,2602PC03,Rohit Kumar Behera,rohit_2602pc03@iitp.ac.in,Environmental Wing
+309,2602PC04,Kondaka Yasaswy,kondaka_2602pc04@iitp.ac.in,Rural Development Wing
+310,2602PC06,Jiya Ganeshsingh Chauhan,jiya_2602pc06@iitp.ac.in,Prerna Wing
+311,2602PH02,ARKA DAS,arka_2602ph02@iitp.ac.in,Rural Development Wing
+312,2602ST02,Saptarshi Patra,saptarshi_2602st02@iitp.ac.in,Prerna Wing
+313,2602ST03,Natasha Sen,natasha_2602st03@iitp.ac.in,Prerna Wing
+314,2602ST05,Anirudh Makkapati,anirudh_2602st05@iitp.ac.in,Design and Curation Wing
+315,2602ST06,Pranjal Narendra Chaudhari,pranjal_2602st06@iitp.ac.in,Prerna Wing
+316,2602VL03,Aryan Singh,aryan_2602vl03@iitp.ac.in,Prerna Wing
+317,2602VL06,Harshit Bajaj,harshit_2602vl06@iitp.ac.in,Teaching and Technical Wing
+318,2602VL07,Neeraj Guguloth,neeraj_2602vl07@iitp.ac.in,Rural Development Wing
+319,2602VL08,Dhande Hemani Vinod,dhande_2602vl08@iitp.ac.in,Design and Curation Wing
+320,2603AI01,Nagella Shrivatsa Prasad,nagella_2603ai01@iitp.ac.in,Prerna Wing
+321,2603AI02,Nishad Baviskar,nishad_2603ai02@iitp.ac.in,Design and Curation Wing
+322,2603AI03,Rahul Prasad P,rahul_2603ai03@iitp.ac.in,Design and Curation Wing
+323,2603CB01,Pratheeksha B G,pratheeksha_2603cb01@iitp.ac.in,Environmental Wing
+324,2603CB02,Sriejan Das,sriejan_2603cb02@iitp.ac.in,Prerna Wing
+325,2603CB03,Bishu Bhaskar,bishu_2603cb03@iitp.ac.in,Teaching and Technical Wing
+326,2603CB04,Sachin Kumar,sachin_2603cb04@iitp.ac.in,Environmental Wing
+327,2603CE02,Vivek Kumar Singh,vivek_2603ce02@iitp.ac.in,Prerna Wing
+328,2603CE04,Bonuga Koushik Chandra Reddy,bonuga_2603ce04@iitp.ac.in,Teaching and Technical Wing
+329,2603CE06,Ayush Singh,ayush_2603ce06@iitp.ac.in,Design and Curation Wing
+330,2603CS01,Alankrit Patel,alankrit_2603cs01@iitp.ac.in,Teaching and Technical Wing
+331,2603CS02,Champa Yeshey,champa_2603cs02@iitp.ac.in,Prerna Wing
+332,2603CT03,Dipu Kumar Kewat,dipu_2603ct03@iitp.ac.in,Teaching and Technical Wing
+333,2603EC01,Aditya Kumar Bhagat,aditya_2603ec01@iitp.ac.in,Teaching and Technical Wing
+334,2603EC02,Kaushik Kumar,kaushik_2603ec02@iitp.ac.in,Prerna Wing
+335,2603EE03,LAKSHMI REVANTH SAI PALADUGU,lakshmi_2603ee03@iitp.ac.in,Prerna Wing
+336,2603EE04,Putluru Sai Varshith Reddy,putluru_2603ee04@iitp.ac.in,Environmental Wing
+337,2603EE05,Abhinav Anand,abhinav_2603ee05@iitp.ac.in,Rural Development Wing
+338,2603ES01,Ramchandra Tholiya,ramchandra_2603es01@iitp.ac.in,Environmental Wing
+339,2603ES03,Pranil Nikhil Dube,pranil_2603es03@iitp.ac.in,Teaching and Technical Wing
+340,2603ES04,Rachit Agarwal,rachit_2603es04@iitp.ac.in,Prerna Wing
+341,2603MC03,Rashmita Yadav,rashmita_2603mc03@iitp.ac.in,Environmental Wing
+342,2603ME01,Pranjal Prashant Nerkar,pranjal_2603me01@iitp.ac.in,Teaching and Technical Wing
+343,2603ME02,Karwar Vedant Dattatray,karwar_2603me02@iitp.ac.in,Prerna Wing
+344,2603ME04,Vikash Vaibhav,vikash_2603me04@iitp.ac.in,Teaching and Technical Wing
+345,2603ME05,Sarda Dhruv,sarda_2603me05@iitp.ac.in,Environmental Wing
+346,2603ME07,Biroju Rushikesh,biroju_2603me07@iitp.ac.in,Environmental Wing
+347,2603ME09,Parikshit Bedi,parikshit_2603me09@iitp.ac.in,Environmental Wing
+348,2603ME13,Silimkar Tejas Mangesh,silimkar_2603me13@iitp.ac.in,Teaching and Technical Wing
+349,2603MM02,Ritojoy Mandal,ritojoy_2603mm02@iitp.ac.in,Environmental Wing
+350,2603MM04,Adya Agarwal,adya_2603mm04@iitp.ac.in,Environmental Wing
+351,2603MM05,Telugu Shashank,telugu_2603mm05@iitp.ac.in,Environmental Wing
+352,2603PH01,Aryan Aggrawal,aryan_2603ph01@iitp.ac.in,Rural Development Wing
+353,2603PH02,Arka Das,arka_2603ph02@iitp.ac.in,Rural Development Wing
+354,2603PH03,Mahak Shakya,mahak_2603ph03@iitp.ac.in,Prerna Wing

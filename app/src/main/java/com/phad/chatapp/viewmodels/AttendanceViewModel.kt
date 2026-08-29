@@ -417,7 +417,14 @@ class AttendanceViewModel(private val application: Application) : ViewModel() {
             }
             Log.d(TAG, "Raw users fetched: ${usersSnap.documents.size}")
 
-            // 3. Include ONLY users who have NOT submitted attendance through any way (truly absent)
+            // 3. Extract previously exempted/zero-penalty roll numbers from previous rounds
+            @Suppress("UNCHECKED_CAST")
+            val previouslyExempted = ((eventDoc.get("exemptedRollNumbers") as? List<*>)?.filterIsInstance<String>() ?: emptyList())
+                .plus((eventDoc.get("zeroPenaltyRollNumbers") as? List<*>)?.filterIsInstance<String>() ?: emptyList())
+                .map { it.uppercase() }
+                .toSet()
+
+            // 4. Include ONLY users who have NOT submitted attendance through any way (truly absent)
             val volunteers = usersSnap.documents.mapNotNull { doc ->
                 val userType = doc.getString("userType") ?: "student"
                 if (userType.equals("Admin", ignoreCase = true)) return@mapNotNull null
@@ -434,12 +441,18 @@ class AttendanceViewModel(private val application: Application) : ViewModel() {
                     return@mapNotNull null
                 }
 
-                // Truly absent volunteer
+                // Truly absent volunteer with memory of previous round exemptions
+                val initialSelection = if (rollNumber in previouslyExempted) {
+                    PenaltySelection.ZERO
+                } else {
+                    PenaltySelection.NEGATIVE
+                }
+
                 VolunteerPenaltyState(
                     rollNumber = rollNumber,
                     name = name,
                     isAbsent = true,
-                    selection = PenaltySelection.NEGATIVE
+                    selection = initialSelection
                 )
             }.sortedBy { it.rollNumber }
 

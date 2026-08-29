@@ -51,7 +51,19 @@ def to_email(value: str) -> str:
 def parse_wings(value: str) -> List[str]:
     if not value:
         return []
-    return [p.strip() for p in value.split(",") if p.strip()]
+    
+    wings = set()
+    parts = value.split(",")
+    for p in parts:
+        clean = p.strip()
+        if not clean: continue
+        lower = clean.lower()
+        if "chetna" in lower or "prayatna" in lower:
+            wings.add("Prerna Wing")
+        else:
+            wings.add(clean)
+            
+    return sorted(list(wings))
 
 
 def init_firebase(service_account_path: str, project_id: Optional[str]) -> firestore.Client:

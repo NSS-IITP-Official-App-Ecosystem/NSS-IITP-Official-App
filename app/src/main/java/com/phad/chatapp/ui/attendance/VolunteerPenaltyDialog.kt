@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -22,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -73,6 +75,7 @@ fun VolunteerPenaltyDialog(
     var isApplying by remember { mutableStateOf(false) }
     var showConfirmDialog by remember { mutableStateOf(false) }
 
+    var quickExemptInput by remember { mutableStateOf("") }
     var loadError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(eventId) {
@@ -185,9 +188,76 @@ fun VolunteerPenaltyDialog(
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 12.dp),
+                            .padding(bottom = 10.dp),
                         shape = RoundedCornerShape(8.dp)
                     )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = quickExemptInput,
+                            onValueChange = { quickExemptInput = it },
+                            placeholder = { Text("Paste Roll Nos to Exempt (0 hrs)...", fontSize = 12.sp, color = Color.Gray) },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color(0xFF2E2E2E),
+                                unfocusedContainerColor = Color(0xFF2E2E2E),
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedIndicatorColor = Color(0xFF757575),
+                                unfocusedIndicatorColor = Color.Transparent,
+                                cursorColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        Button(
+                            onClick = {
+                                val inputRolls = quickExemptInput
+                                    .split(Regex("[,\\s;]+"))
+                                    .map { it.trim().uppercase() }
+                                    .filter { it.isNotBlank() }
+                                    .toSet()
+
+                                if (inputRolls.isEmpty()) {
+                                    Toast.makeText(context, "Please enter at least one roll number", Toast.LENGTH_SHORT).show()
+                                    return@Button
+                                }
+
+                                val allAbsentRolls = volunteers.map { it.rollNumber.uppercase() }.toSet()
+                                val matched = inputRolls.filter { it in allAbsentRolls }
+                                val unmatched = inputRolls.filter { it !in allAbsentRolls }
+
+                                if (matched.isNotEmpty()) {
+                                    volunteers = volunteers.map { vol ->
+                                        if (vol.rollNumber.uppercase() in matched) {
+                                            vol.copy(selection = PenaltySelection.ZERO)
+                                        } else {
+                                            vol
+                                        }
+                                    }
+                                }
+
+                                val message = when {
+                                    matched.isEmpty() -> "No matching absent students found for: ${unmatched.joinToString(", ")}"
+                                    unmatched.isEmpty() -> "Marked ${matched.size} student(s) as 0 Hours"
+                                    else -> "Marked ${matched.size} as 0 Hours. Not found / already attended: ${unmatched.joinToString(", ")}"
+                                }
+                                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                                quickExemptInput = ""
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF616161)),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+                        ) {
+                            Text("Set 0", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                    }
 
                     Row(
                         modifier = Modifier
@@ -333,7 +403,7 @@ private fun BulkSetButton(text: String, color: Color, onClick: () -> Unit) {
     TextButton(
         onClick = onClick,
         colors = ButtonDefaults.textButtonColors(contentColor = color),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
         modifier = Modifier
             .height(32.dp)
             .defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)

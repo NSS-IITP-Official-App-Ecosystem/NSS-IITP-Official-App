@@ -580,13 +580,29 @@ exports.onAttendanceCreate = onDocumentCreated(
       const userRef = db.collection('users').doc(rollNumber);
       const semester = calculateSemester(eventDate, eventId);
 
+      const negativeHours = Number(event.negativeHours) || 0;
+      const normRoll = rollNumber.toUpperCase();
+      const penalizedRolls = (event.penalizedRollNumbers || []).map(r => r.toUpperCase());
+      const negativePenaltyRolls = (event.negativePenaltyRollNumbers || []).map(r => r.toUpperCase());
+      const wasPenalized = penalizedRolls.includes(normRoll) || negativePenaltyRolls.includes(normRoll);
+
+      let totalHoursToAdd = hours;
+      if (event.mandatory && negativeHours > 0 && wasPenalized) {
+        totalHoursToAdd += negativeHours; // Refund previously deducted penalty
+        console.log(`[onAttendanceCreate] Refunding ${negativeHours}h penalty for ${rollNumber} who attended event ${eventId}.`);
+        await eventRef.update({
+          penalizedRollNumbers: FieldValue.arrayRemove(rollNumber, normRoll),
+          negativePenaltyRollNumbers: FieldValue.arrayRemove(rollNumber, normRoll)
+        }).catch(err => console.warn('[onAttendanceCreate] Non-fatal arrayRemove error:', err));
+      }
+
       const updates = {
         eventsAttended: FieldValue.increment(1),
-        hours: FieldValue.increment(hours),
+        hours: FieldValue.increment(totalHoursToAdd),
         eventsList: FieldValue.arrayUnion(eventId)
       };
-      if (semester === 1) updates.sem1Hours = FieldValue.increment(hours);
-      if (semester === 2) updates.sem2Hours = FieldValue.increment(hours);
+      if (semester === 1) updates.sem1Hours = FieldValue.increment(totalHoursToAdd);
+      if (semester === 2) updates.sem2Hours = FieldValue.increment(totalHoursToAdd);
 
       await userRef.set(updates, { merge: true });
 
@@ -652,6 +668,8 @@ exports.applyAbsentPenalty = onRequest({ region: REGION, invoker: 'public' }, as
     const { eventId, positiveRollNumbers, negativeRollNumbers, zeroRollNumbers } = req.body || {};
     if (!eventId) throw Object.assign(new Error('Missing eventId'), { status: 400 });
 
+    const hasSelectiveLists = Array.isArray(positiveRollNumbers) && Array.isArray(negativeRollNumbers) && Array.isArray(zeroRollNumbers);
+
     const eventRef = db.collection('NSS_Events_Attendence').doc(eventId);
     const eventSnap = await eventRef.get();
 
@@ -662,7 +680,9 @@ exports.applyAbsentPenalty = onRequest({ region: REGION, invoker: 'public' }, as
     if (!event.mandatory) {
       return res.json({ ok: false, reason: 'Event is not mandatory. No penalty applied.' });
     }
-    if (event.absentPenaltyApplied) {
+
+    // Only block repeated legacy calls without selective lists; allow re-adjustments and refunds when selective lists are provided
+    if (event.absentPenaltyApplied && !hasSelectiveLists) {
       return res.json({ ok: false, reason: 'Penalty already applied for this event.' });
     }
 
@@ -693,10 +713,6 @@ exports.applyAbsentPenalty = onRequest({ region: REGION, invoker: 'public' }, as
     let penaltyCount = 0;
     let updatedPenalizedRolls = [...(event.penalizedRollNumbers || [])];
     let penalizedChanged = false;
-
-    // Bug fix: all three lists must be present (use && not ||).
-    // With ||, a request missing two of the three lists would still pass the guard.
-    const hasSelectiveLists = Array.isArray(positiveRollNumbers) && Array.isArray(negativeRollNumbers) && Array.isArray(zeroRollNumbers);
 
     if (!hasSelectiveLists) {
       throw Object.assign(new Error('Outdated App Version: The app did not send positive/negative/zero lists. Please update your app.'), { status: 400 });
@@ -744,6 +760,8 @@ exports.applyAbsentPenalty = onRequest({ region: REGION, invoker: 'public' }, as
         updatedExempted.push(r);
         exemptedChanged = true;
       }
+      // Ensure uncovered absent students are processed in zeroSet to refund any previous penalty
+      zeroSet.add(r);
     }
 
     for (const rollNumber of Object.keys(userMap)) {

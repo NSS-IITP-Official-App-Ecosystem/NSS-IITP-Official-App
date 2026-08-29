@@ -1,0 +1,25 @@
+NSS IITP Pre-Reset Backup Summary
+Generated: 2026-08-13 00:37:40
+==================================================
+
+users collection:
+  Total documents:    418
+  Admins:             54
+  Students:           364
+  Non-zero hours:     363
+
+NSS_Events_Attendence:
+  Total events:       367
+  Attendance records: 10334
+
+Other (counted, not exported):
+  PhotoAttendanceLog:      37
+  scheduledNotifications:  15
+
+Files written:
+  C:\NSS IITP APP\NSS-IITP-Official-App\scripts\backups\20260813_003646_users.json
+  C:\NSS IITP APP\NSS-IITP-Official-App\scripts\backups\20260813_003646_events.json
+
+IMPORTANT: These JSON files are a human-readable snapshot.
+For a true restore-capable backup, use the official
+Firestore export to Cloud Storage.
