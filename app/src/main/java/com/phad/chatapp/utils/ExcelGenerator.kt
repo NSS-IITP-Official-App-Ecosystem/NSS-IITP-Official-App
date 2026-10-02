@@ -147,7 +147,7 @@ class ExcelGenerator(private val context: Context) {
             val sheet1 = workbook.createSheet("Open & DNC Events")
             // Header Row
             val headerRow1 = sheet1.createRow(0)
-            val headers1 = mutableListOf("Name", "Roll", "Wing", "Wing Hours", "Open Event Hours", "Extra Events")
+            val headers1 = mutableListOf("Name", "Roll", "Wing", "Wing Hours", "Open Event Hours", "Total Hours", "Extra Events")
             headers1.addAll(sheet1Events.map { it.getEventName() })
             
             // Styles
@@ -182,13 +182,14 @@ class ExcelGenerator(private val context: Context) {
                 row.createCell(2).setCellValue(student.wings.joinToString("\n"))
                 row.createCell(3).setCellValue(wHours)
                 row.createCell(4).setCellValue(oHours)
-                row.createCell(5).setCellValue(getExtraEvents(student))
+                row.createCell(5).setCellValue(wHours + oHours)
+                row.createCell(6).setCellValue(getExtraEvents(student))
 
                 // Event Columns (now starting at column 6)
                 val studentHoursMap = perStudentEventHours[roll] ?: emptyMap()
                 
                 sheet1Events.forEachIndexed { evtIndex, event ->
-                    val cell = row.createCell(6 + evtIndex)
+                    val cell = row.createCell(7 + evtIndex)
                     val hours = studentHoursMap[event.id]
                     
                     if (hours != null) {

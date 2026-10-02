@@ -1,0 +1,90 @@
+Loaded 448 users and 69 events from Firestore.
+
+=======================================================
+DATABASE AUDIT RESULTS: 12 DISCREPANCIES FOUND OUT OF 448 USERS
+=======================================================
+
+Roll: 2601CS24   Name: Jadhav Prajyot           
+  ò Sem 1 Hours : Stored=20.0 | Calculated=18.0 (Diff: 2.0)
+  ò Sem 2 Hours : Stored=0.0 | Calculated=0.0 (Diff: 0.0)
+  ò Total Hours : Stored=20.0 | Calculated=18.0 (Diff: 2.0)
+  ò Events Count: Stored=9 | Calculated=8 (Diff: 1)
+  ò Breakdown   : +2.0h (10_Sep_BVC_session), +0.0h (12_Sep_VBYLD_Certificate_Submission), +4.0h (15_Aug_Independence_Day_Tiranga_Rally), +4.0h (16_Aug_NSS_Official_Orientation), +2.0h (25_Aug_Environmental_wing_orientation), -2.0h (26_Aug_Blood__Platelet_Donation_Awareness_Session), +3.0h (29_Aug_Blood_Donation_Slot_2), +3.0h (29_Aug_Blood_Donation_Slot_4), +2.0h (5_Sep_My_Bharat_Portal_Registration_Drive)
+
+Roll: 2601CT17   Name: Mayank Jangid            
+  ò Sem 1 Hours : Stored=20.0 | Calculated=18.0 (Diff: 2.0)
+  ò Sem 2 Hours : Stored=0.0 | Calculated=0.0 (Diff: 0.0)
+  ò Total Hours : Stored=20.0 | Calculated=18.0 (Diff: 2.0)
+  ò Events Count: Stored=9 | Calculated=8 (Diff: 1)
+  ò Breakdown   : +2.0h (12_Sep_Scholarship_Awareness_Session), +0.0h (12_Sep_VBYLD_Certificate_Submission), +1.0h (13_Sep_Ganesh_Chaturthi_Reel_Shooting), +2.0h (13_Sep_Mental_Health_Awareness_Session), +4.0h (15_Aug_Independence_Day_Tiranga_Rally), +4.0h (16_Aug_NSS_Official_Orientation), +2.0h (25_Aug_Environmental_wing_orientation), +3.0h (26_Aug_Blood__Platelet_Donation_Awareness_Session)
+
+Roll: 2601EC31   Name: Mallika Lokesh           
+  ò Sem 1 Hours : Stored=21.0 | Calculated=19.0 (Diff: 2.0)
+  ò Sem 2 Hours : Stored=0.0 | Calculated=0.0 (Diff: 0.0)
+  ò Total Hours : Stored=21.0 | Calculated=19.0 (Diff: 2.0)
+  ò Events Count: Stored=9 | Calculated=8 (Diff: 1)
+  ò Breakdown   : +2.0h (10_Sep_BVC_session), +2.0h (12_Sep_Scholarship_Awareness_Session), +0.0h (12_Sep_VBYLD_Certificate_Submission), +4.0h (15_Aug_Independence_Day_Tiranga_Rally), +4.0h (16_Aug_NSS_Official_Orientation), +2.0h (25_Aug_Environmental_wing_orientation), +3.0h (26_Aug_Blood__Platelet_Donation_Awareness_Session), +2.0h (5_Sep_My_Bharat_Portal_Registration_Drive)
+
+Roll: 2601EE24   Name: Ambala Athrij            
+  ò Sem 1 Hours : Stored=19.0 | Calculated=17.0 (Diff: 2.0)
+  ò Sem 2 Hours : Stored=0.0 | Calculated=0.0 (Diff: 0.0)
+  ò Total Hours : Stored=19.0 | Calculated=17.0 (Diff: 2.0)
+  ò Events Count: Stored=8 | Calculated=7 (Diff: 1)
+  ò Breakdown   : +2.0h (10_Sep_BVC_session), +0.0h (12_Sep_VBYLD_Certificate_Submission), +4.0h (15_Aug_Independence_Day_Tiranga_Rally), +4.0h (16_Aug_NSS_Official_Orientation), +2.0h (25_Aug_Environmental_wing_orientation), +3.0h (26_Aug_Blood__Platelet_Donation_Awareness_Session), +2.0h (5_Sep_My_Bharat_Portal_Registration_Drive)
+
+Roll: 2601EE26   Name: Samir Kumar              
+  ò Sem 1 Hours : Stored=21.0 | Calculated=19.0 (Diff: 2.0)
+  ò Sem 2 Hours : Stored=0.0 | Calculated=0.0 (Diff: 0.0)
+  ò Total Hours : Stored=21.0 | Calculated=19.0 (Diff: 2.0)
+  ò Events Count: Stored=9 | Calculated=8 (Diff: 1)
+  ò Breakdown   : +2.0h (10_Sep_BVC_session), +2.0h (12_Sep_Scholarship_Awareness_Session), +0.0h (12_Sep_VBYLD_Certificate_Submission), +4.0h (15_Aug_Independence_Day_Tiranga_Rally), +4.0h (16_Aug_NSS_Official_Orientation), +2.0h (25_Aug_Environmental_wing_orientation), +3.0h (26_Aug_Blood__Platelet_Donation_Awareness_Session), +2.0h (5_Sep_My_Bharat_Portal_Registration_Drive)
+
+Roll: 2601EE46   Name: SHAIK NOUSHEER           
+  ò Sem 1 Hours : Stored=19.0 | Calculated=17.0 (Diff: 2.0)
+  ò Sem 2 Hours : Stored=0.0 | Calculated=0.0 (Diff: 0.0)
+  ò Total Hours : Stored=19.0 | Calculated=17.0 (Diff: 2.0)
+  ò Events Count: Stored=9 | Calculated=8 (Diff: 1)
+  ò Breakdown   : +2.0h (10_Sep_BVC_session), +2.0h (12_Sep_Scholarship_Awareness_Session), +0.0h (12_Sep_VBYLD_Certificate_Submission), +2.0h (13_Sep_Mental_Health_Awareness_Session), +4.0h (16_Aug_NSS_Official_Orientation), +2.0h (25_Aug_Environmental_wing_orientation), +3.0h (26_Aug_Blood__Platelet_Donation_Awareness_Session), +2.0h (5_Sep_My_Bharat_Portal_Registration_Drive)
+
+Roll: 2601ME74   Name: Bhukya Mohan             
+  ò Sem 1 Hours : Stored=16.0 | Calculated=14.0 (Diff: 2.0)
+  ò Sem 2 Hours : Stored=0.0 | Calculated=0.0 (Diff: 0.0)
+  ò Total Hours : Stored=16.0 | Calculated=14.0 (Diff: 2.0)
+  ò Events Count: Stored=8 | Calculated=7 (Diff: 1)
+  ò Breakdown   : +2.0h (10_Sep_BVC_session), +2.0h (12_Sep_Scholarship_Awareness_Session), +0.0h (12_Sep_VBYLD_Certificate_Submission), +2.0h (13_Sep_Mental_Health_Awareness_Session), +4.0h (15_Aug_Independence_Day_Tiranga_Rally), +4.0h (16_Aug_NSS_Official_Orientation), -2.0h (26_Aug_Blood__Platelet_Donation_Awareness_Session), +2.0h (5_Sep_My_Bharat_Portal_Registration_Drive)
+
+Roll: 2601ME78   Name: Murukuti Sridhar Reddy   
+  ò Sem 1 Hours : Stored=17.0 | Calculated=15.0 (Diff: 2.0)
+  ò Sem 2 Hours : Stored=0.0 | Calculated=0.0 (Diff: 0.0)
+  ò Total Hours : Stored=17.0 | Calculated=15.0 (Diff: 2.0)
+  ò Events Count: Stored=8 | Calculated=7 (Diff: 1)
+  ò Breakdown   : +2.0h (12_Sep_Scholarship_Awareness_Session), +0.0h (12_Sep_VBYLD_Certificate_Submission), +2.0h (13_Sep_Mental_Health_Awareness_Session), +4.0h (16_Aug_NSS_Official_Orientation), +2.0h (25_Aug_Environmental_wing_orientation), +3.0h (26_Aug_Blood__Platelet_Donation_Awareness_Session), +2.0h (5_Sep_My_Bharat_Portal_Registration_Drive)
+
+Roll: 2602PC03   Name: Rohit Kumar Behera       
+  ò Sem 1 Hours : Stored=14.0 | Calculated=12.0 (Diff: 2.0)
+  ò Sem 2 Hours : Stored=0.0 | Calculated=0.0 (Diff: 0.0)
+  ò Total Hours : Stored=14.0 | Calculated=12.0 (Diff: 2.0)
+  ò Events Count: Stored=7 | Calculated=6 (Diff: 1)
+  ò Breakdown   : +2.0h (10_Sep_BVC_session), +0.0h (12_Sep_VBYLD_Certificate_Submission), +1.0h (13_Sep_Ganesh_Chaturthi_Reel_Shooting), +2.0h (13_Sep_Mental_Health_Awareness_Session), +4.0h (16_Aug_NSS_Official_Orientation), +3.0h (26_Aug_Blood__Platelet_Donation_Awareness_Session)
+
+Roll: 2603CB04   Name: Sachin Kumar             
+  ò Sem 1 Hours : Stored=23.0 | Calculated=21.0 (Diff: 2.0)
+  ò Sem 2 Hours : Stored=0.0 | Calculated=0.0 (Diff: 0.0)
+  ò Total Hours : Stored=23.0 | Calculated=21.0 (Diff: 2.0)
+  ò Events Count: Stored=10 | Calculated=9 (Diff: 1)
+  ò Breakdown   : +2.0h (10_Sep_BVC_session), +2.0h (12_Sep_Scholarship_Awareness_Session), +0.0h (12_Sep_VBYLD_Certificate_Submission), +2.0h (13_Sep_Mental_Health_Awareness_Session), +4.0h (15_Aug_Independence_Day_Tiranga_Rally), +4.0h (16_Aug_NSS_Official_Orientation), +2.0h (25_Aug_Environmental_wing_orientation), +3.0h (26_Aug_Blood__Platelet_Donation_Awareness_Session), +2.0h (5_Sep_My_Bharat_Portal_Registration_Drive)
+
+Roll: 2603CE06   Name: Ayush Singh              
+  ò Sem 1 Hours : Stored=6.5 | Calculated=10.5 (Diff: -4.0)
+  ò Sem 2 Hours : Stored=0.0 | Calculated=0.0 (Diff: 0.0)
+  ò Total Hours : Stored=6.5 | Calculated=10.5 (Diff: -4.0)
+  ò Events Count: Stored=5 | Calculated=5 (Diff: 0)
+  ò Breakdown   : +0.0h (12_Sep_VBYLD_Certificate_Submission), +4.0h (16_Aug_NSS_Official_Orientation), +1.5h (22_Aug_ERSM_Meet_1), +3.0h (26_Aug_Blood__Platelet_Donation_Awareness_Session), +2.0h (5_Sep_My_Bharat_Portal_Registration_Drive)
+
+Roll: 2603EE04   Name: Putluru Sai Varshith Reddy
+  ò Sem 1 Hours : Stored=23.0 | Calculated=21.0 (Diff: 2.0)
+  ò Sem 2 Hours : Stored=0.0 | Calculated=0.0 (Diff: 0.0)
+  ò Total Hours : Stored=23.0 | Calculated=21.0 (Diff: 2.0)
+  ò Events Count: Stored=10 | Calculated=9 (Diff: 1)
+  ò Breakdown   : +2.0h (10_Sep_BVC_session), +2.0h (12_Sep_Scholarship_Awareness_Session), +0.0h (12_Sep_VBYLD_Certificate_Submission), +2.0h (13_Sep_Mental_Health_Awareness_Session), +4.0h (16_Aug_NSS_Official_Orientation), +2.0h (25_Aug_Environmental_wing_orientation), +3.0h (26_Aug_Blood__Platelet_Donation_Awareness_Session), +3.0h (29_Aug_Blood_Donation_Slot_1), +3.0h (29_Aug_Blood_Donation_Slot_2)
+

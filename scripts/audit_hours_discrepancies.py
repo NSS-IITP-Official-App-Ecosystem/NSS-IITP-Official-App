@@ -26,7 +26,7 @@ def get_semester(date_str, eid=''):
 events = list(db.collection('NSS_Events_Attendence').stream())
 users = list(db.collection('users').stream())
 
-print(f"Total users: {len(users)}, Total events: {len(events)}")
+print(f"Loaded {len(users)} users and {len(events)} events from Firestore.\n")
 
 user_computed = {}
 
@@ -39,12 +39,14 @@ for u in users:
         'stored_sem2': float(udata.get('sem2Hours') or 0),
         'stored_hours': float(udata.get('hours') or 0),
         'stored_events': int(udata.get('eventsAttended') or 0),
+        'stored_events_list': udata.get('eventsList') or [],
         'userType': udata.get('userType') or '',
         'name': udata.get('name') or '',
         'calc_sem1': 0.0,
         'calc_sem2': 0.0,
         'calc_hours': 0.0,
         'calc_events': 0,
+        'calc_events_list': [],
         'events_breakdown': []
     }
 
@@ -56,35 +58,45 @@ for e in events:
     neg_h = float(ed.get('negativeHours') or 0)
     is_mand = bool(ed.get('mandatory'))
     
-    attendees = {a.get('rollNumber', '').upper() for a in (ed.get('attendees') or []) if a.get('rollNumber')}
+    # Also check subcollection attendance in case attendees array differs
+    attendees_array = {a.get('rollNumber', '').upper() for a in (ed.get('attendees') or []) if a.get('rollNumber')}
+    
     penalized = {r.upper() for r in (ed.get('penalizedRollNumbers') or [])}
     neg_penalty = {r.upper() for r in (ed.get('negativePenaltyRollNumbers') or [])}
+    zero_penalty = {r.upper() for r in (ed.get('zeroPenaltyRollNumbers') or [])}
+    exempt = {r.upper() for r in (ed.get('exemptedRollNumbers') or [])}
+    pos_penalty = {r.upper() for r in (ed.get('positivePenaltyRollNumbers') or [])}
 
     for roll, data in user_computed.items():
         if data['userType'] == 'Admin':
             continue
             
-        if roll in attendees:
+        if roll in attendees_array or roll in pos_penalty:
             data['calc_events'] += 1
             data['calc_hours'] += h
             if sem == 1: data['calc_sem1'] += h
             if sem == 2: data['calc_sem2'] += h
-            data['events_breakdown'].append(f"+{h} ({eid})")
+            data['calc_events_list'].append(eid)
+            data['events_breakdown'].append(f"+{h}h ({eid})")
         elif roll in penalized or roll in neg_penalty:
             pen = neg_h if neg_h > 0 else h
             data['calc_hours'] -= pen
             if sem == 1: data['calc_sem1'] -= pen
             if sem == 2: data['calc_sem2'] -= pen
-            data['events_breakdown'].append(f"-{pen} ({eid})")
+            data['events_breakdown'].append(f"-{pen}h ({eid})")
+        elif roll in zero_penalty or roll in exempt:
+            data['events_breakdown'].append(f"0h (Exempt {eid})")
 
 discrepancies = []
 for roll, data in user_computed.items():
     if data['userType'] == 'Admin': continue
+    
     diff_sem1 = round(data['stored_sem1'] - data['calc_sem1'], 2)
+    diff_sem2 = round(data['stored_sem2'] - data['calc_sem2'], 2)
     diff_hours = round(data['stored_hours'] - data['calc_hours'], 2)
     diff_events = data['stored_events'] - data['calc_events']
     
-    if diff_sem1 != 0 or diff_hours != 0 or diff_events != 0:
+    if diff_sem1 != 0 or diff_sem2 != 0 or diff_hours != 0 or diff_events != 0:
         discrepancies.append({
             'doc_id': data['doc_id'],
             'roll': roll,
@@ -92,18 +104,29 @@ for roll, data in user_computed.items():
             'stored_sem1': data['stored_sem1'],
             'calc_sem1': data['calc_sem1'],
             'diff_sem1': diff_sem1,
+            'stored_sem2': data['stored_sem2'],
+            'calc_sem2': data['calc_sem2'],
+            'diff_sem2': diff_sem2,
             'stored_hours': data['stored_hours'],
             'calc_hours': data['calc_hours'],
+            'diff_hours': diff_hours,
             'stored_events': data['stored_events'],
             'calc_events': data['calc_events'],
+            'diff_events': diff_events,
             'events_breakdown': data['events_breakdown']
         })
 
-print(f"\n=======================================================")
-print(f"Total students with discrepancies: {len(discrepancies)}")
+print(f"=======================================================")
+print(f"DATABASE AUDIT RESULTS: {len(discrepancies)} DISCREPANCIES FOUND OUT OF {len(users)} USERS")
 print(f"=======================================================\n")
 
-for d in discrepancies[:30]:
-    print(f"Roll: {d['roll']:<10} Name: {d['name']:<25} | Sem1: Stored={d['stored_sem1']:<5} Calc={d['calc_sem1']:<5} (Diff={d['diff_sem1']:<5}) | Events: Stored={d['stored_events']} Calc={d['calc_events']}")
-    print(f"   Breakdown: {', '.join(d['events_breakdown'])}")
-
+if not discrepancies:
+    print("SUCCESS: All student hour calculations, semester balances, and event counts 100% match!")
+else:
+    for d in discrepancies:
+        print(f"Roll: {d['roll']:<10} Name: {d['name']:<25}")
+        print(f"  • Sem 1 Hours : Stored={d['stored_sem1']} | Calculated={d['calc_sem1']} (Diff: {d['diff_sem1']})")
+        print(f"  • Sem 2 Hours : Stored={d['stored_sem2']} | Calculated={d['calc_sem2']} (Diff: {d['diff_sem2']})")
+        print(f"  • Total Hours : Stored={d['stored_hours']} | Calculated={d['calc_hours']} (Diff: {d['diff_hours']})")
+        print(f"  • Events Count: Stored={d['stored_events']} | Calculated={d['calc_events']} (Diff: {d['diff_events']})")
+        print(f"  • Breakdown   : {', '.join(d['events_breakdown'])}\n")

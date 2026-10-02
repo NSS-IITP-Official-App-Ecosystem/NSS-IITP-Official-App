@@ -1,0 +1,119 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #333; line-height: 1.6; margin: 40px; }
+  h1 { color: #1a237e; text-align: center; border-bottom: 2px solid #3f51b5; padding-bottom: 10px; }
+  h2 { color: #3f51b5; border-bottom: 1px solid #ccc; padding-bottom: 5px; margin-top: 30px; }
+  h3 { color: #0277bd; margin-top: 20px; }
+  .test-case { background-color: #f5f5f5; border-left: 4px solid #0277bd; padding: 15px; margin-bottom: 20px; border-radius: 4px; }
+  .test-case.issue { border-left-color: #d32f2f; background-color: #ffebee; }
+  .step-label { font-weight: bold; color: #424242; }
+  .expected { color: #2e7d32; font-weight: bold; }
+  .warning { color: #d32f2f; font-weight: bold; }
+  ul { margin-top: 5px; }
+  table { border-collapse: collapse; width: 100%; margin-top: 15px; }
+  th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+  th { background-color: #e0e0e0; }
+</style>
+</head>
+<body>
+
+<h1>NSS App: Comprehensive Manual Test Plan</h1>
+<p>This document outlines the step-by-step test sequences required to validate all permutations of the attendance and penalty logic in the NSS IITP Official App.</p>
+
+<h2>Phase 1: Standard Event Workflows (Normal Events)</h2>
+
+<div class="test-case">
+  <h3>Test 1.1: Normal Event - QR Code & Manual Override</h3>
+  <ol>
+    <li><span class="step-label">Create Event:</span> Type "Normal", Mode: QR Code, Positive Hours: 2.0, Mandatory: OFF.</li>
+    <li><span class="step-label">Start Attendance:</span> Tap "Start Attendance". Wait for Live Count to appear.</li>
+    <li><span class="step-label">Add Manual:</span> Tap "Add/Delete Roll No". Add a test student (e.g., 2301CT01).</li>
+    <li><span class="step-label">Close Event:</span> Tap "Close Event".</li>
+    <li><span class="step-label">Verify:</span> Student 2301CT01 should have +2.0 hours.</li>
+  </ol>
+</div>
+
+<div class="test-case">
+  <h3>Test 1.2: Normal Event - Geo-Tagged Photo Approval</h3>
+  <ol>
+    <li><span class="step-label">Create Event:</span> Type "Normal", Mode: Geo-Tagged Photo, Positive Hours: 3.0, Mandatory: OFF.</li>
+    <li><span class="step-label">Student Action:</span> Student submits a photo.</li>
+    <li><span class="step-label">Admin Action:</span> Go to "Pending Photos". Approve the photo.</li>
+    <li><span class="step-label">Verify:</span> Student receives +3.0 hours immediately.</li>
+  </ol>
+</div>
+
+<h2>Phase 2: Mandatory Event Workflows & Penalties</h2>
+
+<div class="test-case">
+  <h3>Test 2.1: Mandatory Event - Applying Penalty to Absentees</h3>
+  <ol>
+    <li><span class="step-label">Create Event:</span> Mode: Both (QR & Geo), Positive Hours: 2.0, Mandatory: ON, Negative Hours: 1.5.</li>
+    <li><span class="step-label">Add Manual:</span> Add Student A manually (+2.0 hours).</li>
+    <li><span class="step-label">Close Event:</span> Close the event. Student B is completely absent.</li>
+    <li><span class="step-label">Apply Penalty:</span> Tap "Apply Penalty".</li>
+    <li><span class="step-label">Verify:</span> Student B should lose 1.5 hours. Student A's hours remain unchanged.</li>
+  </ol>
+</div>
+
+<div class="test-case">
+  <h3>Test 2.2: Mandatory Event - Selective Penalty Exemptions (Zero Roll Numbers)</h3>
+  <ol>
+    <li><span class="step-label">Create Event:</span> Mode: QR Code, Positive Hours: 2.0, Mandatory: ON, Negative Hours: 2.0.</li>
+    <li><span class="step-label">Close Event & Apply Penalty:</span> Student C is absent. During the "Apply Penalty" screen, manually move Student C to the "Exempt" list (Zero Roll Numbers).</li>
+    <li><span class="step-label">Verify:</span> Student C should receive 0 penalty hours, not -2.0.</li>
+  </ol>
+</div>
+
+<h2>Phase 3: Edge Cases & Corrections</h2>
+
+<div class="test-case">
+  <h3>Test 3.1: Editing Hours of an Active Event</h3>
+  <ol>
+    <li><span class="step-label">Create Event:</span> Positive Hours: 2.0.</li>
+    <li><span class="step-label">Add Manual:</span> Add Student D (+2.0 hours).</li>
+    <li><span class="step-label">Edit Event:</span> Long press the event card. Change Positive Hours to 4.0.</li>
+    <li><span class="step-label">Verify:</span> Student D's total hours should automatically jump from +2.0 to +4.0.</li>
+  </ol>
+</div>
+
+<div class="test-case">
+  <h3>Test 3.2: Deleting Attendance</h3>
+  <ol>
+    <li><span class="step-label">Pre-requisite:</span> Student E has +3.0 hours from an event.</li>
+    <li><span class="step-label">Delete Attendance:</span> Long press "Add/Delete Roll No". Enter Student E's roll number to mark them absent.</li>
+    <li><span class="step-label">Verify:</span> Student E's hours should drop by 3.0.</li>
+  </ol>
+</div>
+
+<div class="test-case">
+  <h3>Test 3.3: Reopening a Penalized Event (Make Live) & Refunding</h3>
+  <ol>
+    <li><span class="step-label">Setup:</span> Mandatory event closed, penalty applied. Student F was absent and got penalized (-2.0).</li>
+    <li><span class="step-label">Make Live:</span> Go to Event History, tap "Make Live".</li>
+    <li><span class="step-label">Late Attendance:</span> Add Student F manually via "Add/Delete Roll No".</li>
+    <li><span class="expected">Expected Outcome:</span> Student F receives the +2.0 positive hours AND their -2.0 penalty is successfully refunded.</li>
+  </ol>
+</div>
+
+<h2><span style="color: #d32f2f;">&#9888; Phase 4: Known Issues (Do Not Test on Live Data)</span></h2>
+<p>Based on a deep-dive code audit, the following critical issues exist in the backend and may crash your app if triggered during manual testing.</p>
+
+<div class="test-case issue">
+  <h3 style="color: #c62828;">Issue 1: The "Apply Penalty" Batch Limit Crash (CRITICAL)</h3>
+  <p><b>Description:</b> When applying a penalty to a mandatory event, the backend shoves all absent students into a single Firestore `batch.commit()`. Firestore hard-limits batches to 500 documents.</p>
+  <p><b>How to trigger it:</b> Create a mandatory event. Close it with 0 attendees. Click "Apply Penalty". If there are more than 500 non-admin users in your `users` collection, the backend will attempt >500 writes and instantly crash. The penalty will fail to apply.</p>
+  <p><b>Current Status:</b> You have 419 users (383 students) in production. You are safe right now, but the app will permanently break as soon as your total student count exceeds ~500 (e.g., during your next fresher intake).</p>
+</div>
+
+<div class="test-case issue">
+  <h3 style="color: #c62828;">Issue 2: "Apply Penalty" Concurrency Race Condition</h3>
+  <p><b>Description:</b> The `applyAbsentPenalty` cloud function does not use a database transaction. It uses a sequence of reads followed by a delayed batch write.</p>
+  <p><b>How to trigger it:</b> If two admins click the "Apply Penalty" button at the exact same time (or if one admin double-clicks due to network lag), both requests read the database before the lock is applied. Both requests will execute, deducting the penalty from students TWICE (e.g., -4.0 hours instead of -2.0).</p>
+</div>
+
+</body>
+</html>

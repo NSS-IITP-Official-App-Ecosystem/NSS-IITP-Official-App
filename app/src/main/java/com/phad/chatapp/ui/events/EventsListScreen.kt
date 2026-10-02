@@ -143,7 +143,9 @@ fun EventsListScreen(
                                 // Fallback for pure DNC or other cases
                                 openEventLog.add(eventDetail)
                             }
-                        } else if (!event.visibleOnlyToPresent && event.isMandatory && event.absentPenaltyApplied && isRelevantToUser) {
+                        } else if (!event.visibleOnlyToPresent && event.isMandatory && isRelevantToUser &&
+                                   (event.absentPenaltyApplied ||
+                                    event.penalizedRollNumbers.any { it.equals(rollNumber, ignoreCase = true) })) {
                             // Absent in a mandatory event: check penalty breakdown for this user
                             val isExplicitZero = event.zeroPenaltyRollNumbers.any { it.equals(rollNumber, ignoreCase = true) } ||
                                                  event.exemptedRollNumbers.any { it.equals(rollNumber, ignoreCase = true) }

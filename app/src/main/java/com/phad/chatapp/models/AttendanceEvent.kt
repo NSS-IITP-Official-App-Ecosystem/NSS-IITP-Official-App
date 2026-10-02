@@ -58,6 +58,9 @@ data class AttendanceEvent(
     @PropertyName("negativePenaltyRollNumbers")
     val negativePenaltyRollNumbers: List<String> = emptyList(),
 
+    @PropertyName("penalizedRollNumbers")
+    val penalizedRollNumbers: List<String> = emptyList(), // Server-maintained list of students who received and still have an active penalty
+
     @PropertyName("attendanceLocationLatitude")
     val attendanceLocationLatitude: Double? = null, // GPS latitude where attendance is being taken
 

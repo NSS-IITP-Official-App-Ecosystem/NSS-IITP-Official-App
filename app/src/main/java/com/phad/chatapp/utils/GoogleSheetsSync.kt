@@ -126,7 +126,7 @@ object GoogleSheetsSync {
 
             // Generate Sheet 1 (Open & DNC Events)
             val sheet1Array = JSONArray()
-            val headers1 = mutableListOf("Name", "Roll", "Wing", "Wing Hours", "Open Event Hours", "Extra Events")
+            val headers1 = mutableListOf("Name", "Roll", "Wing", "Wing Hours", "Open Event Hours", "Total Hours", "Extra Events")
             headers1.addAll(sheet1Events.map { it.getEventName() })
             
             val headerRow1 = JSONArray()
@@ -150,6 +150,7 @@ object GoogleSheetsSync {
                 row.put(student.wings.joinToString("\n"))
                 row.put(wHours)
                 row.put(oHours)
+                row.put(wHours + oHours)
                 row.put(getExtraEvents(student))
 
                 val studentHoursMap = perStudentEventHours[roll] ?: emptyMap()
