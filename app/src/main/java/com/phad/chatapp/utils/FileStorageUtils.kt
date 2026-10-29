@@ -1,8 +1,11 @@
 package com.phad.chatapp.utils
 
+import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
+import android.provider.MediaStore
 import android.util.Log
 import android.webkit.MimeTypeMap
 import android.widget.Toast
@@ -380,6 +383,68 @@ object FileStorageUtils {
             bytes.joinToString("") { "%02x".format(it) }
         } catch (e: Exception) {
             input.hashCode().toString()
+        }
+    }
+
+    /**
+     * Safely save a file to public Downloads/NSS_Reports across all Android versions (including Android 10-15+ Scoped Storage).
+     * On API 29+ (Android 10+), writes to MediaStore.Downloads without requiring WRITE_EXTERNAL_STORAGE.
+     * On older versions, copies to Environment.DIRECTORY_DOWNLOADS/NSS_Reports.
+     * Always returns a non-null path to the saved file (or tempFile) if successful.
+     */
+    fun saveFileToPublicDownloads(
+        context: Context,
+        tempFile: File,
+        filename: String,
+        mimeType: String,
+        subfolder: String = "NSS_Reports"
+    ): String? {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val contentValues = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
+                    put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/$subfolder")
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+                val resolver = context.contentResolver
+                val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+                if (uri != null) {
+                    resolver.openOutputStream(uri)?.use { out ->
+                        tempFile.inputStream().use { input ->
+                            input.copyTo(out)
+                        }
+                    }
+                    contentValues.clear()
+                    contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                    resolver.update(uri, contentValues, null, null)
+                    Log.d(TAG, "File successfully saved via MediaStore to Downloads/$subfolder/$filename")
+                    return tempFile.absolutePath
+                }
+            }
+
+            // Legacy Android (< Q) or fallback if MediaStore returned null
+            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            val reportsDir = File(downloadsDir, subfolder)
+            if (!reportsDir.exists()) {
+                reportsDir.mkdirs()
+            }
+            val destFile = File(reportsDir, filename)
+            tempFile.copyTo(destFile, overwrite = true)
+            Log.d(TAG, "File saved to public Downloads: ${destFile.absolutePath}")
+            return destFile.absolutePath
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save file to public Downloads, saving to app external storage", e)
+            try {
+                val appDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+                val reportsDir = File(appDir, subfolder).apply { mkdirs() }
+                val destFile = File(reportsDir, filename)
+                tempFile.copyTo(destFile, overwrite = true)
+                return destFile.absolutePath
+            } catch (e2: Exception) {
+                Log.e(TAG, "Failed fallback to app-specific storage as well", e2)
+                return tempFile.absolutePath
+            }
         }
     }
 } 

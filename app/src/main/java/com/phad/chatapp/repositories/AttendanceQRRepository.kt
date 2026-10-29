@@ -534,19 +534,24 @@ class AttendanceQRRepository {
                 return@withContext Result.failure(Exception("Attendee not found in event"))
             }
 
-            // Remove from attendees array and decrement total_marked
-            val updates = mapOf(
-                "attendees" to FieldValue.arrayRemove(attendeeToRemove),
-                "total_marked" to FieldValue.increment(-1)
-            )
-
-            Log.d(TAG, "Performing Firestore update with: $updates")
+            // Filter raw attendees list to remove any matching roll number (case-insensitive)
+            // This avoids FieldValue.arrayRemove silently failing when map schemas have extra fields (e.g. from Cloud Functions)
+            @Suppress("UNCHECKED_CAST")
+            val rawAttendees = (eventSnapshot.get("attendees") as? List<Map<String, Any>>) ?: emptyList()
+            val filteredAttendees = rawAttendees.filterNot { map ->
+                val roll = (map["rollNumber"] ?: map["roll_number"]) as? String
+                roll?.equals(normalizedRollNumber, ignoreCase = true) == true
+            }
 
             // Remove from subcollection attendance document (use actual roll number from found attendee)
             val attendanceDocRef = docRef.collection("attendance").document(attendeeToRemove.rollNumber)
             attendanceDocRef.delete().await()
 
             // Update parent event counters and embedded list
+            val updates = mapOf(
+                "attendees" to filteredAttendees,
+                "total_marked" to filteredAttendees.size
+            )
             docRef.update(updates).await()
 
             Log.d(TAG, "✅ Firestore update completed successfully")
@@ -1035,8 +1040,8 @@ class AttendanceQRRepository {
             // 3) Create new event document with updated details
             val batch = firestore.batch()
             
-            // Create the new event with preserved total_marked field
-            val newEventData = mapOf(
+            // Create the new event with preserved total_marked field and penalty metadata
+            val newEventData = mutableMapOf<String, Any?>(
                 "description" to newEvent.description,
                 "createdBy" to newEvent.createdBy,
                 "creatorName" to newEvent.creatorName,
@@ -1053,8 +1058,22 @@ class AttendanceQRRepository {
                 "is_live" to newEvent.isLive,
                 "visibleOnlyToPresent" to newEvent.visibleOnlyToPresent, // Also added this field
                 "allowedAttendanceMode" to newEvent.allowedAttendanceMode,
-                "total_marked" to oldEvent.attendees.size // Preserve the total count
+                "total_marked" to oldEvent.attendees.size, // Preserve the total count
+                // Penalty metadata — must be preserved across renames to prevent
+                // double-penalization and to keep Fix #1 (Sheets absentPenaltyApplied check) working
+                "absentPenaltyApplied" to oldEvent.absentPenaltyApplied,
+                "penalizedRollNumbers" to oldEvent.penalizedRollNumbers,
+                "negativePenaltyRollNumbers" to oldEvent.negativePenaltyRollNumbers,
+                "zeroPenaltyRollNumbers" to oldEvent.zeroPenaltyRollNumbers,
+                "positivePenaltyRollNumbers" to oldEvent.positivePenaltyRollNumbers,
+                "exemptedRollNumbers" to oldEvent.exemptedRollNumbers,
+                "liveCount" to oldEvent.liveCount
             )
+            // penaltyEverApplied is not in the data class — read from raw snapshot
+            val penaltyEverApplied = oldEventSnapshot.get("penaltyEverApplied") as? Boolean
+            if (penaltyEverApplied != null) {
+                newEventData["penaltyEverApplied"] = penaltyEverApplied
+            }
             
             batch.set(newEventDocRef, newEventData)
 

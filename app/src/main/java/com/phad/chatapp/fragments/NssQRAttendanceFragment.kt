@@ -294,6 +294,9 @@ class NssQRAttendanceFragment : Fragment() {
                     onClearSuccessMessage = {
                         viewModel.clearSuccessMessage()
                     },
+                    onClearGeneratedPdfPath = {
+                        viewModel.clearGeneratedPdfPath()
+                    },
                     onDismissRollResults = {
                         viewModel.clearRollResults()
                     },
@@ -379,7 +382,8 @@ fun QRAttendanceAdminScreen(
     onAddManualAttendance: (AttendanceEvent, String) -> Unit, // Manual attendance callback
     onMarkAbsent: (AttendanceEvent, String) -> Unit, // Mark absent callback
     onApplyPenalty: () -> Unit,
-    onNotifyEvent: (AttendanceEvent) -> Unit
+    onNotifyEvent: (AttendanceEvent) -> Unit,
+    onClearGeneratedPdfPath: () -> Unit = {}
 ) {
     // Scroll state for events list (hoisted to persist across navigation/dialogs)
     val eventsListState = rememberLazyListState()
@@ -464,6 +468,42 @@ fun QRAttendanceAdminScreen(
                 Toast.LENGTH_LONG
             ).show()
             onClearSuccessMessage()
+        }
+    }
+
+    // Handle opening generated PDF report
+    LaunchedEffect(uiState.generatedPdfPath) {
+        uiState.generatedPdfPath?.let { filePath ->
+            try {
+                val file = java.io.File(filePath)
+                if (file.exists()) {
+                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        file
+                    )
+                    val viewIntent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                        setDataAndType(uri, "application/pdf")
+                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    if (viewIntent.resolveActivity(context.packageManager) != null) {
+                        context.startActivity(viewIntent)
+                    } else {
+                        val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                            type = "application/pdf"
+                            putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(android.content.Intent.createChooser(shareIntent, "Open Attendance Report"))
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("NssQRAttendanceFragment", "Error opening generated PDF: ${e.message}", e)
+            } finally {
+                onClearGeneratedPdfPath()
+            }
         }
     }
 
@@ -2173,8 +2213,9 @@ fun EventCard(
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
                         ) {
                             Text(
-                                text = "Attendance log",
-                                fontSize = 14.sp,
+                                text = "Attendance Log",
+                                fontSize = 13.sp,
+                                maxLines = 1,
                                 fontWeight = FontWeight.Medium
                             )
                         }
@@ -2638,7 +2679,7 @@ fun CreateEventDialog(
 
     var selectedWings by remember { mutableStateOf(emptyList<String>()) }
     var visibleOnlyToPresent by remember { mutableStateOf(false) }
-    var allowedAttendanceMode by remember { mutableStateOf("BOTH") }
+    var allowedAttendanceMode by remember { mutableStateOf("QR") }
 
     // Scheduled reminders: Triple(scheduledAtMs, title, body)
     var scheduledReminders by remember { mutableStateOf(emptyList<Triple<Long, String, String>>()) }

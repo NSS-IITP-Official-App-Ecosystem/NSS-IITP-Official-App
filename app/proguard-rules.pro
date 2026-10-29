@@ -19,3 +19,39 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# Keep data models used by Firebase Firestore
+-keep class com.phad.chatapp.models.** { *; }
+
+# Apache POI rules (prevents build failures from missing optional dependencies and preserves classes)
+-keep class org.apache.poi.** { *; }
+-keep class org.apache.xmlbeans.** { *; }
+-keep class org.openxmlformats.schemas.** { *; }
+-keep class schemaorg_apache_xmlbeans.** { *; }
+-dontwarn org.apache.poi.**
+-dontwarn org.apache.xmlbeans.**
+-dontwarn org.openxmlformats.schemas.**
+-dontwarn schemaorg_apache_xmlbeans.**
+-dontwarn javax.xml.stream.**
+-dontwarn com.fasterxml.aalto.**
+-dontwarn java.awt.**
+-dontwarn com.graphbuilder.**
+-dontwarn org.etsi.uri.**
+
+# iText PDF rules
+-keep class com.itextpdf.** { *; }
+-dontwarn com.itextpdf.**
+
+# Google API Client rules
+-dontwarn com.google.api.client.**
+-dontwarn com.google.api.services.drive.**
+
+# Cloudinary rules
+-dontwarn com.cloudinary.**
+
+# Ignore missing SLF4J logger implementations (often referenced by POI or iText)
+-dontwarn org.slf4j.**
+
+# Keep generic signatures for Retrofit / JSON parsing if applicable
+-keepattributes Signature
+-keepattributes *Annotation*

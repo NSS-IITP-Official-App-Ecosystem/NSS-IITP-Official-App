@@ -59,16 +59,7 @@ class ExcelGenerator(private val context: Context) {
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
             val filename = "NSS_Attendance_Matrix_$timestamp.xlsx"
 
-            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
-            val excelDir = File(downloadsDir, "NSS_Reports")
-            if (!excelDir.exists()) {
-                val created = excelDir.mkdirs()
-                if (!created) {
-                    Log.e(TAG, "Failed to create directory: ${excelDir.absolutePath}")
-                    return@withContext null
-                }
-            }
-            val excelFile = File(excelDir, filename)
+            val tempFile = File(context.cacheDir, filename)
             val workbook = XSSFWorkbook()
 
             // 1. Prepare Data Helpers
@@ -76,6 +67,8 @@ class ExcelGenerator(private val context: Context) {
             val sheet1Events = events.filter { event ->
                 event.getDisplayWings() == "Open Event" || event.wings.contains(DNC_WING)
             }.sortedBy { it.getEventDateAsDate() }
+
+            val eventMap = events.associateBy { it.id }
 
             // Logic to check claim source
             fun getClaimResult(studentWings: List<String>, event: AttendanceEvent): ClaimResult {
@@ -105,7 +98,7 @@ class ExcelGenerator(private val context: Context) {
                 val attendedEvents = perStudentEventHours[roll] ?: return Pair(0.0, 0.0)
 
                 attendedEvents.forEach { (eventId, hours) ->
-                    val event = events.find { it.id == eventId }
+                    val event = eventMap[eventId]
                     if (event != null) {
                         val claim = getClaimResult(student.wings, event)
                         if (claim.source == ClaimSource.WING_SHEET) {
@@ -125,7 +118,7 @@ class ExcelGenerator(private val context: Context) {
                 val extraEventsList = mutableListOf<String>()
                 
                 attendedEvents.forEach { (eventId, hours) ->
-                    val event = events.find { it.id == eventId }
+                    val event = eventMap[eventId]
                     if (event != null) {
                         // Check if this is a cross-wing event (student not in event's wings)
                         val eventWings = event.wings.filter { it != DNC_WING }
@@ -242,7 +235,7 @@ class ExcelGenerator(private val context: Context) {
                     val studentHoursMap = perStudentEventHours[roll] ?: emptyMap()
                     
                     studentHoursMap.forEach { (eid, h) ->
-                         val ev = events.find { it.id == eid }
+                         val ev = eventMap[eid]
                          if (ev != null) {
                              val res = getClaimResult(student.wings, ev)
                              if (res.source == ClaimSource.WING_SHEET && res.wingName == wingName) {
@@ -280,16 +273,23 @@ class ExcelGenerator(private val context: Context) {
             }
 
             // Write to file
-            val fos = FileOutputStream(excelFile)
+            val fos = FileOutputStream(tempFile)
             workbook.write(fos)
             fos.close()
             workbook.close()
 
-            Log.d(TAG, "Excel file generated: ${excelFile.absolutePath}")
-            return@withContext excelFile.absolutePath
+            val savedPath = FileStorageUtils.saveFileToPublicDownloads(
+                context = context,
+                tempFile = tempFile,
+                filename = filename,
+                mimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 
-        } catch (e: Exception) {
-            Log.e(TAG, "Error generating attendance matrix Excel", e)
+            Log.d(TAG, "Excel file generated: ${savedPath ?: tempFile.absolutePath}")
+            return@withContext savedPath ?: tempFile.absolutePath
+
+        } catch (t: Throwable) {
+            Log.e(TAG, "Error generating attendance matrix Excel", t)
             return@withContext null
         }
     }
@@ -306,12 +306,9 @@ class ExcelGenerator(private val context: Context) {
             Log.d(TAG, "Generating student events list CSV for $studentName")
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
             val filename = "NSS_S${semester}_${rollNumber}_Events_${timestamp}.csv"
-            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
-            val excelDir = File(downloadsDir, "NSS_Reports")
-            if (!excelDir.exists()) excelDir.mkdirs()
-            val excelFile = File(excelDir, filename)
+            val tempFile = File(context.cacheDir, filename)
             
-            val writer = FileWriter(excelFile)
+            val writer = FileWriter(tempFile)
             writer.write("Semester $semester Events Summary\n\n")
             writer.write("Name:,$studentName\nRoll Number:,$rollNumber\nSemester:,$semester\n")
             writer.write("Total Hours:,${rows.sumOf { it.third }}\nEvents Attended:,${rows.size}\n\n")
@@ -320,7 +317,14 @@ class ExcelGenerator(private val context: Context) {
                 writer.write("\"$name\",\"$date\",$hours\n")
             }
             writer.close()
-            return@withContext excelFile.absolutePath
+
+            val savedPath = FileStorageUtils.saveFileToPublicDownloads(
+                context = context,
+                tempFile = tempFile,
+                filename = filename,
+                mimeType = "text/csv"
+            )
+            return@withContext savedPath ?: tempFile.absolutePath
         } catch (e: Exception) {
             Log.e(TAG, "Error", e)
             null
@@ -334,12 +338,9 @@ class ExcelGenerator(private val context: Context) {
          try {
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
             val filename = "NSS_Attendance_${event.getEventName().replace(" ", "_")}_$timestamp.csv"
-            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
-            val excelDir = File(downloadsDir, "NSS_Reports")
-            if (!excelDir.exists()) excelDir.mkdirs()
-            val excelFile = File(excelDir, filename)
+            val tempFile = File(context.cacheDir, filename)
 
-            val writer = FileWriter(excelFile)
+            val writer = FileWriter(tempFile)
             writer.write("NSS Attendance Report\n\n")
             writer.write("Event:,${event.getEventName()}\nDate:,${event.getFormattedEventDate()}\n")
             writer.write("Hours:,${event.hours}\n\n")
@@ -355,7 +356,14 @@ class ExcelGenerator(private val context: Context) {
                 writer.write("No attendees.\n")
             }
             writer.close()
-            return@withContext excelFile.absolutePath
+
+            val savedPath = FileStorageUtils.saveFileToPublicDownloads(
+                context = context,
+                tempFile = tempFile,
+                filename = filename,
+                mimeType = "text/csv"
+            )
+            return@withContext savedPath ?: tempFile.absolutePath
         } catch (e: Exception) {
             Log.e(TAG, "Error", e)
             null

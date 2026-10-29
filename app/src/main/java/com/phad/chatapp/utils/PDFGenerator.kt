@@ -21,6 +21,9 @@ import com.phad.chatapp.models.AttendanceEvent
 import com.phad.chatapp.models.AttendeeRecord
 import com.phad.chatapp.models.User
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.tasks.await
 import java.io.File
@@ -66,19 +69,9 @@ class PDFGenerator(private val context: Context) {
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
             val filename = "NSS_S${semester}_${rollNumber}_Events_${timestamp}.pdf"
 
-            // Use Downloads directory instead of cache
-            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
-            val pdfDir = File(downloadsDir, "NSS_Reports")
-            if (!pdfDir.exists()) {
-                val created = pdfDir.mkdirs()
-                if (!created) {
-                    Log.e(TAG, "Failed to create directory: ${pdfDir.absolutePath}")
-                    return@withContext null
-                }
-            }
-            val pdfFile = File(pdfDir, filename)
-
-            val pdfWriter = PdfWriter(FileOutputStream(pdfFile))
+            // Create PDF in cacheDir first (always succeeds without storage permissions)
+            val tempFile = File(context.cacheDir, filename)
+            val pdfWriter = PdfWriter(FileOutputStream(tempFile))
             val pdfDocument = PdfDocument(pdfWriter)
             val document = Document(pdfDocument)
 
@@ -160,14 +153,15 @@ class PDFGenerator(private val context: Context) {
 
             document.close()
 
-            Log.d(TAG, "Student events list PDF generated: ${pdfFile.absolutePath}")
-            return@withContext pdfFile.absolutePath
-        } catch (e: SecurityException) {
-            Log.e(TAG, "Permission denied for file access", e)
-            return@withContext null
-        } catch (e: java.io.IOException) {
-            Log.e(TAG, "File I/O error during PDF generation", e)
-            return@withContext null
+            val savedPath = FileStorageUtils.saveFileToPublicDownloads(
+                context = context,
+                tempFile = tempFile,
+                filename = filename,
+                mimeType = "application/pdf"
+            )
+
+            Log.d(TAG, "Student events list PDF generated: ${savedPath ?: tempFile.absolutePath}")
+            return@withContext savedPath ?: tempFile.absolutePath
         } catch (e: Exception) {
             Log.e(TAG, "Error generating student events list PDF", e)
             return@withContext null
@@ -188,19 +182,9 @@ class PDFGenerator(private val context: Context) {
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
             val filename = "NSS_Attendance_Matrix_${timestamp}.pdf"
 
-            // Use Downloads directory instead of cache
-            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
-            val pdfDir = File(downloadsDir, "NSS_Reports")
-            if (!pdfDir.exists()) {
-                val created = pdfDir.mkdirs()
-                if (!created) {
-                    Log.e(TAG, "Failed to create directory: ${pdfDir.absolutePath}")
-                    return@withContext null
-                }
-            }
-            val pdfFile = File(pdfDir, filename)
-
-            val pdfWriter = PdfWriter(FileOutputStream(pdfFile))
+            // Create PDF in cacheDir first
+            val tempFile = File(context.cacheDir, filename)
+            val pdfWriter = PdfWriter(FileOutputStream(tempFile))
             val pdfDocument = PdfDocument(pdfWriter)
             val document = Document(pdfDocument)
 
@@ -261,14 +245,15 @@ class PDFGenerator(private val context: Context) {
             document.add(table)
             document.close()
 
-            Log.d(TAG, "Attendance matrix PDF generated: ${pdfFile.absolutePath}")
-            return@withContext pdfFile.absolutePath
-        } catch (e: SecurityException) {
-            Log.e(TAG, "Permission denied for file access", e)
-            return@withContext null
-        } catch (e: java.io.IOException) {
-            Log.e(TAG, "File I/O error during PDF generation", e)
-            return@withContext null
+            val savedPath = FileStorageUtils.saveFileToPublicDownloads(
+                context = context,
+                tempFile = tempFile,
+                filename = filename,
+                mimeType = "application/pdf"
+            )
+
+            Log.d(TAG, "Attendance matrix PDF generated: ${savedPath ?: tempFile.absolutePath}")
+            return@withContext savedPath ?: tempFile.absolutePath
         } catch (e: Exception) {
             Log.e(TAG, "Error generating attendance matrix PDF", e)
             return@withContext null
@@ -287,19 +272,9 @@ class PDFGenerator(private val context: Context) {
             val safeEventName = event.getEventName().replace("[^a-zA-Z0-9.-]".toRegex(), "_")
             val filename = "NSS_Report_${safeEventName}_${timestamp}.pdf"
 
-            // Use Downloads directory instead of cache
-            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
-            val pdfDir = File(downloadsDir, "NSS_Reports")
-            if (!pdfDir.exists()) {
-                val created = pdfDir.mkdirs()
-                if (!created) {
-                    Log.e(TAG, "Failed to create directory: ${pdfDir.absolutePath}")
-                    return@withContext null
-                }
-            }
-            val pdfFile = File(pdfDir, filename)
-
-            val pdfWriter = PdfWriter(FileOutputStream(pdfFile))
+            // Create PDF in cacheDir first (always succeeds without storage permissions)
+            val tempFile = File(context.cacheDir, filename)
+            val pdfWriter = PdfWriter(FileOutputStream(tempFile))
             val pdfDocument = PdfDocument(pdfWriter)
             val document = Document(pdfDocument)
 
@@ -316,18 +291,21 @@ class PDFGenerator(private val context: Context) {
             )
 
             addEventDetails(document, event, font, boldFont)
-            addAttendeesTable(document, attendees, font, boldFont)
+            val groupedAttendees = groupAttendeesByWing(attendees)
+            addAttendeesTable(document, groupedAttendees, font, boldFont)
             addSummary(document, event, attendees, font, boldFont)
 
             document.close()
-            Log.d(TAG, "Attendance report PDF generated: ${pdfFile.absolutePath}")
-            return@withContext pdfFile.absolutePath
-        } catch (e: SecurityException) {
-            Log.e(TAG, "Permission denied for file access", e)
-            return@withContext null
-        } catch (e: java.io.IOException) {
-            Log.e(TAG, "File I/O error during PDF generation", e)
-            return@withContext null
+
+            val savedPath = FileStorageUtils.saveFileToPublicDownloads(
+                context = context,
+                tempFile = tempFile,
+                filename = filename,
+                mimeType = "application/pdf"
+            )
+
+            Log.d(TAG, "Attendance report PDF generated: ${savedPath ?: tempFile.absolutePath}")
+            return@withContext savedPath ?: tempFile.absolutePath
         } catch (e: Exception) {
             Log.e(TAG, "Error generating attendance report PDF", e)
             return@withContext null
@@ -384,11 +362,11 @@ class PDFGenerator(private val context: Context) {
      */
     private fun addAttendeesTable(
         document: Document,
-        attendees: List<AttendeeRecord>,
+        groupedAttendees: Map<String, List<AttendeeRecord>>,
         font: PdfFont,
         boldFont: PdfFont
     ) {
-        if (attendees.isEmpty()) {
+        if (groupedAttendees.isEmpty() || groupedAttendees.values.all { it.isEmpty() }) {
             document.add(Paragraph("No attendees recorded for this event.")
                 .setFont(font)
                 .setFontSize(FONT_SIZE_NORMAL)
@@ -397,15 +375,11 @@ class PDFGenerator(private val context: Context) {
             return
         }
         
-        // Group attendees by Wing
-        val groupedAttendees = runBlockingGroupBy(attendees)
-        
         // Create table for attendees
         val attendeesTable = Table(3)
             .setWidth(UnitValue.createPercentValue(100f))
             .setMarginBottom(20f)
         
-        // Add header
         // Add header
         attendeesTable.addCell(createHeaderCell("Wing", boldFont))
         attendeesTable.addCell(createHeaderCell("Name", boldFont))
@@ -440,11 +414,6 @@ class PDFGenerator(private val context: Context) {
         summaryTable.addCell(createCell("Total Attendees:", boldFont, true))
         summaryTable.addCell(createCell(attendees.size.toString(), font, false))
         
-        // NSS groups count - REMOVED as per request
-        // val nssGroups = runBlockingGroupBy(attendees).keys.size
-        // summaryTable.addCell(createCell("NSS Groups Represented:", boldFont, true))
-        // summaryTable.addCell(createCell(nssGroups.toString(), font, false))
-        
         // Report generation time
         val currentTime = SimpleDateFormat("dd MMM yyyy, HH:mm:ss", Locale.getDefault()).format(Date())
         summaryTable.addCell(createCell("Report Generated:", boldFont, true))
@@ -452,22 +421,24 @@ class PDFGenerator(private val context: Context) {
         
         document.add(summaryTable)
     }
-    
-    /**
-     * Group attendees by their Wing
-     */
-    private fun runBlockingGroupBy(attendees: List<AttendeeRecord>): Map<String, List<AttendeeRecord>> {
-        // Since we are already on Dispatchers.IO, block for simplicity inside PDF generation
-        return kotlinx.coroutines.runBlocking {
-            groupAttendeesByWing(attendees)
-        }
-    }
 
+    /**
+     * Group attendees by their Wing asynchronously in parallel
+     */
     private suspend fun groupAttendeesByWing(attendees: List<AttendeeRecord>): Map<String, List<AttendeeRecord>> {
         val groupedAttendees = mutableMapOf<String, MutableList<AttendeeRecord>>()
+        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
         
-        for (attendee in attendees) {
-            val wing = getStudentWing(attendee.rollNumber)
+        val attendeeWithWings = kotlinx.coroutines.coroutineScope {
+            attendees.map { attendee ->
+                async(Dispatchers.IO) {
+                    val wing = getStudentWing(attendee.rollNumber, db)
+                    attendee to wing
+                }
+            }.awaitAll()
+        }
+        
+        for ((attendee, wing) in attendeeWithWings) {
             if (!groupedAttendees.containsKey(wing)) {
                 groupedAttendees[wing] = mutableListOf()
             }
@@ -486,12 +457,10 @@ class PDFGenerator(private val context: Context) {
     /**
      * Get Wing for a student by their roll number
      */
-    private suspend fun getStudentWing(rollNumber: String): String {
+    private suspend fun getStudentWing(rollNumber: String, db: com.google.firebase.firestore.FirebaseFirestore): String {
+        if (rollNumber.isBlank()) return "Unknown"
         return try {
-            val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-            // Modified to fetch from 'users' collection instead of 'Student'
-            val studentDoc = db.collection("users").document(rollNumber).get().await()
-            
+            val studentDoc = db.collection("users").document(rollNumber.trim()).get().await()
             if (studentDoc.exists()) {
                 val wings = studentDoc.get("wings")
                 if (wings is List<*>) {

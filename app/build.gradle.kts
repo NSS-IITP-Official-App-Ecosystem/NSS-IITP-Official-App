@@ -19,14 +19,14 @@ if (localPropertiesFile.exists()) {
 
 android {
     namespace = "com.phad.chatapp"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.phad.chatapp"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 65
-        versionName = "1.1.10"
+        targetSdk = 36
+        versionCode = 68
+        versionName = "1.1.13"
 
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -47,20 +47,26 @@ android {
     }
 
     signingConfigs {
-        create("release") {
-            // Load keystore properties from local.properties
-            val keystoreFile = localProperties.getProperty("key.store") ?: "campus-code-0.jks"
-            storeFile = file(keystoreFile)
-            storePassword = localProperties.getProperty("key.store.password")
-            keyAlias = localProperties.getProperty("key.alias")
-            keyPassword = localProperties.getProperty("key.alias.password")
+        val keystoreProp = localProperties.getProperty("key.store")
+        val keystoreFile = if (!keystoreProp.isNullOrBlank()) file(keystoreProp) else null
+        if (keystoreFile != null && keystoreFile.exists()) {
+            create("release") {
+                storeFile = keystoreFile
+                storePassword = localProperties.getProperty("key.store.password")
+                keyAlias = localProperties.getProperty("key.alias")
+                keyPassword = localProperties.getProperty("key.alias.password")
+            }
         }
     }
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
-            isMinifyEnabled = false
+            val releaseSigning = signingConfigs.findByName("release")
+            if (releaseSigning != null) {
+                signingConfig = releaseSigning
+            }
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

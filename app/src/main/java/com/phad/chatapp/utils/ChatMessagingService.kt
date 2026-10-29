@@ -333,9 +333,10 @@ class ChatMessagingService : FirebaseMessagingService() {
                 .setColorized(true)
                 .setColor(Color.parseColor("#4CAF50")) // Green for system notifications
             
-            val notificationId = NOTIFICATION_ID_BASE + title.hashCode()
+            val notificationTag = data["eventId"] ?: data["relatedId"] ?: title
+            val notificationId = NOTIFICATION_ID_BASE + (data["eventId"]?.hashCode() ?: title.hashCode())
             
-            NotificationManagerCompat.from(context).notify(notificationId, notificationBuilder.build())
+            NotificationManagerCompat.from(context).notify(notificationTag, notificationId, notificationBuilder.build())
         } catch (e: SecurityException) {
             Log.e(TAG, "Failed to show notification: Permission not granted", e)
         } catch (e: Exception) {

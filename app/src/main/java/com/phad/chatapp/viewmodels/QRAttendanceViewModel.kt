@@ -222,7 +222,7 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
     /**
      * Create a new attendance event
      */
-    fun createAttendanceEvent(name: String, description: String, location: String, eventDate: java.util.Date, openingTime: java.util.Date, closingTime: java.util.Date, hours: Double, isMandatory: Boolean = false, negativeHours: Double = 0.0, wings: List<String> = emptyList(), visibleOnlyToPresent: Boolean = false, allowedAttendanceMode: String = "BOTH") {
+    fun createAttendanceEvent(name: String, description: String, location: String, eventDate: java.util.Date, openingTime: java.util.Date, closingTime: java.util.Date, hours: Double, isMandatory: Boolean = false, negativeHours: Double = 0.0, wings: List<String> = emptyList(), visibleOnlyToPresent: Boolean = false, allowedAttendanceMode: String = "QR") {
         viewModelScope.launch {
             try {
                 Log.d(TAG, "Creating attendance event: $name")
@@ -1277,6 +1277,13 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
         _adminUiState.value = _adminUiState.value.copy(successMessage = null)
     }
 
+    /**
+     * Clear generated PDF path
+     */
+    fun clearGeneratedPdfPath() {
+        _adminUiState.value = _adminUiState.value.copy(generatedPdfPath = null)
+    }
+
     // dismissSuccessDialog method removed - no longer needed with dedicated result screens
 
     /**
@@ -1730,9 +1737,9 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                     Log.e(TAG, "Error fetching all events", e)
                 }
                 
-                // Fetch attendees directly from Firestore database
-                Log.d(TAG, "=== FETCHING ATTENDEES FOR EVENT: ${event.id} ===")
-                val attendees = fetchEventAttendeesFromDatabase(event.id)
+                // Fetch attendees directly from Firestore database, falling back to event.attendees if empty
+                val fetchedAttendees = fetchEventAttendeesFromDatabase(event.id)
+                val attendees = fetchedAttendees.ifEmpty { event.attendees }
                 
                 if (attendees.isEmpty()) {
                     Log.w(TAG, "No attendees found for event: ${event.getEventName()}")
@@ -1756,7 +1763,8 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                     // Show success message with path
                     _adminUiState.value = _adminUiState.value.copy(
                         isLoading = false,
-                        successMessage = "PDF saved to Downloads/NSS_Reports"
+                        successMessage = "PDF saved to Downloads/NSS_Reports",
+                        generatedPdfPath = pdfPath
                     )
                 } else {
                     Log.e(TAG, "Failed to generate PDF")
@@ -2261,14 +2269,16 @@ class QRAttendanceViewModel(private val application: Application) : ViewModel() 
                 }.await()
 
                 // 2. Determine topics to notify
-                val topicsToSend = if (targetWings.isEmpty() || targetWings.contains("all")) {
+                val allWingsCount = com.phad.chatapp.utils.Constants.NSS_WINGS.size
+                val isAllWings = targetWings.isEmpty() || targetWings.contains("all") || targetWings.size >= allWingsCount
+                val topicsToSend = if (isAllWings) {
                     listOf("all")
                 } else {
                     targetWings.map { wing ->
                         "wing_" + wing.lowercase()
                             .replace(" ", "_")
                             .replace("&", "and")
-                    }
+                    }.distinct()
                 }
 
                 // 3. Send via existing Vercel FCM backend (same as all other notifications in the app)
@@ -2327,7 +2337,8 @@ data class AdminQRUiState(
     val showRollProgress: Boolean = false,
     val rollProgressProcessed: Int = 0,
     val rollProgressTotal: Int = 0,
-    val rollProgressTitle: String? = null
+    val rollProgressTitle: String? = null,
+    val generatedPdfPath: String? = null
 )
 
 /**

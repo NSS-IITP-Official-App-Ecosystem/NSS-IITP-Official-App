@@ -1603,12 +1603,16 @@ app.post('/api/attendance/schedule-notification', async (req, res) => {
     const db = admin.firestore();
 
     // Derive FCM topics from targetWings
-    const isOpenEvent = !targetWings || targetWings.length === 0 || targetWings.includes('all');
+    const ALL_WINGS_COUNT = 6;
+    const isOpenEvent = !targetWings || targetWings.length === 0 || targetWings.includes('all') || targetWings.length >= ALL_WINGS_COUNT;
     const topics = isOpenEvent
       ? ['all']
-      : targetWings.map(w => 'wing_' + w.toLowerCase().replace(/ /g, '_').replace(/&/g, 'and'));
+      : [...new Set(targetWings.map(w => 'wing_' + w.toLowerCase().replace(/ /g, '_').replace(/&/g, 'and')))];
 
-    const docRef = await db.collection('scheduledNotifications').add({
+    // Use deterministic document ID: ${eventId}_${scheduledAt} to prevent duplicates on edits or retries
+    const safeDocId = `${eventId}_${scheduledAt}`.replace(/[\/\s]/g, '_');
+    const docRef = db.collection('scheduledNotifications').doc(safeDocId);
+    await docRef.set({
       eventId,
       title,
       body,
@@ -1618,7 +1622,7 @@ app.post('/api/attendance/schedule-notification', async (req, res) => {
       status: 'pending',
       createdBy: decoded.uid,
       createdAt: Timestamp.now(),
-    });
+    }, { merge: true });
 
     console.log(`[schedule-notification] Scheduled notification ${docRef.id} for event ${eventId} at ${new Date(scheduledAt).toISOString()}`);
     res.status(200).json({ ok: true, id: docRef.id });
@@ -1705,8 +1709,10 @@ exports.processScheduledNotifications = onSchedule(
 
     for (const doc of snap.docs) {
       const { title, body, topics } = doc.data();
+      // If all wings are selected or topics empty, send to 'all' once instead of fan-out
+      const effectiveTopics = (topics && topics.length > 0 && topics.length < 6) ? [...new Set(topics)] : ['all'];
 
-      for (const topic of (topics || ['all'])) {
+      for (const topic of effectiveTopics) {
         const message = {
           notification: { title, body },
           topic,
@@ -1726,5 +1732,3 @@ exports.processScheduledNotifications = onSchedule(
     console.log(`[processScheduledNotifications] Processed ${snap.docs.length} notification(s).`);
   }
 );
-
-

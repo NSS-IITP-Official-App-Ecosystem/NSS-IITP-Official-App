@@ -34,6 +34,8 @@ import androidx.core.content.FileProvider
 import android.content.ActivityNotFoundException
 import android.net.Uri
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -152,77 +154,120 @@ class ProfileFragment : Fragment() {
         lifecycleScope.launch {
             try {
                 Toast.makeText(requireContext(), "Preparing attendance sheet...", Toast.LENGTH_SHORT).show()
-                val db = FirebaseFirestore.getInstance()
+                val appContext = context?.applicationContext ?: return@launch
 
-                // Fetch all events to build dynamic columns
-                val eventsSnapshot = db.collection("NSS_Events_Attendence").get().await()
-                val events = eventsSnapshot.documents.mapNotNull { it.toObject(AttendanceEvent::class.java) }
-                    .sortedBy { it.getEventDateAsDate().time }
+                val excelPath = withContext(Dispatchers.IO) {
+                    val db = FirebaseFirestore.getInstance()
 
-                // Fetch all students (case-insensitive userType)
-                val usersSnapshot = db.collection("users")
-                    .whereIn("userType", listOf("Student", "student"))
-                    .get()
-                    .await()
+                    // Fetch all events to build dynamic columns
+                    val eventsSnapshot = db.collection("NSS_Events_Attendence").get().await()
+                    val events = eventsSnapshot.documents.mapNotNull { it.toObject(AttendanceEvent::class.java) }
+                        .sortedBy { it.getEventDateAsDate().time }
 
-                val students = usersSnapshot.documents.map { doc ->
-                    // Map to User while preserving document ID as roll number if field empty
-                    val user = doc.toObject(User::class.java) ?: User()
-                    if (user.rollNumber.isEmpty()) user.apply { rollNumber = doc.id } else user
-                }.sortedWith(compareBy({ it.name.lowercase() }, { it.rollNumber }))
+                    // Fetch all students (case-insensitive userType)
+                    val usersSnapshot = db.collection("users")
+                        .whereIn("userType", listOf("Student", "student"))
+                        .get()
+                        .await()
 
-                // Build per-student event hours based on users.eventsList and total hours from users.hours
-                val perStudentEventHours: MutableMap<String, MutableMap<String, Double>> = mutableMapOf()
-                val totalHoursPerStudent: MutableMap<String, Double> = mutableMapOf()
+                    val students = usersSnapshot.documents.map { doc ->
+                        // Map to User while preserving document ID as roll number if field empty
+                        val user = doc.toObject(User::class.java) ?: User()
+                        if (user.rollNumber.isEmpty()) user.apply { rollNumber = doc.id } else user
+                    }.sortedWith(compareBy({ it.name.lowercase() }, { it.rollNumber }))
 
-                val eventHoursById = events.associate { it.id to it.hours }
-                val eventNegativeHoursById = events.associate { it.id to it.negativeHours }
-                val mandatoryEventsById = events.associate { it.id to it.isMandatory }
+                    // Build per-student event hours based on users.eventsList and total hours from users.hours
+                    val perStudentEventHours: MutableMap<String, MutableMap<String, Double>> = mutableMapOf()
+                    val totalHoursPerStudent: MutableMap<String, Double> = mutableMapOf()
 
-                usersSnapshot.documents.forEach { doc ->
-                    val roll = doc.id
-                    @Suppress("UNCHECKED_CAST")
-                    val eventsList = doc.get("eventsList") as? List<String> ?: emptyList()
-                    val totalHours = (doc.getDouble("hours") ?: 0.0)
-                    totalHoursPerStudent[roll] = totalHours
-                    val perEvent = perStudentEventHours.getOrPut(roll) { mutableMapOf() }
-                    
-                    // Add hours for attended events
-                    eventsList.forEach { eventId ->
-                        eventHoursById[eventId]?.let { hours -> perEvent[eventId] = hours }
-                    }
-                    
-                    // Add negative hours for mandatory events where student is absent
-                    events.forEach { event ->
-                        if (event.isMandatory && event.id !in eventsList && roll !in event.exemptedRollNumbers) {
-                            perEvent[event.id] = -event.negativeHours
+                    val eventHoursById = events.associate { it.id to it.hours }
+
+                    usersSnapshot.documents.forEach { doc ->
+                        val roll = doc.id
+                        @Suppress("UNCHECKED_CAST")
+                        val eventsList = doc.get("eventsList") as? List<String> ?: emptyList()
+                        val totalHours = (doc.getDouble("hours") ?: 0.0)
+                        totalHoursPerStudent[roll] = totalHours
+                        val perEvent = perStudentEventHours.getOrPut(roll) { mutableMapOf() }
+
+                        // Add hours for attended events
+                        eventsList.forEach { eventId ->
+                            eventHoursById[eventId]?.let { hours -> perEvent[eventId] = hours }
+                        }
+
+                        // Add negative hours for mandatory events where student is absent
+                        @Suppress("UNCHECKED_CAST")
+                        val userWings = (doc.get("wings") as? List<String>) ?: emptyList<String>()
+
+                        events.forEach { event ->
+                            val isOpenEvent = event.getDisplayWings() == "Open Event"
+                            val isDncEvent = event.wings.contains("Design and Curation Wing")
+                            val isRelevant = isOpenEvent || isDncEvent || userWings.any { it in event.wings }
+
+                            if (isRelevant && !event.visibleOnlyToPresent && event.isMandatory &&
+                                event.absentPenaltyApplied &&
+                                event.id !in eventsList &&
+                                roll !in event.exemptedRollNumbers &&
+                                !event.zeroPenaltyRollNumbers.any { it.equals(roll, ignoreCase = true) } &&
+                                !event.positivePenaltyRollNumbers.any { it.equals(roll, ignoreCase = true) }) {
+                                perEvent[event.id] = -event.negativeHours
+                            }
                         }
                     }
+
+                    // Generate Excel via utility
+                    ExcelGenerator(appContext).generateAttendanceMatrixReport(
+                        students = students,
+                        events = events,
+                        perStudentEventHours = perStudentEventHours,
+                        totalHoursPerStudent = totalHoursPerStudent
+                    )
                 }
 
-                // Generate Excel via utility
-                val excelPath = ExcelGenerator(requireContext()).generateAttendanceMatrixReport(
-                    students = students,
-                    events = events,
-                    perStudentEventHours = perStudentEventHours,
-                    totalHoursPerStudent = totalHoursPerStudent
-                )
-
-                if (excelPath != null) {
-                    val file = java.io.File(excelPath)
-                    Toast.makeText(requireContext(), "File saved to: ${file.absolutePath}", Toast.LENGTH_LONG).show()
-                } else {
-                    Toast.makeText(requireContext(), "Failed to generate attendance report", Toast.LENGTH_LONG).show()
+                context?.let { ctx ->
+                    if (excelPath != null) {
+                        val file = java.io.File(excelPath)
+                        Toast.makeText(ctx, "File saved to Downloads/NSS_Reports", Toast.LENGTH_LONG).show()
+                        try {
+                            val uri = FileProvider.getUriForFile(
+                                ctx,
+                                "${ctx.packageName}.fileprovider",
+                                file
+                            )
+                            val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                                setDataAndType(uri, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            if (viewIntent.resolveActivity(ctx.packageManager) != null) {
+                                ctx.startActivity(viewIntent)
+                            } else {
+                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                    putExtra(Intent.EXTRA_STREAM, uri)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                ctx.startActivity(Intent.createChooser(shareIntent, "Open Attendance Matrix"))
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error opening excel: ${e.message}", e)
+                        }
+                    } else {
+                        Toast.makeText(ctx, "Failed to generate attendance report", Toast.LENGTH_LONG).show()
+                    }
                 }
-            } catch (e: SecurityException) {
-                Log.e(TAG, "Permission denied for file access", e)
-                Toast.makeText(requireContext(), "Permission denied. Please check app permissions.", Toast.LENGTH_LONG).show()
-            } catch (e: java.io.IOException) {
-                Log.e(TAG, "File I/O error during export", e)
-                Toast.makeText(requireContext(), "File system error. Please try again.", Toast.LENGTH_LONG).show()
-            } catch (e: Exception) {
-                Log.e(TAG, "Error exporting attendance matrix", e)
-                Toast.makeText(requireContext(), "Error: ${e.message}", Toast.LENGTH_LONG).show()
+            } catch (t: Throwable) {
+                Log.e(TAG, "Error exporting attendance matrix", t)
+                context?.let { ctx ->
+                    val errorMsg = when (t) {
+                        is OutOfMemoryError -> "Out of memory while generating attendance matrix."
+                        is SecurityException -> "Permission denied. Please check app permissions."
+                        is java.io.IOException -> "Storage error: ${t.message}"
+                        else -> "Error: ${t.message ?: t.javaClass.simpleName}"
+                    }
+                    Toast.makeText(ctx, errorMsg, Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
@@ -237,57 +282,73 @@ class ProfileFragment : Fragment() {
         lifecycleScope.launch {
             try {
                 Toast.makeText(requireContext(), "Syncing to Google Sheets...", Toast.LENGTH_SHORT).show()
-                val db = FirebaseFirestore.getInstance()
+                val appContext = context?.applicationContext ?: return@launch
 
-                // Fetch all events to build dynamic columns
-                val eventsSnapshot = db.collection("NSS_Events_Attendence").get().await()
-                val events = eventsSnapshot.documents.mapNotNull { it.toObject(AttendanceEvent::class.java) }
-                    .sortedBy { it.getEventDateAsDate().time }
+                val result = withContext(Dispatchers.IO) {
+                    val db = FirebaseFirestore.getInstance()
 
-                // Fetch all students (case-insensitive userType)
-                val usersSnapshot = db.collection("users")
-                    .whereIn("userType", listOf("Student", "student"))
-                    .get()
-                    .await()
+                    // Fetch all events to build dynamic columns
+                    val eventsSnapshot = db.collection("NSS_Events_Attendence").get().await()
+                    val events = eventsSnapshot.documents.mapNotNull { it.toObject(AttendanceEvent::class.java) }
+                        .sortedBy { it.getEventDateAsDate().time }
 
-                val students = usersSnapshot.documents.map { doc ->
-                    val user = doc.toObject(User::class.java) ?: User()
-                    if (user.rollNumber.isEmpty()) user.apply { rollNumber = doc.id } else user
-                }.sortedWith(compareBy({ it.name.lowercase() }, { it.rollNumber }))
+                    // Fetch all students (case-insensitive userType)
+                    val usersSnapshot = db.collection("users")
+                        .whereIn("userType", listOf("Student", "student"))
+                        .get()
+                        .await()
 
-                val perStudentEventHours: MutableMap<String, MutableMap<String, Double>> = mutableMapOf()
-                val totalHoursPerStudent: MutableMap<String, Double> = mutableMapOf()
+                    val students = usersSnapshot.documents.map { doc ->
+                        val user = doc.toObject(User::class.java) ?: User()
+                        if (user.rollNumber.isEmpty()) user.apply { rollNumber = doc.id } else user
+                    }.sortedWith(compareBy({ it.name.lowercase() }, { it.rollNumber }))
 
-                val eventHoursById = events.associate { it.id to it.hours }
+                    val perStudentEventHours: MutableMap<String, MutableMap<String, Double>> = mutableMapOf()
+                    val totalHoursPerStudent: MutableMap<String, Double> = mutableMapOf()
 
-                usersSnapshot.documents.forEach { doc ->
-                    val roll = doc.id
-                    @Suppress("UNCHECKED_CAST")
-                    val eventsList = doc.get("eventsList") as? List<String> ?: emptyList()
-                    val totalHours = (doc.getDouble("hours") ?: 0.0)
-                    totalHoursPerStudent[roll] = totalHours
-                    val perEvent = perStudentEventHours.getOrPut(roll) { mutableMapOf() }
-                    
-                    // Add hours for attended events
-                    eventsList.forEach { eventId ->
-                        eventHoursById[eventId]?.let { hours -> perEvent[eventId] = hours }
-                    }
-                    
-                    // Add negative hours for mandatory events where student is absent
-                    events.forEach { event ->
-                        if (event.isMandatory && event.id !in eventsList && roll !in event.exemptedRollNumbers) {
-                            perEvent[event.id] = -event.negativeHours
+                    val eventHoursById = events.associate { it.id to it.hours }
+
+                    usersSnapshot.documents.forEach { doc ->
+                        val roll = doc.id
+                        @Suppress("UNCHECKED_CAST")
+                        val eventsList = doc.get("eventsList") as? List<String> ?: emptyList()
+                        val totalHours = (doc.getDouble("hours") ?: 0.0)
+                        totalHoursPerStudent[roll] = totalHours
+                        val perEvent = perStudentEventHours.getOrPut(roll) { mutableMapOf() }
+
+                        // Add hours for attended events
+                        eventsList.forEach { eventId ->
+                            eventHoursById[eventId]?.let { hours -> perEvent[eventId] = hours }
+                        }
+
+                        // Add negative hours for mandatory events where student is absent
+                        @Suppress("UNCHECKED_CAST")
+                        val userWings = (doc.get("wings") as? List<String>) ?: emptyList<String>()
+
+                        events.forEach { event ->
+                            val isOpenEvent = event.getDisplayWings() == "Open Event"
+                            val isDncEvent = event.wings.contains("Design and Curation Wing")
+                            val isRelevant = isOpenEvent || isDncEvent || userWings.any { it in event.wings }
+
+                            if (isRelevant && !event.visibleOnlyToPresent && event.isMandatory &&
+                                event.absentPenaltyApplied &&
+                                event.id !in eventsList &&
+                                roll !in event.exemptedRollNumbers &&
+                                !event.zeroPenaltyRollNumbers.any { it.equals(roll, ignoreCase = true) } &&
+                                !event.positivePenaltyRollNumbers.any { it.equals(roll, ignoreCase = true) }) {
+                                perEvent[event.id] = -event.negativeHours
+                            }
                         }
                     }
-                }
 
-                val result = com.phad.chatapp.utils.GoogleSheetsSync.sync(
-                    context = requireContext(),
-                    students = students,
-                    events = events,
-                    perStudentEventHours = perStudentEventHours,
-                    totalHoursPerStudent = totalHoursPerStudent
-                )
+                    com.phad.chatapp.utils.GoogleSheetsSync.sync(
+                        context = appContext,
+                        students = students,
+                        events = events,
+                        perStudentEventHours = perStudentEventHours,
+                        totalHoursPerStudent = totalHoursPerStudent
+                    )
+                }
 
                 result.fold(
                     onSuccess = {
@@ -298,9 +359,9 @@ class ProfileFragment : Fragment() {
                         Toast.makeText(requireContext(), "Sync failed: ${error.message}", Toast.LENGTH_LONG).show()
                     }
                 )
-            } catch (e: Exception) {
-                Log.e(TAG, "Error syncing to Google Sheets", e)
-                Toast.makeText(requireContext(), "Error: ${e.message}", Toast.LENGTH_LONG).show()
+            } catch (t: Throwable) {
+                Log.e(TAG, "Error syncing to Google Sheets", t)
+                Toast.makeText(requireContext(), "Error: ${t.message ?: t.javaClass.simpleName}", Toast.LENGTH_LONG).show()
             }
         }
     }
